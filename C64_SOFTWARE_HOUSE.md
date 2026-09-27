@@ -107,27 +107,7 @@ VICE has a **binary remote monitor** (start `x64sc -binarymonitor`, which listen
 | `vice_raster_profile(start_label, end_label)` | Measure the cycles or raster lines a routine takes; the core of performance work |
 | `vice_symbols(file)` | Load the assembler's label file so that tools accept `label` names instead of hex addresses |
 
-Build this **first**, with Claude Code in this repo: *"Build a Python MCP server using the official `mcp` SDK (FastMCP) that wraps the VICE binary monitor protocol with these tools…"*. Before you build your own, search GitHub for an existing VICE MCP server; one may already exist. It's still a small job to write your own, and you'll understand it better.
-
-Skeleton, for a sense of scale:
-
-```python
-from mcp.server.fastmcp import FastMCP
-mcp = FastMCP("vice")
-
-@mcp.tool()
-def vice_read_mem(addr: int, length: int) -> str:
-    """Read C64 memory; returns a hex dump."""
-    return hexdump(monitor.mem_get(addr, addr + length - 1))
-
-@mcp.tool()
-def vice_screenshot() -> Image:
-    """Capture the current screen (with borders) as PNG."""
-    ...
-
-if __name__ == "__main__":
-    mcp.run()
-```
+**Status: built in M1.** See [mcp/vice/README.md](mcp/vice/README.md) for the actual tool list (names differ slightly from the sketch above: `vice_profile`, `vice_type`, `vice_run_until` with read/write watchpoints), how it's wired together, and the VICE 3.10 quirks found along the way. It uses the official MCP Python SDK 2.x (`MCPServer`, the successor to v1's `FastMCP`) in a `uv`-managed project.
 
 ### 4.3 Real hardware later (optional, but valuable)
 

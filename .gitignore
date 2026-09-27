@@ -1,3 +1,5 @@
 .DS_Store
 build/
 screenshots/
+.venv/
+__pycache__/

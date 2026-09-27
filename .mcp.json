@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "vice": {
+      "command": "uv",
+      "args": ["run", "--directory", "mcp/vice", "server.py"]
+    }
+  }
+}
