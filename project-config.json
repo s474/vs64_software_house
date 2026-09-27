@@ -1,0 +1,11 @@
+{
+    "name": "hello",
+    "description": "C64 Software House - M0 toolchain smoke test",
+    "toolkit": "kick",
+    "main": "games/hello/src/main.asm",
+    "build": "debug",
+    "definitions": [],
+    "includes": [],
+    "args": [],
+    "compiler": ""
+}
