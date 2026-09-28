@@ -1,0 +1,6 @@
+{
+    // Python tooling in this repo is the VICE MCP server's uv project (mcp/vice).
+    // Point Pylance at its venv so imports like mcp.server.mcpserver resolve.
+    "python.defaultInterpreterPath": "${workspaceFolder}/mcp/vice/.venv/bin/python",
+    "python.analysis.extraPaths": ["${workspaceFolder}/mcp/vice"]
+}
