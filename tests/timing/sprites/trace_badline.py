@@ -19,8 +19,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "mcp" / "vice"))
 
-from server import _free_port, _load_symbols  # noqa: E402
-from vice_monitor import CPU_OP_EXEC, ViceMonitor  # noqa: E402
+from vice_monitor import CPU_OP_EXEC, ViceMonitor, free_port, load_symbols  # noqa: E402
 
 BADLINE = 51
 CYCLES_PER_LINE = 63  # measured: tests/timing/rasterline
@@ -31,8 +30,8 @@ def main() -> None:
     mask = int(sys.argv[1], 16)
     passes = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] != "-q" else 1
     quiet = "-q" in sys.argv
-    sym = _load_symbols(prg)
-    port = _free_port()
+    sym = load_symbols(prg)
+    port = free_port()
     proc = subprocess.Popen(
         ["x64sc", "-default", "-pal", "-sounddev", "dummy", "-warp", "-minimized",
          "-binarymonitor", "-binarymonitoraddress", f"ip4://127.0.0.1:{port}", "-autostartprgmode", "1"],

@@ -10,7 +10,6 @@ from __future__ import annotations
 import atexit
 import functools
 import re
-import socket
 import struct
 import subprocess
 import time
@@ -21,7 +20,15 @@ from pathlib import Path
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from vice_monitor import CPU_OP_EXEC, CPU_OP_LOAD, CPU_OP_STORE, ViceError, ViceMonitor
+from vice_monitor import (
+    CPU_OP_EXEC,
+    CPU_OP_LOAD,
+    CPU_OP_STORE,
+    ViceError,
+    ViceMonitor,
+    free_port,
+    load_symbols,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCREENSHOT_DIR = REPO_ROOT / "screenshots"
@@ -85,28 +92,9 @@ atexit.register(session.stop)
 # -- helpers ---------------------------------------------------------------
 
 
-def _free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
-
 def _resolve_path(path: str) -> Path:
     p = Path(path).expanduser()
     return p if p.is_absolute() else (REPO_ROOT / p).resolve()
-
-
-def _load_symbols(program: Path) -> dict[str, int]:
-    """Read KickAssembler VICE symbols ('al C:080e .start') from .vs files beside the program."""
-    candidates = [program.with_suffix(".vs")] + sorted(program.parent.glob("*.vs"))
-    symbols: dict[str, int] = {}
-    for vs in dict.fromkeys(candidates):
-        if vs.exists():
-            for line in vs.read_text().splitlines():
-                m = re.match(r"al\s+C:([0-9a-fA-F]+)\s+\.(\S+)", line)
-                if m:
-                    symbols[m.group(2)] = int(m.group(1), 16)
-    return symbols
 
 
 def _basic_sys_address(program: Path) -> int | None:
@@ -229,7 +217,7 @@ def vice_start(program: str = "", warp: bool = True, show_window: bool = False, 
     Joystick ports 1 and 2 are wired to the monitor (see vice_joystick); real joysticks are ignored.
     """
     session.stop()
-    port = _free_port()
+    port = free_port()
     args = [
         "x64sc", "-default", "-pal", "-sounddev", "dummy",
         "-binarymonitor", "-binarymonitoraddress", f"ip4://127.0.0.1:{port}",
@@ -266,7 +254,7 @@ def vice_load(program: str, boot_frames: int = 250, settle_frames: int = 10) -> 
     if not path.exists():
         raise ViceError(f"file not found: {path}")
     session.program = path
-    session.symbols = _load_symbols(path)
+    session.symbols = load_symbols(path)
     mon.autostart(str(path), run=True)
     entry = _basic_sys_address(path)
     if entry is None:

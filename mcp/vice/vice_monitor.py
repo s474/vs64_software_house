@@ -14,10 +14,12 @@ to resume.
 
 from __future__ import annotations
 
+import re
 import socket
 import struct
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 STX = 0x02
 API_VERSION = 0x02
@@ -380,3 +382,23 @@ class ViceMonitor:
         vlen = r.body[0]
         version = ".".join(str(x) for x in r.body[1 : 1 + vlen])
         return version
+
+
+def free_port() -> int:
+    """Ask the OS for an unused TCP port on localhost."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def load_symbols(program: Path) -> dict[str, int]:
+    """Read KickAssembler VICE symbols ('al C:080e .start') from .vs files beside the program."""
+    candidates = [program.with_suffix(".vs")] + sorted(program.parent.glob("*.vs"))
+    symbols: dict[str, int] = {}
+    for vs in dict.fromkeys(candidates):
+        if vs.exists():
+            for line in vs.read_text().splitlines():
+                m = re.match(r"al\s+C:([0-9a-fA-F]+)\s+\.(\S+)", line)
+                if m:
+                    symbols[m.group(2)] = int(m.group(1), 16)
+    return symbols
