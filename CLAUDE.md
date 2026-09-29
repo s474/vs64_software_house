@@ -1,0 +1,77 @@
+# C64 Software House
+
+An AI-assisted studio making commercial-quality Commodore 64 games that push the hardware.
+The human (Simon) is creative director and playtester. The overall plan and milestones are in
+[C64_SOFTWARE_HOUSE.md](C64_SOFTWARE_HOUSE.md).
+
+Target: **PAL C64** (6510 + VIC-II 6569 + SID), KickAssembler 5.25, VICE 3.10 (`x64sc`).
+
+## Commands
+
+| Task | Command |
+|---|---|
+| Build a game | `make GAME=<title>` → `build/<title>/<title>.prg` (default `GAME=hello`) |
+| Build something outside `games/` | `make GAME=<name> SRC_DIR=<dir>` |
+| Run in VICE for a human | `make run GAME=<title>` |
+| Release build | `make BUILD=release GAME=<title>` (no `DEBUG` define) |
+| Crunched PRG / disk image | `make crunch` / `make d64` |
+| Test the VICE MCP server | `cd mcp/vice && uv run smoke_test.py` |
+
+Build outputs in `build/<title>/`: `.prg`, `main.vs` (labels), `main.dump` (address of every source line).
+`make clean` and VS64's clean delete all of `build/`.
+
+## Layout
+
+| Path | Contents |
+|---|---|
+| `games/<title>/src/main.asm` | Each game's single entry file; imports the rest |
+| `engine/` | Shared, reusable modules (import as `#import "engine/x.asm"`: the repo root is on the include path) |
+| `tests/timing/` | Timing probes backing the figures in the reference docs |
+| `docs/reference/` | C64 hardware facts: **read before writing hardware code** |
+| `docs/standards/` | Coding standards, memory-map template |
+| `docs/games/<title>/` | Per game: design doc, memory map, raster timeline |
+| `mcp/vice/` | VICE MCP server (Python, uv project) |
+| `tools/` | Python asset converters and utilities (uv, never system pip) |
+| `screenshots/` | Git-ignored. All screenshots and visual output go here |
+
+## Reference docs
+
+- [vic-ii-timing.md](docs/reference/vic-ii-timing.md): frame geometry, badlines (43 cycles, measured), sprite DMA, frame budget
+- [memory-map.md](docs/reference/memory-map.md): `$01` banking, VIC banks, `$D018`, zero page, typical game layout
+- [raster-interrupts.md](docs/reference/raster-interrupts.md): IRQ setup, chaining, jitter, common bugs
+- [6502-timing.md](docs/reference/6502-timing.md): cycle counts, page crossings, illegal opcodes
+- [kickassembler.md](docs/reference/kickassembler.md): how we build and the syntax we use
+- [coding-standards.md](docs/standards/coding-standards.md): naming, zero page, IRQ ownership, **definition of done**
+
+If a doc is wrong or missing something you had to find out, fix the doc in the same change, and
+mark measured facts as measured (with the probe that shows it).
+
+## Working rules
+
+- **Verify in VICE, don't assume.** Use the `vice_*` MCP tools: `vice_start` the build,
+  `vice_run_frames` / `vice_joystick` to drive it, `vice_screenshot` to see it, `vice_read_memory` to
+  check state, and `vice_profile` for any timing claim. Addresses accept labels from the build.
+- Screenshots: always pass a descriptive `name`; they land in `screenshots/`. Mention the paths
+  when reporting (as relative Markdown links).
+- Follow the [definition of done](docs/standards/coding-standards.md#verification-done-means-all-of-these)
+  and report what was verified and how.
+- Timing figures come from measurement ([vic-ii-timing.md](docs/reference/vic-ii-timing.md)), not memory.
+  If a number isn't in the docs, measure it and add it.
+- Zero page is allocated in each game's `zp.asm`. Only the IRQ framework touches the IRQ vectors and `$D012`.
+- Python: each project is a uv project (`uv add`, `uv run`). Never `pip install` into the system Python.
+- Diagrams in docs are Mermaid.
+- Git: commit and push only when Simon asks. Never commit `build/`, `screenshots/` or `.venv/`.
+
+## The team
+
+Specialist subagents are in `.claude/agents/`:
+
+| Agent | Use for |
+|---|---|
+| `technical-director` | Memory maps, raster timelines, frame budgets, architecture and feasibility calls, reviewing designs |
+| `gameplay-engineer` | Implementing game features in 6502: player, enemies, collisions, game loop |
+| `tools-engineer` | Python converters, build tooling, test harnesses |
+| `qa-tester` | Playing builds in VICE, regression checks, bug reports with screenshots |
+
+The main session acts as producer: it breaks work into tasks, delegates to these agents, and
+checks their reports against the definition of done.

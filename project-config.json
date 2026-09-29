@@ -5,7 +5,7 @@
     "main": "games/hello/src/main.asm",
     "build": "debug",
     "definitions": [],
-    "includes": [],
+    "includes": ["."],
     "args": [],
     "compiler": ""
 }

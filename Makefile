@@ -4,7 +4,8 @@
 #   make crunch          Exomizer self-extracting build -> $(GAME)-sfx.prg
 #   make d64             disk image containing the crunched build
 #   make clean
-# Pick a game with GAME=<name> (default: hello). BUILD=release drops the DEBUG
+# Pick a game with GAME=<name> (default: hello). For programs outside games/, also set
+# SRC_DIR, e.g. make GAME=badline SRC_DIR=tests/timing/badline BUILD=release drops the DEBUG
 # define (matching VS64's "build" setting). Tool paths can be overridden from
 # the environment, e.g. KICKASS_JAR=~/tools/KickAss.jar make
 
@@ -17,7 +18,7 @@ X64         ?= x64sc
 C1541       ?= c1541
 EXOMIZER    ?= exomizer
 
-SRC_DIR   := games/$(GAME)/src
+SRC_DIR   ?= games/$(GAME)/src
 OUT_DIR   := build/$(GAME)
 MAIN      := $(SRC_DIR)/main.asm
 PRG       := $(OUT_DIR)/$(GAME).prg
@@ -30,11 +31,12 @@ DEFINES   := $(if $(filter release,$(BUILD)),,-define DEBUG)
 
 all: $(PRG)
 
-# -vicesymbols writes main.vs (named after the source) next to the PRG so VICE shows labels
+# -vicesymbols writes main.vs (named after the source) next to the PRG so VICE shows labels;
+# -bytedumpfile writes main.dump: every source line with its address and bytes
 $(PRG): $(SOURCES)
 	@mkdir -p $(OUT_DIR)
 	$(JAVA) -jar $(KICKASS_JAR) $(MAIN) -o $(PRG) -odir $(abspath $(OUT_DIR)) \
-		-vicesymbols -symbolfile -showmem $(DEFINES)
+		-libdir $(CURDIR) -vicesymbols -symbolfile -bytedumpfile main.dump -showmem $(DEFINES)
 
 crunch: $(SFX)
 

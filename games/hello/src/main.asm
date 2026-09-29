@@ -26,6 +26,11 @@ start:
         lda #$35                // RAM everywhere except I/O; we own the vectors
         sta $01
 
+        lda #<nmi_rti           // RESTORE triggers an NMI; with the KERNAL out it must land somewhere
+        sta $fffa
+        lda #>nmi_rti
+        sta $fffb
+
         lda #<irq_top
         sta $fffe
         lda #>irq_top
@@ -43,6 +48,9 @@ start:
         cli
 
         jmp *                   // all work happens in the IRQs
+
+nmi_rti:
+        rti
 
 irq_top:
         pha
