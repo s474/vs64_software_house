@@ -8,6 +8,7 @@ Never print to stdout here: stdout is the MCP transport.
 from __future__ import annotations
 
 import atexit
+import functools
 import re
 import socket
 import struct
@@ -18,6 +19,7 @@ from datetime import datetime
 from pathlib import Path
 
 from mcp.server.mcpserver import Image, MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from vice_monitor import CPU_OP_EXEC, CPU_OP_LOAD, CPU_OP_STORE, ViceError, ViceMonitor
 
@@ -197,7 +199,26 @@ def _hexdump(start: int, data: bytes) -> str:
 # -- tools -----------------------------------------------------------------
 
 
-@mcp.tool()
+def tool(fn):
+    """Register fn as an MCP tool, reporting anticipated failures to the model as ToolError.
+
+    MCPServer hides the text of any other exception from the client ("Error executing
+    tool X"), which would leave an agent guessing. Returns fn unwrapped so tools can call
+    each other and still see the original exception.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except (ViceError, OSError, ValueError) as exc:
+            raise ToolError(str(exc)) from exc
+
+    mcp.tool()(wrapper)
+    return fn
+
+
+@tool
 def vice_start(program: str = "", warp: bool = True, show_window: bool = False, boot_frames: int = 250) -> str:
     """Launch a fresh x64sc (PAL, default settings) and optionally autostart a program.
 
@@ -233,7 +254,7 @@ def vice_start(program: str = "", warp: bool = True, show_window: bool = False, 
     return result
 
 
-@mcp.tool()
+@tool
 def vice_load(program: str, boot_frames: int = 250, settle_frames: int = 10) -> str:
     """Autostart a .prg/.d64/.crt in the running VICE and load its symbols.
 
@@ -268,14 +289,14 @@ def vice_load(program: str, boot_frames: int = 250, settle_frames: int = 10) -> 
     return f"Loaded {path.name} ({len(session.symbols)} symbols), {how}.\n{_status(mon)}"
 
 
-@mcp.tool()
+@tool
 def vice_stop() -> str:
     """Quit VICE."""
     session.stop()
     return "VICE stopped."
 
 
-@mcp.tool()
+@tool
 def vice_reset(hard: bool = False) -> str:
     """Reset the C64 (soft by default) and run 150 frames so BASIC is ready."""
     mon = session.require()
@@ -284,7 +305,7 @@ def vice_reset(hard: bool = False) -> str:
     return _status(mon)
 
 
-@mcp.tool()
+@tool
 def vice_run_frames(frames: int = 1) -> str:
     """Advance exactly N PAL frames (19,656 cycles each); stops at the start of raster line 0."""
     mon = session.require()
@@ -292,11 +313,14 @@ def vice_run_frames(frames: int = 1) -> str:
     return f"Ran {frames} frame(s).\n{_status(mon)}"
 
 
-@mcp.tool()
+@tool
 def vice_run_until(address: str, access: str = "exec", timeout_frames: int = 500) -> str:
     """Run until the CPU executes (or loads/stores, via access="load"/"store") the given address or label."""
     mon = session.require()
-    op = {"exec": CPU_OP_EXEC, "load": CPU_OP_LOAD, "store": CPU_OP_STORE}[access]
+    ops = {"exec": CPU_OP_EXEC, "load": CPU_OP_LOAD, "store": CPU_OP_STORE}
+    if access not in ops:
+        raise ViceError(f"access must be one of {', '.join(ops)}")
+    op = ops[access]
     target = _addr(address)
     cp = mon.checkpoint_set(target, target, op)
     try:
@@ -310,7 +334,7 @@ def vice_run_until(address: str, access: str = "exec", timeout_frames: int = 500
         mon.checkpoint_delete(cp.number)
 
 
-@mcp.tool()
+@tool
 def vice_screenshot(name: str = "", area: str = "visible") -> list:
     """Capture the screen as PNG, save it under screenshots/, and return the image.
 
@@ -336,7 +360,7 @@ def vice_screenshot(name: str = "", area: str = "visible") -> list:
     return [Image(data=png, format="png"), f"Saved {path.relative_to(REPO_ROOT)} ({w}x{h})"]
 
 
-@mcp.tool()
+@tool
 def vice_read_memory(address: str, length: int = 64) -> str:
     """Hex dump memory as the CPU sees it (current $01 banking). Reads have no I/O side effects."""
     mon = session.require()
@@ -345,7 +369,7 @@ def vice_read_memory(address: str, length: int = 64) -> str:
     return _hexdump(start, mon.mem_get(start, end))
 
 
-@mcp.tool()
+@tool
 def vice_write_memory(address: str, hex_bytes: str) -> str:
     """Write bytes (hex, e.g. "a9 00 8d 20 d0") to memory at address/label."""
     mon = session.require()
@@ -355,7 +379,7 @@ def vice_write_memory(address: str, hex_bytes: str) -> str:
     return f"Wrote {len(data)} byte(s) at ${start:04x}."
 
 
-@mcp.tool()
+@tool
 def vice_registers(set_values: dict[str, int] | None = None) -> str:
     """Show CPU registers and raster position; optionally set some first, e.g. {"PC": 2064, "A": 0}."""
     mon = session.require()
@@ -364,7 +388,7 @@ def vice_registers(set_values: dict[str, int] | None = None) -> str:
     return _status(mon)
 
 
-@mcp.tool()
+@tool
 def vice_joystick(input: str = "none", port: int = 2, frames: int = 10, release: bool = True) -> str:
     """Hold joystick input for N frames. input: "none" or directions joined by +, e.g. "up+fire", "left".
 
@@ -376,8 +400,11 @@ def vice_joystick(input: str = "none", port: int = 2, frames: int = 10, release:
         raise ViceError("port must be 1 or 2")
     pressed = 0
     for part in filter(None, input.lower().replace(" ", "").split("+")):
-        if part != "none":
-            pressed |= JOY_BITS[part]
+        if part == "none":
+            continue
+        if part not in JOY_BITS:
+            raise ViceError(f"unknown joystick input {part!r}; use up, down, left, right, fire or none")
+        pressed |= JOY_BITS[part]
     if port == 1:
         mon.resource_set("JoyPort1Device", JOYPORT_IO_SIMULATION)
     mon.joyport_set(port - 1, ~pressed & 0x1F)
@@ -389,7 +416,7 @@ def vice_joystick(input: str = "none", port: int = 2, frames: int = 10, release:
     return f"Port {port}: held {input} for {frames} frame(s){'' if release else ' (still held)'}.\n{_status(mon)}"
 
 
-@mcp.tool()
+@tool
 def vice_type(text: str, frames: int = 20) -> str:
     """Type text via the KERNAL keyboard buffer (works at the BASIC prompt / KERNAL input, not for
     games that scan the keyboard matrix). Newlines become RETURN. Runs `frames` frames afterwards."""
@@ -399,7 +426,7 @@ def vice_type(text: str, frames: int = 20) -> str:
     return f"Typed {len(text)} character(s).\n{_status(mon)}"
 
 
-@mcp.tool()
+@tool
 def vice_profile(start: str, end: str, samples: int = 50) -> str:
     """Measure CPU cycles from executing `start` up to (not including) `end`, over several passes.
 
@@ -410,25 +437,27 @@ def vice_profile(start: str, end: str, samples: int = 50) -> str:
     a, b = _addr(start), _addr(end)
     frame = PAL_LINES * PAL_CYCLES_PER_LINE
     cp_a = mon.checkpoint_set(a, a, CPU_OP_EXEC)
-    cp_b = mon.checkpoint_set(b, b, CPU_OP_EXEC, enabled=True)
+    cp_b = mon.checkpoint_set(b, b, CPU_OP_EXEC)
     costs: list[int] = []
+    started_at: int | None = None  # raster time of the latest `start` hit not yet paired with an `end`
     try:
-        for _ in range(samples):
-            positions = []
-            for _stop in range(2):
-                mon.exit()
-                if not mon.wait_stopped(timeout=5.0):
-                    mon.ping()
-                    mon.drain_events()
-                    break
-                r = mon.registers()
-                positions.append((r["PC"], r["LIN"] * PAL_CYCLES_PER_LINE + r["CYC"]))
-            if len(positions) < 2:
+        # Stops can arrive in any order (e.g. we begin between start and end), so pair each
+        # `end` with the most recent `start` rather than assuming they alternate.
+        for _ in range(samples * 4):
+            if len(costs) >= samples:
                 break
-            (pc1, t1), (pc2, t2) = positions
-            if pc1 != a or pc2 != b:
-                continue  # hit out of order (e.g. end before start); resync on next sample
-            costs.append((t2 - t1) % frame)
+            mon.exit()
+            if not mon.wait_stopped(timeout=5.0):
+                mon.ping()
+                mon.drain_events()
+                break
+            r = mon.registers()
+            now = r["LIN"] * PAL_CYCLES_PER_LINE + r["CYC"]
+            if r["PC"] == a:
+                started_at = now
+            elif r["PC"] == b and started_at is not None:
+                costs.append((now - started_at) % frame)
+                started_at = None
     finally:
         mon.checkpoint_delete(cp_a.number)
         mon.checkpoint_delete(cp_b.number)
@@ -443,7 +472,7 @@ def vice_profile(start: str, end: str, samples: int = 50) -> str:
     )
 
 
-@mcp.tool()
+@tool
 def vice_symbols(filter: str = "") -> str:
     """List the loaded program's labels (optionally only those containing `filter`)."""
     items = sorted((a, n) for n, a in session.symbols.items() if filter.lower() in n.lower())

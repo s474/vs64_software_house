@@ -1,13 +1,14 @@
 """End-to-end check of the VICE MCP server, talking to it exactly as Claude Code does:
 launched with the command in the repo's .mcp.json, from the repo root, over stdio.
 
-    cd mcp/vice && uv run smoke_test.py      (build hello first: make -C ../.. GAME=hello)
+    cd mcp/vice && uv run smoke_test.py
 
-Screenshots land in screenshots/smoke-*.png.
+Builds hello with make first. Screenshots land in screenshots/smoke-*.png.
 """
 
 import asyncio
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -22,6 +23,7 @@ def text_of(result) -> str:
 
 
 async def main() -> int:
+    subprocess.run(["make", "-s", "GAME=hello"], cwd=REPO_ROOT, check=True, stdout=subprocess.DEVNULL)
     config = json.loads((REPO_ROOT / ".mcp.json").read_text())["mcpServers"]["vice"]
     server = StdioServerParameters(command=config["command"], args=config["args"], cwd=str(REPO_ROOT))
     failures = 0
@@ -39,6 +41,13 @@ async def main() -> int:
             return result
 
         await call("vice_start", "symbols", program=PROGRAM)
+        # anticipated failures must reach the model with their message, not a generic error
+        missing = await client.call_tool("vice_load", {"program": "build/nope.prg"})
+        if not (missing.is_error and "file not found" in text_of(missing)):
+            failures += 1
+            print(f"[FAIL] missing-file error not reported clearly: {text_of(missing)!r}")
+        else:
+            print(f"\n[ok] vice_load(missing) -> {text_of(missing)}")
         await call("vice_symbols", "irq_top")
         await call("vice_run_frames", "Ran 10", frames=10)
         shot = await call("vice_screenshot", "384x272", name="smoke-hello")
@@ -56,6 +65,11 @@ async def main() -> int:
             failures += 1
             print(f"[FAIL] profile {lo}..{hi} not within 3024 +/- 7")
         await call("vice_run_until", "Hit exec", address="irq_bottom")
+        # now stopped at `end`: the next stops come end-first, and must still pair up correctly
+        prof = await call("vice_profile", "over 5 pass", start="irq_top", end="irq_bottom", samples=5)
+        if "min 30" not in text_of(prof):
+            failures += 1
+            print("[FAIL] profile starting between start and end measured the wrong span")
         await call("vice_registers")
         # joystick: $dc00 should read up+fire while held (bits 0 and 4 low)
         await call("vice_write_memory", "Wrote", address="$c000",
