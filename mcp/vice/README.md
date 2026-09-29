@@ -93,13 +93,22 @@ and nothing moves until the server sends `exit`:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Stopped: server connects
-    Stopped --> Stopped: memory, registers, display, checkpoint commands
+    [*] --> Stopped: connect
     Stopped --> Running: exit
-    Running --> Stopped: checkpoint hit (stopped event)
-    Running --> Stopped: any other command, e.g. ping
-    Running --> Jammed: CPU executes a JAM opcode
+    Running --> Stopped: halt
+    Running --> Jammed: JAM opcode
+    note right of Stopped
+        Memory, register, display and
+        checkpoint commands run here
+    end note
 ```
+
+| Transition | Caused by |
+|---|---|
+| connect | The server opens the TCP connection, and VICE halts the machine |
+| exit | The server's `exit` command resumes emulation |
+| halt | A checkpoint is hit (VICE sends a `stopped` event), or the server sends any other command, e.g. `ping` |
+| JAM opcode | The CPU executes an illegal JAM instruction and locks up. The server reports this instead of waiting forever |
 
 This is why every tool that runs the machine does it the same way: set up a checkpoint,
 send `exit`, wait for the `stopped` event, then read whatever it needs.
