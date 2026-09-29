@@ -121,7 +121,7 @@ def fmt(n: float) -> str:
 def eval_profile(check: Check, costs: list[int]) -> Result:
     if not costs:
         return Result(check, error="no complete start -> end pass was seen")
-    avg = round(sum(costs) / len(costs), 1)
+    avg = sum(costs) / len(costs)  # compared unrounded: 5,000.04 is over an average budget of 5,000
     parts = [Part("max", max(costs), "<=", check.params["max_cycles"])]
     if check.params.get("max_avg_cycles") is not None:
         parts.append(Part("avg", avg, "<=", check.params["max_avg_cycles"]))

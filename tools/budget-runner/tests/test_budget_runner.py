@@ -222,3 +222,79 @@ def test_pending_result_reports_and_strict_fails(tmp_path):
     assert line == "m  later  stage 4 check, spike is at stage 2  PENDING  (requirement)"
     strict = pending_result(b, b.checks[0], strict=True)
     assert strict.pending is None and "FAIL" in format_result("m", strict, 5)
+
+
+def test_average_limit_is_not_rounded_in_your_favour():
+    c = check(routine=["a", "b"], max_cycles=100, max_avg_cycles=50)
+    r = eval_profile(c, [50] * 24 + [51])  # avg 50.04: rounds to 50.0 but is over
+    assert not r.passed and [p.label for p in r.parts if not p.ok] == ["avg"]
+    assert "avg 50.04 / budget 50" in format_result("m", r, 1)
+
+
+def test_max_still_fails_when_average_is_fine():
+    r = eval_profile(check(routine=["a", "b"], max_cycles=100, max_avg_cycles=50), [1, 1, 1, 101])
+    assert not r.passed and [p.label for p in r.parts if not p.ok] == ["max"]
+
+
+def test_average_limit_parsing():
+    c = check(kind="profile_excl_irq", routine=["a", "b"], max_cycles=100, max_avg_cycles=50)
+    assert c.params["max_avg_cycles"] == 50
+    with pytest.raises(BudgetError, match="'max_avg_cycles' must be"):
+        check(routine=["a", "b"], max_cycles=100, max_avg_cycles=-1)
+    with pytest.raises(BudgetError, match="above 'max_cycles'"):
+        check(routine=["a", "b"], max_cycles=100, max_avg_cycles=101)
+    with pytest.raises(BudgetError, match="unknown field"):
+        check(kind="irq_time_per_frame", max_cycles=1, frames=1, max_avg_cycles=1)
+
+
+def test_run_skips_pending_checks_and_strict_fails(tmp_path, monkeypatch, capsys):
+    """End to end through cli.main with a fake VICE: only the current-stage check is run."""
+    from budget_runner import cli, session
+
+    (tmp_path / "main.asm").write_text("")
+    now = {"name": "now", "kind": "memory", "address": "x", "size": 1, "after_frames": 1, "equals": 0,
+           "basis": "requirement"}
+    later = now | {"name": "later", "from_stage": 3}
+    p = tmp_path / "budget.json"
+    p.write_text(json.dumps({"spike": "s", "src_dir": str(tmp_path), "stage": 2, "checks": [now, later]}))
+    ran, closed = [], []
+
+    class FakeVice:
+        def __init__(self, prg, warmup):
+            pass
+
+        def run(self, c):
+            ran.append(c.name)
+            return eval_memory(c, 0)
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(session, "build", lambda b: tmp_path / "s.prg")
+    monkeypatch.setattr(session, "Vice", FakeVice)
+    assert cli.main([str(p)]) == 0
+    out = capsys.readouterr().out
+    assert ran == ["now"] and "PENDING" in out and "1/1 checks passed, 1 pending a later stage" in out
+    ran.clear()
+    assert cli.main(["--strict", str(p)]) == 1
+    out = capsys.readouterr().out
+    assert ran == ["now"] and "later" in out and "FAIL" in out and "1 FAILED" in out and closed == [True, True]
+
+
+def test_pending_check_is_pending_even_when_the_build_fails(tmp_path, monkeypatch, capsys):
+    from budget_runner import cli, session
+
+    (tmp_path / "main.asm").write_text("")
+    now = {"name": "now", "kind": "memory", "address": "x", "size": 1, "after_frames": 1, "equals": 0,
+           "basis": "requirement"}
+    p = tmp_path / "budget.json"
+    p.write_text(json.dumps({"spike": "s", "src_dir": str(tmp_path), "stage": 1,
+                             "checks": [now, now | {"name": "later", "from_stage": 2}]}))
+
+    def broken(b):
+        raise session.MeasureError("build failed")
+
+    monkeypatch.setattr(session, "build", broken)
+    assert cli.main([str(p)]) == 1
+    out = capsys.readouterr().out
+    assert "error: build failed" in out and "later  stage 2 check" in out and "0/1 checks passed, 1 FAILED, 1 pending" in out

@@ -106,7 +106,8 @@ def parse_check(path: Path, index: int, raw: object) -> Check:
     if params.get("max_cycle") is not None:
         _int(where, "max_cycle", params["max_cycle"])
     if params.get("max_avg_cycles") is not None:
-        _int(where, "max_avg_cycles", params["max_avg_cycles"])
+        if _int(where, "max_avg_cycles", params["max_avg_cycles"]) > params["max_cycles"]:
+            raise BudgetError(f"{where}: 'max_avg_cycles' is above 'max_cycles', so it could never fail")
     from_stage = _int(where, "from_stage", raw["from_stage"], 1) if "from_stage" in raw else None
     return Check(name=name, kind=kind, basis=basis, source=str(raw.get("source", "")), params=params,
                  from_stage=from_stage)

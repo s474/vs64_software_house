@@ -32,18 +32,22 @@ def pending_result(budget: Budget, check, strict: bool = False) -> Result:
 def run_budget(budget: Budget, do_build: bool, strict: bool = False) -> list[Result]:
     from . import session  # imports the VICE client; kept out of module load so tests need no VICE
 
+    vice = error = None
     try:
         prg = session.build(budget) if do_build else REPO / "build" / budget.spike / f"{budget.spike}.prg"
         vice = session.Vice(prg, budget.warmup_frames)
     except Exception as e:  # build failure, VICE not installed, program never started
-        return [pending_result(budget, c, strict) if budget.pending(c) else Result(c, error=str(e)) for c in budget.checks]
+        error = str(e)
     try:  # a pending check runs no frames, so later memory checks see the same frames as without it
-        return [pending_result(budget, c, strict) if budget.pending(c) else vice.run(c) for c in budget.checks]
+        return [pending_result(budget, c, strict) if budget.pending(c)
+                else Result(c, error=error) if vice is None else vice.run(c) for c in budget.checks]
     finally:
-        vice.close()
+        if vice:
+            vice.close()
 
 
-def report(budget: Budget, results: list[Result], out=sys.stdout) -> None:
+def report(budget: Budget, results: list[Result], out=None) -> None:
+    out = out or sys.stdout  # looked up per call, not at import
     width = max(len(c.name) for c in budget.checks)
     for r in results:
         print(format_result(budget.spike, r, width), file=out)
