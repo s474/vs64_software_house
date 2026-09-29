@@ -10,7 +10,7 @@ many consecutive frames and reads the raster (line, cycle) at each stop, so it g
     hit - 7 to its irq_exit_rti hit + 6
   - irq_late_count at the end
 
-    cd mcp/vice && uv run python ../../tests/engine/irq_chain/measure.py [frames] [warmup]
+    uv run python tests/engine/irq_chain/measure.py [frames] [warmup]
 
 Needs a build first: make GAME=irq_chain SRC_DIR=tests/engine/irq_chain
 Stopping at a checkpoint freezes the emulated machine, so the raster figures are exact.

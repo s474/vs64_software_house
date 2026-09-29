@@ -1,7 +1,7 @@
 [project]
 name = "png2sprites"
 version = "0.1.0"
-description = "Add your description here"
+description = "Convert 24x21 hires and 12x21 multicolour sprite sheets (PNG) to C64 sprite data, checking C64 constraints"
 readme = "README.md"
 authors = [
     { name = "Simon Adams", email = "simonjadams@gmail.com" }

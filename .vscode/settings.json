@@ -1,6 +1,6 @@
 {
-    // Python tooling in this repo is the VICE MCP server's uv project (mcp/vice).
-    // Point Pylance at its venv so imports like mcp.server.mcpserver resolve.
-    "python.defaultInterpreterPath": "${workspaceFolder}/mcp/vice/.venv/bin/python",
+    // Python is one uv workspace with a single .venv at the repo root, which VS Code finds
+    // on its own, so no interpreter path is set. Pylance still needs to see mcp/vice, whose
+    // modules (vice_monitor) are imported by path rather than installed.
     "python.analysis.extraPaths": ["${workspaceFolder}/mcp/vice"]
 }

@@ -1,13 +1,14 @@
 # png2sprites
 
 Converts a PNG sprite sheet to C64 sprite data: **64 bytes per sprite** (63 data bytes + 1 pad),
-in row-major cell order (left to right, then down). A uv project.
+in row-major cell order (left to right, then down). A member of the repo's uv workspace (root
+`.venv` and `uv.lock`); the commands below work from this directory or the repo root.
 
 ```
 cd tools/png2sprites
 uv run png2sprites SHEET.png -o out.bin [-m hires|multicolour] [--mc1 N] [--mc2 N]
                             [--colors out.col] [--inc out.inc] [--prefix NAME]
-uv run pytest -q          # tests (or: make test-tools from the repo root)
+uv run pytest -q          # tests (or: make test-tools from the repo root, which runs all tools' tests)
 ```
 
 On success it prints one line and exits 0; on any rule violation it prints the file, sprite and

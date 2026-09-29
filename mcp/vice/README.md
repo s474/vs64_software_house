@@ -49,13 +49,18 @@ flowchart LR
   and its docstring is the description the model reads.
 - **`vice_monitor.py`** is a plain Python client for VICE's
   [binary monitor protocol](https://vice-emu.sourceforge.io/vice_13.html). It has no MCP in it,
-  so you can use it from scripts too.
+  so you can use it from scripts too. It also holds the shared helpers `start_vice()` (launch
+  x64sc with the monitor on a free port), `run_frames()` and `basic_sys_address()`, which the
+  server and the budget runner (`tools/budget-runner`, `make test`) both use.
 - **`smoke_test.py`** builds `hello`, launches the server exactly as `.mcp.json` does, and calls
   every tool. Run it after changing anything here.
 
-Python environment: `uv` reads `pyproject.toml` (dependency: `mcp[cli]`),
-`.python-version` (3.13) and `uv.lock` (exact pinned versions), and keeps the virtual
-env in `.venv/` (git-ignored). `uv sync` recreates it; `uv add <pkg>` adds a dependency.
+Python environment: this directory is a member of the repo's **uv workspace**. The root
+`pyproject.toml` lists the members, the root `uv.lock` pins exact versions for all of them,
+`.python-version` (3.13) is at the root, and the one virtual env is the root `.venv/`
+(git-ignored). This project's own dependency is `mcp[cli]`. `uv sync --all-packages` (from the root)
+recreates the env; `uv add --package vice-mcp <pkg>` adds a dependency. `uv run` works from here
+or from the root; `.mcp.json` launches the server with `uv run --directory mcp/vice server.py`.
 
 ### A session, start to finish
 

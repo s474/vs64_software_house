@@ -26,8 +26,10 @@ from vice_monitor import (
     CPU_OP_STORE,
     ViceError,
     ViceMonitor,
-    free_port,
+    basic_sys_address as _basic_sys_address,
     load_symbols,
+    run_frames as _run_frames,
+    start_vice,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -97,17 +99,6 @@ def _resolve_path(path: str) -> Path:
     return p if p.is_absolute() else (REPO_ROOT / p).resolve()
 
 
-def _basic_sys_address(program: Path) -> int | None:
-    """Entry point of a PRG with a BASIC upstart line ('10 SYS 2062'), or None."""
-    if program.suffix.lower() != ".prg":
-        return None
-    data = program.read_bytes()
-    if len(data) < 8 or data[0:2] != b"\x01\x08":
-        return None
-    m = re.search(rb"\x9e\s*\(?(\d+)", data[6:40])  # $9e = SYS token
-    return int(m.group(1)) if m else None
-
-
 def _addr(value: str | int) -> int:
     if isinstance(value, int):
         return value
@@ -142,23 +133,6 @@ def _status(mon: ViceMonitor) -> str:
         f"{where} A=${r['A']:02x} X=${r['X']:02x} Y=${r['Y']:02x} SP=${r['SP']:02x} "
         f"FL=%{r['FL']:08b} raster line {r['LIN']} cycle {r['CYC']}"
     )
-
-
-def _run_frames(mon: ViceMonitor, frames: int) -> None:
-    """Advance exactly `frames` PAL frames, stopping at the start of raster line 0."""
-    cp = mon.checkpoint_set(0x0000, 0xFFFF, CPU_OP_EXEC)
-    try:
-        for _ in range(frames):
-            for line in (PAL_LINES // 2, 0):  # mid-frame then line 0 = one frame boundary
-                mon.checkpoint_condition(cp.number, f"RL == ${line:02x}")
-                mon.exit()
-                if not mon.wait_stopped(timeout=5.0):
-                    mon.ping()  # halts the machine
-                    if mon.state.jammed_pc is not None:
-                        raise ViceError(f"CPU jammed at ${mon.state.jammed_pc:04x}")
-                    raise ViceError("frame did not complete within 5s (CPU jammed or interrupts off?)")
-    finally:
-        mon.checkpoint_delete(cp.number)
 
 
 def _png(width: int, height: int, indices: bytes, palette: list[tuple[int, int, int]]) -> bytes:
@@ -217,20 +191,9 @@ def vice_start(program: str = "", warp: bool = True, show_window: bool = False, 
     Joystick ports 1 and 2 are wired to the monitor (see vice_joystick); real joysticks are ignored.
     """
     session.stop()
-    port = free_port()
-    args = [
-        "x64sc", "-default", "-pal", "-sounddev", "dummy",
-        "-binarymonitor", "-binarymonitoraddress", f"ip4://127.0.0.1:{port}",
-        "-autostartprgmode", "1",
-    ]
-    if warp:
-        args.append("-warp")
-    if not show_window:
-        args.append("-minimized")
-    session.proc = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    session.mon = mon = ViceMonitor(port=port)
-    mon.connect()
-    mon.drain_events(0.3)
+    session.proc, session.mon = start_vice(warp, show_window)
+    mon = session.mon
+    port = mon.port
     mon.resource_set("JoyPort2Device", JOYPORT_IO_SIMULATION)
     mon.joyport_set(1, 0x1F)  # lines are active-low: $1f = nothing pressed
     result = f"VICE {mon.vice_info()} started (monitor port {port})."

@@ -1,0 +1,16 @@
+# uv workspace root: one lockfile (uv.lock) and one virtual environment (.venv) for every Python
+# project in the repo. The root itself has no code; the members are the projects.
+#   uv sync --all-packages     create/refresh .venv with every member's dependencies
+#   uv run --package <name> ...  run inside one member's dependency set
+[project]
+name = "c64-software-house"
+version = "0.0.0"
+description = "Workspace root for the C64 Software House Python tools"
+requires-python = ">=3.13"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["mcp/vice", "tools/png2sprites", "tools/budget-runner"]

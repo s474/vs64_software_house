@@ -85,5 +85,6 @@ Zero page is scarce and shared, so it is **allocated, never grabbed**:
 3. Timing-critical code has a measured cost within its budget.
 4. The memory map and raster timeline docs are updated if anything moved.
 5. If `mcp/vice` changed: `cd mcp/vice && uv run smoke_test.py` passes.
+6. If engine code changed: `make test` passes (or its `budget.json` is deliberately re-baselined).
 
 Report what you verified and how, including the screenshot paths. "Should work" is not done.

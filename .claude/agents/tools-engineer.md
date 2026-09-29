@@ -9,8 +9,10 @@ Python tools and build steps that let artists, designers and other agents work q
 
 ## Conventions
 
-- Python tools live in `tools/`. Each is part of a **uv** project (`pyproject.toml`, `uv.lock`
-  committed, `.venv/` git-ignored). Add dependencies with `uv add`, run with `uv run`.
+- Python tools live in `tools/`. Each is a member of the repo's single **uv workspace** (root
+  `pyproject.toml`; one root `uv.lock` committed, one root `.venv/` git-ignored). A new tool gets its
+  own `pyproject.toml` and is added to `[tool.uv.workspace] members`. Add dependencies with
+  `uv add --package <tool> <pkg>`, run with `uv run` (from the root or the tool's directory).
   Never `pip install` into the system Python.
 - Every converter **validates C64 constraints** and fails loudly with a clear message naming the
   file, position and rule broken. Examples: more than 4 colours in a multicolour cell, sprite not 24×21

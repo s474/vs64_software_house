@@ -3,6 +3,8 @@
 #   make run             build and autostart in VICE
 #   make crunch          Exomizer self-extracting build -> $(GAME)-sfx.prg
 #   make d64             disk image containing the crunched build
+#   make test            budget runner: build + run the engine spikes in VICE, check budget.json
+#   make test-tools      pytest for the Python tools
 #   make clean
 # Pick a game with GAME=<name> (default: hello). For programs outside games/, also set
 # SRC_DIR, e.g. make GAME=badline SRC_DIR=tests/timing/badline BUILD=release drops the DEBUG
@@ -29,13 +31,13 @@ D64       := $(OUT_DIR)/$(GAME).d64
 # colour byte per sprite) and .inc (KickAssembler constants). The source loads them with
 # LoadBinary("build/<game>/NAME.mc.bin"); constants are NAME_MC_COUNT/_MC1/_MC2 and
 # NAME_HIRES_COUNT. See tools/png2sprites/README.md.
-PNG2SPRITES := cd tools/png2sprites && uv run --quiet png2sprites
+PNG2SPRITES := uv run --quiet --package png2sprites png2sprites
 SPRITE_PNGS := $(wildcard $(SRC_DIR)/*.hires.png $(SRC_DIR)/*.mc.png)
 SPRITE_BINS := $(patsubst $(SRC_DIR)/%.png,$(OUT_DIR)/%.bin,$(SPRITE_PNGS))
 SOURCES   := $(wildcard $(SRC_DIR)/*.asm $(SRC_DIR)/*.inc engine/*.asm) $(SPRITE_BINS)
 DEFINES   := $(if $(filter release,$(BUILD)),,-define DEBUG)
 
-.PHONY: all run run-sfx crunch d64 clean test-tools
+.PHONY: all run run-sfx crunch d64 clean test test-tools
 
 all: $(PRG)
 
@@ -46,7 +48,7 @@ $(PRG): $(SOURCES)
 	$(JAVA) -jar $(KICKASS_JAR) $(MAIN) -o $(PRG) -odir $(abspath $(OUT_DIR)) \
 		-libdir $(CURDIR) -vicesymbols -symbolfile -bytedumpfile main.dump -showmem $(DEFINES)
 
-# Absolute paths: the converter runs from tools/png2sprites (its uv project).
+# Absolute paths, so the rules do not depend on the directory uv runs from.
 $(OUT_DIR)/%.hires.bin $(OUT_DIR)/%.hires.col $(OUT_DIR)/%.hires.inc: $(SRC_DIR)/%.hires.png $(wildcard tools/png2sprites/src/png2sprites/*.py) Makefile
 	@mkdir -p $(OUT_DIR)
 	@$(PNG2SPRITES) -m hires $(abspath $<) -o $(abspath $(OUT_DIR))/$*.hires.bin \
@@ -59,8 +61,14 @@ $(OUT_DIR)/%.mc.bin $(OUT_DIR)/%.mc.col $(OUT_DIR)/%.mc.inc: $(SRC_DIR)/%.mc.png
 		--colors $(abspath $(OUT_DIR))/$*.mc.col --inc $(abspath $(OUT_DIR))/$*.mc.inc \
 		--prefix $(shell echo $* | tr 'a-z-' 'A-Z_')_MC
 
+# Python tests for every workspace member that has some (no VICE needed).
 test-tools:
-	cd tools/png2sprites && uv run --quiet pytest -q
+	uv run --quiet --all-packages pytest -q tools
+
+# Budget runner: builds each tests/**/budget.json spike, runs it in VICE, checks the budgets.
+# Pass ARGS to select spikes: make test ARGS=irq_chain
+test:
+	@uv run --quiet --package budget-runner budget-runner $(ARGS)
 
 crunch: $(SFX)
 

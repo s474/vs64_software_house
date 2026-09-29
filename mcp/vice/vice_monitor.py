@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 import socket
 import struct
+import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -402,3 +403,62 @@ def load_symbols(program: Path) -> dict[str, int]:
                 if m:
                     symbols[m.group(2)] = int(m.group(1), 16)
     return symbols
+
+
+PAL_LINES = 312
+PAL_CYCLES_PER_LINE = 63
+
+
+def start_vice(warp: bool = True, show_window: bool = False) -> tuple[subprocess.Popen, ViceMonitor]:
+    """Launch a fresh x64sc (PAL, default settings) with the binary monitor on a free port.
+
+    Returns (process, connected monitor). The caller owns both: `mon.quit(); mon.close()`
+    then `proc.wait()`. Used by the MCP server's vice_start and by the budget runner.
+    """
+    port = free_port()
+    args = [
+        "x64sc", "-default", "-pal", "-sounddev", "dummy",
+        "-binarymonitor", "-binarymonitoraddress", f"ip4://127.0.0.1:{port}",
+        "-autostartprgmode", "1",
+    ]
+    if warp:
+        args.append("-warp")
+    if not show_window:
+        args.append("-minimized")
+    proc = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    mon = ViceMonitor(port=port)
+    try:
+        mon.connect()
+        mon.drain_events(0.3)
+    except BaseException:
+        proc.kill()
+        raise
+    return proc, mon
+
+
+def run_frames(mon: ViceMonitor, frames: int) -> None:
+    """Advance exactly `frames` PAL frames, stopping at the start of raster line 0."""
+    cp = mon.checkpoint_set(0x0000, 0xFFFF, CPU_OP_EXEC)
+    try:
+        for _ in range(frames):
+            for line in (PAL_LINES // 2, 0):  # mid-frame then line 0 = one frame boundary
+                mon.checkpoint_condition(cp.number, f"RL == ${line:02x}")
+                mon.exit()
+                if not mon.wait_stopped(timeout=5.0):
+                    mon.ping()  # halts the machine
+                    if mon.state.jammed_pc is not None:
+                        raise ViceError(f"CPU jammed at ${mon.state.jammed_pc:04x}")
+                    raise ViceError("frame did not complete within 5s (CPU jammed or interrupts off?)")
+    finally:
+        mon.checkpoint_delete(cp.number)
+
+
+def basic_sys_address(program: Path) -> int | None:
+    """Entry point of a PRG with a BASIC upstart line ('10 SYS 2062'), or None."""
+    if program.suffix.lower() != ".prg":
+        return None
+    data = program.read_bytes()
+    if len(data) < 8 or data[0:2] != b"\x01\x08":
+        return None
+    m = re.search(rb"\x9e\s*\(?(\d+)", data[6:40])  # $9e = SYS token
+    return int(m.group(1)) if m else None

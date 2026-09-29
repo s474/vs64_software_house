@@ -5,7 +5,9 @@ reusable engine modules, and the automated test that proves they fit their cycle
 Everything after this (the M4 training game onwards) is built on it.
 
 **Done when:** each module has a spike demo in `tests/engine/`, and `make test` runs every demo's
-cycle-budget checks in VICE and passes, with no human in the loop.
+cycle-budget checks in VICE and passes, with no human in the loop. Sign-off runs
+`uv run budget-runner --strict`, so a spike whose budget exists but whose `main.asm` doesn't fails
+rather than skips.
 
 ## Decisions (agreed with Simon, 2026-09-29)
 
@@ -14,6 +16,8 @@ cycle-budget checks in VICE and passes, with no human in the loop.
 | Multiplexer size for v1 | 16 / **24** / 32 virtual sprites | **24**: enough for a busy shooter, and leaves room to find the limits before v2 |
 | More than 8 sprites on one row | Drop the lowest-priority ones / **flicker them in turn** | **Flicker**: nothing vanishes permanently, which is what players notice most |
 | Who writes engine code | Gameplay engineer / **a new `raster-engineer` agent** | **New agent**: cycle-exact IRQ and multiplexer work needs a different mindset from game logic (it's in the plan's role list) |
+| Budget file whose spike has no `main.asm` yet | **SKIP** / fail | **SKIP by default**, so budgets can be written first; M3 sign-off runs with `--strict`, which fails it |
+| `start_cycle` hit of the label on a line other than `line` | Ignore it / **fail** | **Fail**: it means the IRQ has moved |
 
 ## Deliverables
 

@@ -712,9 +712,9 @@ Music (M3 doesn't include it; a typical player's cost is *unmeasured*) comes out
 ## Budget files
 
 Each spike has `tests/engine/<spike>/budget.json`. The Technical Director writes the budgets;
-the tools-engineer's runner (`make test`) builds the spike, runs it in VICE through
-`mcp/vice/vice_monitor.py`, runs every check, prints one line per check, and exits non-zero if
-any fails.
+the tools-engineer's runner (`make test`, see [Running it](#running-it)) builds the spike, runs it
+in VICE through `mcp/vice/vice_monitor.py`, runs every check, prints one line per check, and exits
+non-zero if any fails.
 
 ```json
 {
@@ -746,12 +746,66 @@ Check kinds (`kind` defaults to `profile`, so the brief's single-object example 
 | `irq_time_per_frame` | `max_cycles`, `frames` | Sum of IRQ spans (as above) per frame | max over the frames ≤ `max_cycles` |
 | `memory` | `address` (label), `size` (1 or 2, little-endian), `after_frames`, one of `equals` / `max` / `min`, optional `scale` | Value after running `after_frames` more frames, times `scale` | Comparison holds |
 
-Output, one line per check:
+Output, one line per check (`spike  name  figures  PASS|FAIL  (basis)`); a failing check adds
+indented lines saying what is over or under, what was measured, and the check's `source`:
 
 ```
-multiplexer  mux_sort            measured   1,137 / budget  1,500  PASS  (estimate)
-irq_chain    h2 stable start     spread 0 cycles / budget 0        PASS
+irq_chain  h1 start (normal, line $69)           spread 7 / budget 7; max cycle 33 / budget 33  PASS  (measured)
+irq_chain  irq_exit overhead                     max 60 / budget 60  PASS  (measured)
+irq_chain  no late handlers                      irq_late_count 0 (required == 0)  PASS  (requirement)
+multiplexer  SKIP  tests/engine/multiplexer/main.asm does not exist yet (14 checks not run)
+budget-runner: 9/9 checks passed (1 spike run, 1 skipped: no source yet)
 ```
+
+```
+irq_chain  irq_exit overhead                     max 60 / budget 50  FAIL  (measured)
+    max: 60 is over the budget of 50 by 10
+    measured: min 58, avg 59.5, 50 passes
+    budget source: engine/README.md#irq-framework-costs: measured 60 every pass ...
+```
+
+### Running it
+
+```
+make test                    # every tests/**/budget.json
+make test ARGS=irq_chain     # one spike (a name, or a path to any budget.json, e.g. a scratch copy)
+uv run budget-runner --no-build irq_chain   # reuse the existing build
+uv run budget-runner --strict               # a missing main.asm is a failure, not a skip
+```
+
+Exit status: 0 all checks passed; 1 a check failed, could not be measured, or a build failed;
+2 a budget file is malformed or the selection matched nothing. Code: `tools/budget-runner`
+(parsing and comparison in `spec.py` / `evaluate.py`, tested by pytest without VICE; the VICE
+driving in `session.py`, on `mcp/vice/vice_monitor.py`). One headless x64sc runs per spike, and
+its checks run one after another in file order, so a `memory` check sees the frames the earlier
+checks already ran.
+
+How the runner reads the schema, where the text above left room:
+
+- `warmup_frames` counts from the program's entry (the BASIC `SYS` target), in whole frames.
+- Every hit is a stop at an execution checkpoint, so raster figures are exact. Time is raster
+  line x 63 + cycle, unwrapped across frames; two watched hits more than a frame apart cannot be
+  timed, and a watched address not reached within 5 s of wall time fails that check as
+  "timed out".
+- `profile`: the cost of a pass is the time from a hit on `start` to the next hit on `end`; a
+  second `start` before `end` restarts the pass. Passes stop after `samples`.
+- `profile_excl_irq` and `irq_time_per_frame` watch the framework labels `irq_dispatch` and
+  `irq_exit_rti`, which the test program must therefore export. Nested IRQs are counted once.
+  Only IRQs **nested inside the pass** (dispatched after `start`, returned before `end`) are
+  subtracted, so a routine that itself runs inside a handler is not reduced to nothing.
+- `irq_time_per_frame` assigns each IRQ span to the frame (raster line 0 to line 0) its start falls
+  in, discards the partial first frame, and takes the max over the next `frames` frames.
+- `start_cycle`: **every** hit of `label` must be on `line` (a hit on another line fails, since it
+  means the IRQ moved), the cycle spread over `frames` hits must be at most `max_spread`, and the
+  max cycle at most `max_cycle` when given. (Decided with Simon, 2026-09-29: a hit elsewhere fails
+  rather than being ignored.)
+- `memory`: `address` is a label (or `$hex`); the value is read little-endian after
+  `after_frames` more frames, multiplied by `scale`, then compared.
+- `notes` is allowed at the top level and on a check and is ignored. An unknown field, an unknown
+  `kind`, or a missing required field is a budget-file error naming the file and check.
+- A spike whose `src_dir/main.asm` does not exist yet (its budget was written first, as with
+  `multiplexer`) is reported as SKIP and does not fail the run. Use `--strict` to fail on it;
+  M3 sign-off runs with `--strict`.
 
 ---
 
@@ -783,7 +837,7 @@ Four entries changing the border colour, screen on (badlines active), no sprites
 - `spike_h2` writes the border colour as its first store, so a screenshot with `area="full"`
   shows the colour change at the same x position on every frame.
 - Screenshot: `screenshots/irq-chain-bands.png`.
-- Frame-by-frame figures: `cd mcp/vice && uv run python ../../tests/engine/irq_chain/measure.py 1000`.
+- Frame-by-frame figures: `uv run python tests/engine/irq_chain/measure.py 1000` (from the repo root or `mcp/vice`).
 
 ```mermaid
 flowchart LR

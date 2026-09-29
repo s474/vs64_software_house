@@ -15,8 +15,10 @@ Target: **PAL C64** (6510 + VIC-II 6569 + SID), KickAssembler 5.25, VICE 3.10 (`
 | Run in VICE for a human | `make run GAME=<title>` |
 | Release build | `make BUILD=release GAME=<title>` (no `DEBUG` define) |
 | Crunched PRG / disk image | `make crunch` / `make d64` |
-| Test the tools | `make test-tools` (pytest for `tools/png2sprites`) |
+| Test the tools | `make test-tools` (pytest for every Python project under `tools/`) |
+| Check engine budgets in VICE | `make test` (builds each `tests/**/budget.json` spike, runs it headless, fails on an overrun; `make test ARGS=irq_chain` for one) |
 | Test the VICE MCP server | `cd mcp/vice && uv run smoke_test.py` |
+| Set up / refresh the Python environment | `uv sync --all-packages` (one workspace: root `.venv` and `uv.lock`) |
 
 Build outputs in `build/<title>/`: `.prg`, `main.vs` (labels), `main.dump` (address of every source line).
 `make clean` and VS64's clean delete all of `build/`.
@@ -32,7 +34,7 @@ Build outputs in `build/<title>/`: `.prg`, `main.vs` (labels), `main.dump` (addr
 | `docs/standards/` | Coding standards, memory-map template |
 | `docs/games/<title>/` | Per game: design doc, memory map, raster timeline |
 | `mcp/vice/` | VICE MCP server (Python, uv project) |
-| `tools/` | Python asset converters and utilities (uv, never system pip) |
+| `tools/` | Python asset converters and utilities: `png2sprites/`, `budget-runner/` (uv workspace members, never system pip) |
 | `screenshots/` | Git-ignored. All screenshots and visual output go here |
 
 ## Reference docs
@@ -60,7 +62,7 @@ mark measured facts as measured (with the probe that shows it).
 - Timing figures come from measurement ([vic-ii-timing.md](docs/reference/vic-ii-timing.md)), not memory.
   If a number isn't in the docs, measure it and add it.
 - Zero page is allocated in each game's `zp.asm`. Only the IRQ framework touches the IRQ vectors and `$D012`.
-- Python: each project is a uv project (`uv add`, `uv run`). Never `pip install` into the system Python.
+- Python: one **uv workspace** rooted at `pyproject.toml` (members `mcp/vice`, `tools/png2sprites`, `tools/budget-runner`), with a single `uv.lock` and `.venv/` at the repo root. Add a dependency with `uv add --package <member> <pkg>`, run with `uv run` (from the root, or from inside a member's directory: both use the root `.venv`). A new Python project is added to `[tool.uv.workspace] members`. Never `pip install` into the system Python.
 - Diagrams in docs are Mermaid.
 - Git: commit and push only when Simon asks. Never commit `build/`, `screenshots/` or `.venv/`.
 
