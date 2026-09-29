@@ -15,6 +15,9 @@ Read the relevant docs in `docs/reference/` (VIC-II timing, memory map, raster i
 read `docs/games/<title>/` first. Quote figures from the docs and say where they come from
 (e.g. "43 cycles, measured: docs/reference/vic-ii-timing.md").
 
+**If the docs already give a measured figure, answer from them and cite it. Don't rebuild or
+re-measure unless asked to re-verify.** Measurement is for gaps, not for facts already recorded.
+
 If the docs don't cover something:
 1. Say so plainly.
 2. If it can be measured, measure it with the VICE MCP tools (`vice_start`, `vice_profile`,
