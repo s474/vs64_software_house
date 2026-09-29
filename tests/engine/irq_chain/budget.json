@@ -16,10 +16,10 @@
       "source": "Spread 7: M3 acceptance (docs/milestones/M3-engine-basics.md). max_cycle: engine/README.md#irq-framework-costs, 24 entry + 8 tick + 7 jitter + trigger cycle (unmeasured) + margin"
     },
     {
-      "name": "h1 start (normal, line $6A)",
+      "name": "h1 start (normal, line $69)",
       "kind": "start_cycle",
       "label": "spike_h1",
-      "line": 106,
+      "line": 105,
       "frames": 100,
       "max_spread": 7,
       "max_cycle": 40,
@@ -27,10 +27,10 @@
       "source": "Spread 7: M3 acceptance. max_cycle: 24 entry + 7 jitter + trigger cycle (unmeasured) + margin"
     },
     {
-      "name": "h2 start (STABLE, line $B2)",
+      "name": "h2 start (STABLE, line $B1)",
       "kind": "start_cycle",
       "label": "spike_h2",
-      "line": 178,
+      "line": 177,
       "frames": 100,
       "max_spread": 0,
       "basis": "requirement",

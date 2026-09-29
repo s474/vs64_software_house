@@ -8,7 +8,7 @@ the code, not after.
 
 | Module | File | Status |
 |---|---|---|
-| IRQ framework | `engine/irq.asm` | Designed (this page). Not implemented |
+| IRQ framework | `engine/irq.asm` | **Implemented** (M3 stage 1). Costs measured in `tests/engine/irq_chain` |
 | Sprite multiplexer v1 | `engine/multiplexer.asm` | Designed (this page). Not implemented |
 
 **How to read the numbers.** Every figure is marked:
@@ -112,8 +112,11 @@ the VIC bank, `$D018` or anything else on the screen.
 - **Entry 0 is the frame entry**: the framework increments `zp_irq_frame` just before its
   handler runs. `irq_wait_frame` returns just after that.
 - The macros emit, where `IrqChainEnd()` is: the RAM table `irq_lines` (one byte per entry,
-  the trigger line), the dispatch-target tables `irq_target_lo`/`irq_target_hi`, and the small
-  per-entry stubs (the frame tick for entry 0, the double-IRQ stage for stable entries).
+  the trigger line: `line − 2` for a stable entry), `irq_next` (the following entry's index),
+  the dispatch-target tables `irq_target_lo`/`irq_target_hi`, the handler tables
+  `irq_handler_lo`/`irq_handler_hi` (read by the stable stage 2), all sized to the chain
+  (6 bytes per entry, kept in one page), and the entry-0 tick stub. The double-IRQ stages are
+  common code in `irq.asm`.
   They assemble-time check (`.errorif`) that there are 1–16 entries, lines are ascending and
   in 0–255, and a stable entry's line is at least 2.
 - `irq_lines` may be rewritten from the main loop (one byte, atomic) to move an entry. The
@@ -181,8 +184,9 @@ detected in v1).
 ### Stable handlers
 
 `IrqStable(line, handler)` makes `handler`'s first instruction run on `line` at the same
-raster cycle every frame (`IRQ_STABLE_CYCLE`, *estimate: to be measured and fixed as a
-constant by the raster-engineer*). It uses the double IRQ from
+raster cycle every frame: `IRQ_STABLE_CYCLE` = **cycle 6** (**measured**: `irq_chain` spike,
+1,000 of 1,000 frames on cycle 6, with stage 1 arriving on 8 different cycles and stage 2 on
+2, via `tests/engine/irq_chain/measure.py`). It uses the double IRQ from
 [raster-interrupts.md](../docs/reference/raster-interrupts.md#jitter-and-stable-rasters): the chain
 triggers at `line − 2`; the stable stub (label `irq_stable_begin`, common code) points
 `$FFFE` at stage 2, sets `$D012` to the next line, acknowledges, `cli`s and runs `NOP`s;
@@ -190,25 +194,47 @@ stage 2 arrives with at most 1 cycle of jitter, discards its own 3-byte interrup
 restores `$FFFE` to `irq_dispatch`, and removes the last cycle with a `$D012` compare
 across the line change. Then it jumps to the handler, which exits normally.
 
+Implementation notes (as built):
+
+- Stage 1 and stage 2 switch only the **low byte** of `$FFFE`: `irq_dispatch` and
+  `irq_stable_stage2` are assembled into one page (asserted). Stage 2 finds the handler
+  through `irq_handler_lo/hi` indexed by `zp_irq_idx`, in the time it has to burn anyway.
+- Stage 2 doesn't acknowledge its own latch: `I` is set until the handler's `irq_exit`, which
+  acknowledges after writing `$D012`.
+- Stage 2's wait (`IRQ_STABLE_DELAY`, `IRQ_STABLE_PAD` in `irq.asm`) was set by measurement.
+  Changing any instruction in stage 2 needs the spread re-measured.
+- If stage 2's IRQ never arrives (stage 1 started too late, e.g. after a long `sei` in the main
+  loop), stage 1's `NOP` slide falls through to a fallback that runs the handler at once,
+  unstable, and counts a late run. Stage 1 reaches `cli` 22 cycles after it starts, so it must
+  start by about cycle 40 of `line − 2` (*counted*; it measured 26–33 with the worst main loop).
+
 Constraints:
 
 - Lines `line − 2` to `line` must **not be badlines** (the `NOP` slide needs the bus), and the
   sprite DMA on them must be the same every frame. Put stable entries in the border or in a
-  gap between badlines ($B0–$B2 is fine with the default YSCROLL=3: badlines are at 51 + 8n,
+  gap between badlines ($AF–$B1 is fine with the default YSCROLL=3: badlines are at 51 + 8n,
   measured, [vic-ii-timing.md](../docs/reference/vic-ii-timing.md#badlines)), and never inside
   the multiplexer's region.
-- Cost: about 2 raster lines more than a normal entry (*estimate*, see [Costs](#irq-framework-costs)).
+- Cost: 99 cycles more than a normal entry (**measured**, see [Costs](#irq-framework-costs)).
 - An NMI (RESTORE key) during the stage costs one frame of stability. Accepted.
 
 ### Jitter guarantee
 
 A normal handler starts on its line within **7 cycles** of its earliest possible start
-(acceptance criterion; `hello` **measured** 3 cycles with a `jmp *` main loop,
+(**measured**: spread exactly 7 on every entry of the `irq_chain` spike over 1,000 frames, with a
+worst-case main loop that includes taken branches right before 7-cycle `inc abs,x`; the IRQ
+sequence starts on cycle 2 of the trigger line at the earliest, so a normal handler's first
+instruction runs on cycle **26–33**, entry 0's on **34–41**;
 [raster-interrupts.md](../docs/reference/raster-interrupts.md#jitter-and-stable-rasters)), **provided no
 badline or sprite DMA falls between the trigger and the handler**. DMA delays it by up to the
 DMA on that line: 43 cycles for a badline, 81 for a badline with sprites 0–7 active around it
 (**measured**, [vic-ii-timing.md](../docs/reference/vic-ii-timing.md#badline-and-sprites-on-the-same-line)).
 Trigger normal entries on non-badlines when their start time matters.
+
+**The line after an entry matters too.** A handler that starts on cycle ~30 and does a few
+cycles of work runs `irq_exit` into the next line. If that line is a badline, the exit costs
+43 cycles more (**measured**: `irq_exit` 102–103 after entries on $6A and $B2, the `irq_chain`
+spike's first layout, against 60 elsewhere). Budget for it, or keep the next line clear.
 
 ### Frame sync
 
@@ -223,21 +249,29 @@ compares it with the value it saw last time (a difference of more than 1 = an ov
 
 ### IRQ framework costs
 
-All *estimates* until the raster-engineer measures them in the `irq_chain` spike. Raster
-cycles (`vice_profile`), no DMA on the lines involved.
+**Measured** in the `irq_chain` spike (VICE 3.10 x64sc PAL, 2026-09-29), with
+`tests/engine/irq_chain/measure.py` over 1,000 frames and confirmed with `vice_profile`. Raster
+cycles, no DMA on the lines involved.
 
 | Part | Cycles | Basis |
 |---|---|---|
+| IRQ sequence starts (earliest) | cycle 2 of the trigger line | **measured** (lines 32, 105, 175, 250; line 0 not measured) |
 | Interrupt sequence | 7 | [6502-timing.md](../docs/reference/6502-timing.md) (standard figure) |
-| Jitter: finishing the interrupted instruction | 0–7 | Acceptance limit; 3 **measured** with `jmp *` |
-| `irq_dispatch`: 3 self-mod saves (12), `cld` (2), `jmp` (3) | 17 | *estimate* (counted) |
-| **Handler starts** after the IRQ is taken | **24** | *estimate* |
-| Frame tick stub, entry 0 only | +8 | *estimate* |
-| `irq_exit` → `irq_exit_rti` (advance, `$D012`, target, ack, late check, restore) | ≤ 60 | *estimate* |
-| `irq_rearm` → `irq_exit_rti` | ≤ 50 | *estimate* |
+| Jitter: finishing the interrupted instruction | 0–7 | **measured**, worst-case main loop, all 8 values seen on every entry |
+| `irq_dispatch`: 3 self-mod saves (12), `cld` (2), `jmp` (3) | 17 | **measured** (`vice_profile irq_dispatch → spike_h1`: 17 every pass) |
+| **Handler starts** after the IRQ is taken | **24** | **measured** (dispatch hit + 17) |
+| Frame tick stub, entry 0 only | +8 | **measured** (h0 starts 25 after dispatch) |
+| `irq_exit` → `irq_exit_rti` (advance, `$D012`, target, ack, late check, restore) | **60** (58 on the wrap) | **measured**, every pass. Exactly the budget: no margin |
+| `irq_rearm` → `irq_exit_rti` | 35 | *counted*: not exercised until M3 stage 2 |
 | `rti` + the handler's `jmp irq_exit` | 9 | [6502-timing.md](../docs/reference/6502-timing.md) |
-| **Total per normal entry, excluding its work** | **≈ 93** (+8 on entry 0) | *estimate* |
-| Stable entry, extra: `irq_stable_begin` → handler | ≤ 170 (≈ 2.7 lines) | *estimate* |
+| **Total per normal entry, excluding its work** | **93** (+8 on entry 0) | **measured** parts |
+| Stable entry, extra: `irq_stable_begin` → handler | **99–106** (1.7 lines) | **measured** |
+| **Total per stable entry, excluding its work** | **192–199** | **measured** parts |
+| All four `irq_chain` entries, per frame (runner's IRQ-span definition) | **501–508** | **measured**, 1,000 frames |
+
+The exit's 60 cycles: `irq_next` table (10 for index advance), `$D012` (8), target (16), ack (6),
+late check against the line (8) and raster bit 8 (6, so a handler that overruns into lines
+256–311 is caught too), restore (6).
 
 For comparison, `hello`'s hand-written handlers cost about 50 cycles each with no register
 save beyond A, no table and no late check.
@@ -245,7 +279,9 @@ save beyond A, no table and no late check.
 ### Labels exported for tests
 
 `irq_dispatch`, `irq_exit`, `irq_rearm`, `irq_exit_rti` (the `rti` itself), `irq_stable_begin`,
-`irq_nmi`, `irq_late_count`, `irq_lines`. The budget runner depends on these names.
+`irq_nmi`, `irq_late_count`, `irq_lines`. The budget runner depends on these names. Also
+emitted: `irq_stable_stage2`, `irq_next`, `irq_target_lo/hi`, `irq_handler_lo/hi`, `irq_tick`,
+`IRQ_COUNT`, and the constant `IRQ_STABLE_CYCLE`.
 
 ---
 
@@ -545,10 +581,11 @@ Suggested block for `zp.asm`, after the scratch registers:
 .label zp_mux_end   = $0f   // IRQ: end of the front buffer
 ```
 
-Non-zero-page engine RAM (in the engine block): `irq_lines`, `irq_target_lo/hi` (48 bytes),
+Non-zero-page engine RAM (in the engine block): the IRQ chain tables (6 bytes per entry, ≤ 96),
 the six virtual arrays (144), `mux_order` and `mux_age` (48), the selection's kept list
 (about 72), and the slot buffers (7 × 64 = 448, aligned). About 760 bytes, plus code
-(*estimate*: ~0.3 KB IRQ framework, ~1.5 KB multiplexer).
+(IRQ framework **as built**: 310 bytes of code and data, plus 6 per entry and the 8-byte
+tick stub; multiplexer *estimate* ~1.5 KB).
 
 ---
 
@@ -676,21 +713,28 @@ Four entries changing the border colour, screen on (badlines active), no sprites
 | Entry | Line | Kind | Label (first instruction) | Why this line |
 |---|---|---|---|---|
 | 0 | `$20` (32) | Normal | `spike_h0` | Top border, frame entry |
-| 1 | `$6A` (106) | Normal | `spike_h1` | Display area, not a badline (107 is) |
-| 2 | `$B2` (178) | **Stable** | `spike_h2` | Stage lines 176–178 are not badlines (179 is) |
+| 1 | `$69` (105) | Normal | `spike_h1` | Display area; 105 and 106 (where its exit ends) are not badlines |
+| 2 | `$B1` (177) | **Stable** | `spike_h2` | Stage lines 175–177 and 178 (its exit) are not badlines (171, 179 are) |
 | 3 | `$FA` (250) | Normal | `spike_h3` | Last display line, below the last badline (243) |
 
+- Entries 1 and 2 were first designed at `$6A` and `$B2`. Their exits then ran into badlines
+  107 and 179, and `irq_exit` measured 102–103 instead of 60, so both moved up one line
+  (see [Jitter guarantee](#jitter-guarantee)).
 - The **main loop must generate worst-case jitter**: a loop mixing 7-cycle instructions
   (`inc abs,x`) with 2- and 3-cycle ones, not `jmp *`. Otherwise the normal handlers show 3
-  cycles of spread and the stable one proves nothing.
+  cycles of spread and the stable one proves nothing. **A fixed-length loop isn't enough**
+  (**measured**): the IRQs' own durations feed back into the loop's phase, and a 25-cycle loop
+  locked into 5 phases at h0 over 1,000 frames. The spike's loop takes a 30- or 37-cycle path
+  chosen by an LFSR, which reached all 8 jitter values on every entry.
 - `spike_h2` writes the border colour as its first store, so a screenshot with `area="full"`
   shows the colour change at the same x position on every frame.
 - Screenshot: `screenshots/irq-chain-bands.png`.
+- Frame-by-frame figures: `cd mcp/vice && uv run python ../../tests/engine/irq_chain/measure.py 1000`.
 
 ```mermaid
 flowchart LR
-    H0["$20 spike_h0<br/>frame tick, colour 1"] --> H1["$6A spike_h1<br/>colour 2"]
-    H1 --> H2["$B0 trigger, $B2 start<br/>spike_h2 stable, colour 3"]
+    H0["$20 spike_h0<br/>frame tick, colour 1"] --> H1["$69 spike_h1<br/>colour 2"]
+    H1 --> H2["$AF trigger, $B1 start<br/>spike_h2 stable, colour 3"]
     H2 --> H3["$FA spike_h3<br/>colour 4"]
     H3 -->|"next frame"| H0
 ```
@@ -740,11 +784,11 @@ records them in the reference docs as measured, and updates this page and the bu
 
 | # | Figure | Design value | Used for | How |
 |---|---|---|---|---|
-| 1 | Raster IRQ trigger cycle within the line (and whether line 0 differs) | ~0 | Handler start cycle, `max_cycle` checks | `vice_run_until` on a handler after a `jmp *` loop |
+| 1 | Raster IRQ trigger cycle within the line (and whether line 0 differs) | **Measured**: IRQ sequence starts on cycle 2 at the earliest (lines 32, 105, 175, 250). Line 0 still unmeasured | Handler start cycle, `max_cycle` checks | `vice_run_until` on a handler after a `jmp *` loop |
 | 2 | Writing `$D012` with the current line: does the IRQ latch immediately? | Assumed "maybe": the late check handles both | Late-check correctness | Probe |
-| 3 | Framework costs: dispatch, exit, re-arm, tick, stable extra | 17 / 60 / 50 / 8 / 170 | Every IRQ budget | `irq_chain` spike, `vice_profile` |
-| 4 | `IRQ_STABLE_CYCLE`: the stable handler's start cycle | Unknown | Stable handler users | `irq_chain` spike, `start_cycle` |
-| 5 | Maximum normal jitter with the worst main loop | ≤ 7 | Acceptance | `irq_chain` spike, `start_cycle` |
+| 3 | Framework costs: dispatch, exit, re-arm, tick, stable extra | **Measured** 17 / 60 / (35 counted) / 8 / 99–106 | Every IRQ budget | `irq_chain` spike, `vice_profile` |
+| 4 | `IRQ_STABLE_CYCLE`: the stable handler's start cycle | **Measured**: 6 | Stable handler users | `irq_chain` spike, `start_cycle` |
+| 5 | Maximum normal jitter with the worst main loop | **Measured**: 7 (8 never seen in 4,000 IRQs, taken branches included) | Acceptance | `irq_chain` spike, `start_cycle` |
 | 6 | Sprite DMA lines per sprite (display on Y+1 … Y+21) | 21 | DMA budget, `MUX_FREE_AFTER` | Extend `tests/timing/sprites` |
 | 7 | Latest cycle on line Y at which writing the sprite's Y still shows it from Y+1 | Before ~cycle 55 | Scheduling, `MUX_WRITE_LINES` | Probe |
 | 8 | Earliest line/cycle to rewrite X, pointer and colour without marking the previous occupant's last line | Line Y_old + 22 | `MUX_FREE_AFTER` | Probe with screenshots |

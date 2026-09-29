@@ -90,6 +90,16 @@ line: 0 to about 7 cycles of jitter, depending on what was executing.
 
 - **Measured:** with a `jmp *` main loop, `hello`'s two IRQs (48 lines apart = 3,024 cycles)
   arrived 3,023–3,026 cycles apart: 3 cycles of jitter.
+- **Measured (worst case)** with the `irq_chain` spike ([tests/engine/irq_chain](../../tests/engine/irq_chain/main.asm),
+  `measure.py`, 1,000 frames × 4 IRQs): a main loop of `inc abs,x`, `asl zp`, `bit zp`, `inx`
+  and taken branches straight before each `inc abs,x` gives **0–7 cycles** of jitter, all 8
+  values seen on every line. The interrupt sequence starts on **cycle 2** of the trigger line
+  at the earliest (VICE `CYC`), so with `engine/irq.asm` a handler starts on cycle 26–33.
+- The main loop's phase at an IRQ isn't random: the IRQs' own lengths feed back into it. A
+  fixed 25-cycle loop hit only 5 phases in 1,000 frames. To see the worst case, vary the loop's
+  length (the spike uses an LFSR branch).
+- **Measured:** a stable raster with the engine's double IRQ starts on the same cycle in
+  1,000 of 1,000 frames (`IRQ_STABLE_CYCLE` = 6, [engine/README.md](../../engine/README.md#stable-handlers)).
 - Jitter is fine for most splits if the change happens in the border (e.g. border and background
   colours changed while the beam is off-screen), or if a few pixels of wobble at the split don't show.
 - It's **not** fine for effects that need an exact cycle: colour changes mid-line, opening the
@@ -107,12 +117,16 @@ the raster line and cycle).
 The M3 engine design ([engine/README.md](../../engine/README.md#estimates-to-measure-in-m3))
 relies on these. They're *unmeasured* here until a probe in `tests/timing/` shows them:
 
-- On which cycle of its line the raster IRQ is raised (commonly given as cycle 0, and 1 on
-  line 0). This sets how early a handler can start.
+- ~~On which cycle of its line the raster IRQ is raised~~ **Measured** for lines 32, 105, 175
+  and 250 (above): the interrupt sequence starts on cycle 2 at the earliest. Line 0 (commonly
+  said to be one cycle later) is still unmeasured.
 - Whether writing `$D012` with the line the raster is already on raises the IRQ at once.
   The framework's late check is written to be correct either way.
 - Whether a taken branch that doesn't cross a page delays the IRQ by one more instruction
-  (the 6502's "branch doesn't poll" quirk), which could push jitter past 7.
+  (the 6502's "branch doesn't poll" quirk), which could push jitter past 7. **Partly measured:**
+  the `irq_chain` loop has taken branches straight before 7-cycle `inc abs,x`, and jitter never
+  exceeded 7 in 4,000 IRQs in x64sc. Whether that's because VICE doesn't show the quirk, or the
+  phase never lined up, isn't known.
 
 ## Common bugs
 
