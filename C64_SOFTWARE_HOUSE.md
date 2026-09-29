@@ -229,7 +229,9 @@ When there are independent tasks (for example, the Tools Engineer on the map edi
 
 Keep a standing `rnd/` track, separate from game production, where the Raster Engineer builds and measures techniques into `engine/` modules, each with a spike demo, cycle cost and documented constraints. Candidate list:
 
-- Robust 24–32+ sprite multiplexer with flicker-free sorting
+- Robust 24–32+ sprite multiplexer with flicker-free sorting. **Next up: multiplexer v2**, bringing
+  `mux_update` to an average of ≤ 3,000 raster cycles (v1 measures ~6,300), due before M5
+  ([M3 brief, rule 3](docs/milestones/M3-engine-basics.md#build-rules-from-the-producers-design-review-2026-09-29))
 - 8-way smooth scrolling with colour RAM double buffering
 - Sprites in the side borders during gameplay
 - AGSP or VSP-style full-screen scrolling (note the VSP real-hardware risk)

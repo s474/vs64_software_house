@@ -137,6 +137,14 @@ The design in [engine/README.md](../../engine/README.md) is approved. These rule
    logic in frames where no window has more than 8 sprites (most frames). The worst case may stay
    expensive. The common case must be cheap.
 
+   **Multiplexer v2 target (agreed with Simon, 2026-09-29).** v1 is accepted for M3 at the interim
+   target below. A **multiplexer v2** must bring `mux_update` down to an **average of ≤ 3,000 raster cycles**
+   in normal frames, keeping fair flicker and pinning, and review the zone IRQ's per-slot cost
+   (stage 2: ~190 raster cycles per slot, against 60 designed). v2 is an R&D-track item
+   ([plan §9](../../C64_SOFTWARE_HOUSE.md#9-pushing-the-boundaries-an-rd-track)), due before the first
+   real title (M5) depends on the multiplexer. M4 may use v1. Performance targets like this are changed
+   only by Simon and the producer: agents report the gap.
+
    **Re-baselined after stage 2** (Technical Director). Stage 2 measured 6,240 raster cycles on
    average (≈ 5,000 CPU). The 3,000 figure isn't reachable in this architecture: the design's own
    estimates for a no-overflow frame added up to ~4,500 CPU. What the rule protects is still met:

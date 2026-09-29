@@ -8,7 +8,10 @@
       "Bash(head *)",
       "Bash(tail *)",
       "Bash(wc *)",
-      "mcp__vice"
+      "Bash(unset VIRTUAL_ENV)",
+      "mcp__vice",
+      "Bash(uv run smoke_test.py)",
+      "Bash(uv run --quiet python tests/*)"
     ]
   }
 }

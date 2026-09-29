@@ -63,6 +63,8 @@ mark measured facts as measured (with the probe that shows it).
   If a number isn't in the docs, measure it and add it.
 - Zero page is allocated in each game's `zp.asm`. Only the IRQ framework touches the IRQ vectors and `$D012`.
 - Python: one **uv workspace** rooted at `pyproject.toml` (members `mcp/vice`, `tools/png2sprites`, `tools/budget-runner`), with a single `uv.lock` and `.venv/` at the repo root. Add a dependency with `uv add --package <member> <pkg>`, run with `uv run` (from the root, or from inside a member's directory: both use the root `.venv`). A new Python project is added to `[tool.uv.workspace] members`. Never `pip install` into the system Python.
+- **Stay in your role.** Agents change only the files their role owns (see the team table below).
+  For anything else, report what's needed and the producer assigns it to the owner.
 - Diagrams in docs are Mermaid.
 - Git: commit and push only when Simon asks. Never commit `build/`, `screenshots/` or `.venv/`.
 
