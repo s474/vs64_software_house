@@ -249,7 +249,7 @@ Each game then picks one or two headline techniques from this shelf. That's how 
 | M0 | Git repo, KickAssembler + VICE + Makefile, "hello border colour" builds and runs from `make run` | One command, from source to running | ✅ Done |
 | M1 | VICE MCP server with screenshot, memory, joystick, frame-step | Claude can boot a PRG, press fire, and describe the screenshot | ✅ Done ([mcp/vice](mcp/vice/README.md)) |
 | M2 | `CLAUDE.md`, the first five reference docs, the first four agents | An agent answers "how many cycles on a badline?" from the repo docs | ✅ Done. The Technical Director answered from the docs, then extended them with new measured probes |
-| M3 | Engine basics: stable raster IRQ framework, sprite multiplexer v1, PNG → sprite converter | Spike demos pass automated cycle-budget tests | |
+| M3 | Engine basics: stable raster IRQ framework, sprite multiplexer v1, PNG → sprite converter | Spike demos pass automated cycle-budget tests | Planned: [brief](docs/milestones/M3-engine-basics.md) |
 | M4 | **Training game:** a small single-screen game (Robotron- or Galaga-like) | Playable, tested, and you find it fun for five minutes | |
 | M5 | First real title: pitch → feasibility spike → vertical slice | Vertical slice you'd be proud to show on CSDb or Lemon64 | |
 
@@ -259,8 +259,21 @@ M4 is deliberately modest. It shakes out the tools, process and agent prompts on
 
 ## 11. Next actions
 
+Progress is tracked in the [milestone table](#10-suggested-first-milestones). Each milestone from
+M3 on has its own brief in [docs/milestones/](docs/milestones/).
+
+**Now: M3, engine basics.** See the [M3 brief](docs/milestones/M3-engine-basics.md) for the
+decisions, deliverables, who does what, and the prompt for each step.
+
+Always: after each milestone, update agent prompts and docs with whatever went wrong. The studio's
+"culture" lives in those files.
+
+<details>
+<summary>Original setup steps (M0–M2, all done)</summary>
+
 1. `git init`, and install VICE, KickAssembler (needs Java) and Exomizer.
 2. Ask Claude Code to build the Makefile and a hello-world raster bar (M0).
-3. Ask Claude Code to build the VICE MCP server (M1). **This is the key milestone.**
+3. Ask Claude Code to build the VICE MCP server (M1).
 4. Write `CLAUDE.md` and the first agent files together with Claude (M2).
-5. Iterate: after each milestone, update agent prompts and docs with whatever went wrong. The studio's "culture" lives in those files.
+
+</details>
