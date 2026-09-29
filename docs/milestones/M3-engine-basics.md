@@ -92,12 +92,44 @@ reviews each report against the definition of done before starting the next step
    engine/README.md with the IRQ framework and multiplexer APIs, zero-page needs, raster timeline
    and budget.json files. Don't write the implementation."*
 2. *"tools-engineer: build tools/png2sprites per the M3 brief."*
-3. *"raster-engineer: implement engine/irq.asm and the irq_chain spike per engine/README.md."*
-4. And so on, following the diagram.
+3. *"raster-engineer: M3 stage 1: implement engine/irq.asm and the irq_chain spike per
+   engine/README.md and the build rules in the M3 brief."* In parallel:
+   *"tools-engineer: build the `make test` budget runner per engine/README.md#budget-files."*
+4. Stages 2–4 by the raster-engineer, one prompt each; then QA, the Technical Director's review, and sign-off.
 
 **Parallel sessions:** agents working at the same time must touch different files, and commit only
 their own paths (`git add <their files>`, never `git add -A`). If that gets awkward, use git worktrees,
 as the plan describes.
+
+## Build rules (from the producer's design review, 2026-09-29)
+
+The design in [engine/README.md](../../engine/README.md) is approved. These rules apply to building it.
+
+1. **Build the engine in four stages.** Each stage ends with its `budget.json` checks passing
+   and a report, before the next starts:
+
+   | Stage | Scope | Checks that must pass |
+   |---|---|---|
+   | 1 | `engine/irq.asm` and the `irq_chain` spike | All of `tests/engine/irq_chain/budget.json` |
+   | 2 | Multiplexer: sort, schedule, zone IRQs, double buffer. **No flicker or pinning yet**: the spike keeps ≤ 8 sprites per window | Costs, `irq_late_count`, `mux_late_count` |
+   | 3 | Add fair flicker; the spike overloads rows | Plus `mux_max_age` (pinning off) |
+   | 4 | Add pinning; the spike runs as the design describes | The full `tests/engine/multiplexer/budget.json` |
+
+2. **Measurements beat acceptance limits.** If correctly written code measures outside a
+   limit that was an estimate or an unmeasured assumption, **report it and don't bend the code
+   to fit.** The Technical Director re-baselines the limit with a probe. In particular, the
+   normal-handler jitter limit of 7 cycles comes from an unmeasured figure in
+   `raster-interrupts.md`, and 8 is possible. The stable-handler requirement (the same cycle
+   every frame) is not negotiable.
+
+3. **The multiplexer's cost must earn its place.** The design leaves about 7,200 cycles (37% of a frame)
+   for the game. If the measured `mux_update` is well above **3,000 cycles** in normal frames,
+   the Technical Director looks for a fast path before M3 closes, e.g. skipping flicker and eviction
+   logic in frames where no window has more than 8 sprites (most frames). The worst case may stay
+   expensive. The common case must be cheap.
+
+4. **`make test` comes early.** The tools-engineer builds the budget runner in parallel with stage 1,
+   so every stage is checked by the runner rather than by hand.
 
 ## Out of scope for M3
 
