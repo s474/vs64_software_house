@@ -1,4 +1,4 @@
-// irq_chain spike (M3 stage 1): four chain entries change the border colour at four lines,
+// irq_chain spike (M3 stage 1, re-arm added in stage 2): four handlers change the border colour at four lines,
 // screen on (badlines active), no sprites. Proves engine/irq.asm: chaining, the frame tick,
 // the stable entry, and the costs in tests/engine/irq_chain/budget.json.
 //
@@ -6,7 +6,14 @@
 //   0      $20 (32)    normal  spike_h0  white   top border, frame entry
 //   1      $69 (105)   normal  spike_h1  red     display area; 105 and 106 (where its exit ends) are not badlines
 //   2      $B1 (177)   STABLE  spike_h2  cyan    triggers at $AF; 175-178 are not badlines (171, 179 are)
-//   3      $FA (250)   normal  spike_h3  purple  last display line, below the last badline (243)
+//   -      $FA (250)   rearm   spike_h3  purple  last display line, below the last badline (243)
+//
+// spike_h3 is not a chain entry: spike_h2 ends with IrqRearm(spike_h3) at $FA (M3 stage 2, build
+// rule 6), so the spike also locks irq_rearm -> irq_exit_rti. The re-arm runs on line 177, right
+// after the stable handler, which has no badline and no sprites. spike_h3's IrqDone() then
+// advances the chain from entry 2, which wraps to entry 0, exactly as the old entry 3 did. Doing
+// it this way rather than adding a fifth IRQ keeps every locked figure in budget.json except the
+// per-frame total, which drops by 19 (irq_exit 60 -> irq_rearm 41 after spike_h2).
 //
 // Lines: every handler's exit (60 cycles) runs into the next line, so that line mustn't be a
 // badline either, or irq_exit's measured cost includes 43 cycles of DMA. The README's first
@@ -38,8 +45,7 @@ BasicUpstart2(start)
         IrqNormal($20, spike_h0)
         IrqNormal($69, spike_h1)
         IrqStable($b1, spike_h2)
-        IrqNormal($fa, spike_h3)
-        IrqChainEnd()
+        IrqChainEnd()                   // spike_h3 ($FA) is re-armed by spike_h2
 
 * = * "Spike"
 start:
@@ -79,7 +85,8 @@ spike_h1:
 spike_h2:
         lda #CYAN
         sta VIC_BORDER
-        IrqDone()
+        lda #$fa                        // spike_h3's line
+        IrqRearm(spike_h3)
 
 spike_h3:
         lda #PURPLE

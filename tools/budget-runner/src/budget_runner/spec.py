@@ -14,13 +14,13 @@ COMPARISONS = ("equals", "max", "min")
 
 # kind -> (required fields, optional fields with defaults)
 FIELDS: dict[str, tuple[tuple[str, ...], dict[str, object]]] = {
-    "profile": (("routine", "max_cycles"), {"samples": 50}),
-    "profile_excl_irq": (("routine", "max_cycles"), {"samples": 50}),
+    "profile": (("routine", "max_cycles"), {"samples": 50, "max_avg_cycles": None}),
+    "profile_excl_irq": (("routine", "max_cycles"), {"samples": 50, "max_avg_cycles": None}),
     "start_cycle": (("label", "line", "max_spread"), {"frames": 100, "max_cycle": None}),
     "irq_time_per_frame": (("max_cycles", "frames"), {}),
     "memory": (("address", "size", "after_frames"), {"scale": 1}),
 }
-COMMON = {"name", "kind", "basis", "source", "notes"}
+COMMON = {"name", "kind", "basis", "source", "notes", "from_stage"}
 
 
 class BudgetError(Exception):
@@ -34,6 +34,7 @@ class Check:
     basis: str
     source: str
     params: dict = field(default_factory=dict)
+    from_stage: int | None = None  # not run while the budget's stage is lower (reported as PENDING)
 
 
 @dataclass
@@ -43,6 +44,11 @@ class Budget:
     src_dir: str
     warmup_frames: int
     checks: list[Check]
+    stage: int | None = None  # the build stage the spike's code has reached (see from_stage)
+
+    def pending(self, check: Check) -> bool:
+        """True if the check belongs to a later stage than the spike has reached."""
+        return check.from_stage is not None and self.stage is not None and check.from_stage > self.stage
 
 
 def _int(where: str, key: str, value: object, minimum: int = 0) -> int:
@@ -99,7 +105,11 @@ def parse_check(path: Path, index: int, raw: object) -> Check:
             _int(where, key, params[key], 1)
     if params.get("max_cycle") is not None:
         _int(where, "max_cycle", params["max_cycle"])
-    return Check(name=name, kind=kind, basis=basis, source=str(raw.get("source", "")), params=params)
+    if params.get("max_avg_cycles") is not None:
+        _int(where, "max_avg_cycles", params["max_avg_cycles"])
+    from_stage = _int(where, "from_stage", raw["from_stage"], 1) if "from_stage" in raw else None
+    return Check(name=name, kind=kind, basis=basis, source=str(raw.get("source", "")), params=params,
+                 from_stage=from_stage)
 
 
 def load_budget(path: Path) -> Budget:
@@ -115,8 +125,13 @@ def load_budget(path: Path) -> Budget:
     if not isinstance(raw["checks"], list) or not raw["checks"]:
         raise BudgetError(f"{path}: 'checks' must be a non-empty list")
     warmup = _int(str(path), "warmup_frames", raw.get("warmup_frames", 50))
+    stage = _int(str(path), "stage", raw["stage"], 1) if "stage" in raw else None
     checks = [parse_check(path, i, c) for i, c in enumerate(raw["checks"])]
-    return Budget(path, str(raw["spike"]), str(raw["src_dir"]), warmup, checks)
+    if stage is None:
+        staged = [c.name for c in checks if c.from_stage is not None]
+        if staged:
+            raise BudgetError(f"{path}: check {staged[0]!r} has 'from_stage' but the file has no top-level 'stage'")
+    return Budget(path, str(raw["spike"]), str(raw["src_dir"]), warmup, checks, stage)
 
 
 def find_budgets(root: Path, selectors: list[str]) -> list[Path]:

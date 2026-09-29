@@ -20,6 +20,13 @@ A page crossing happens when base + index lands in a different 256-byte page fro
 (e.g. `lda $c0f0,x` with X=$20). **Page-align tables** read in timing-critical loops
 (`.align $100` in KickAssembler), so the count is constant.
 
+**Absolute,X/Y never wraps within 8 bits.** `sta table+1,x` with X=$FF writes `table+$100`, not
+`table+0`: the index is added as an unsigned byte to a 16-bit address. A loop that counts X down
+past 0 (`dex / bmi`) and then indexes with `+1` corrupts whatever follows the table. This
+happened in M3 stage 2 (`mux_sort`'s insertion wrote into the code after `mux_order` whenever a
+sprite moved to the front; seen in VICE as `mux_order` filling with 0s). Fix: `inx` first, then
+index from the base. Zero page,X *does* wrap (`lda $f0,x` with X=$20 reads `$10`).
+
 ## Everything else
 
 | Instruction | Cycles |

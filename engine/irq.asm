@@ -25,8 +25,8 @@
 //   irq_dispatch -> handler                    17 (+8 on entry 0: the frame tick)
 //   Normal handler's first instruction         cycle 26-33 of its line (entry 0: 34-41)
 //   irq_exit -> irq_exit_rti                   60 (58 on the wrap to entry 0)
-//   irq_rearm -> irq_exit_rti                  41 (counted: 35 to jmp irq_restore + 6 restore; not yet
-//                                              exercised, M3 stage 2 measures it)
+//   irq_rearm -> irq_exit_rti                  41 (measured M3 stage 2: irq_chain spike_h2 -> spike_h3,
+//                                              line 177, 1,000 of 1,000 passes; = 35 + 6 restore)
 //   rti                                        6
 //   Whole normal entry, excluding its work     7 + 17 + 3 (jmp irq_exit) + 60 + 6 = 93 (+8 entry 0)
 //   Stable: irq_stable_begin -> handler        99-106; handler starts at IRQ_STABLE_CYCLE, every frame
@@ -315,7 +315,7 @@ irq_late_now:
 #endif
         jmp irq_jmp                     // 3  the target was already written
 
-// TIMING: 41 cycles to irq_exit_rti: 35 to the jmp, 6 in irq_restore (counted; not yet measured).
+// TIMING: 41 cycles to irq_exit_rti: 35 to the jmp, 6 in irq_restore (measured, tests/engine/irq_chain).
 // Fire `handler` (X = lo, Y = hi) at line A, without advancing the chain.
 // In: A = line, X/Y = handler, from a handler (IrqRearm)
 irq_rearm:

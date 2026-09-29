@@ -2,7 +2,7 @@
   "spike": "irq_chain",
   "src_dir": "tests/engine/irq_chain",
   "warmup_frames": 50,
-  "notes": "Budgets set by the Technical Director, 2026-09-29; re-baselined from measurement after M3 stage 1 (tests/engine/irq_chain/measure.py, 1,000 frames, re-checked over 300). Every framework path is straight-line code in a layout with no DMA on the lines it runs, so each measured figure is exact and the budget IS the measured figure: a regression lock with no headroom, because headroom here could only hide a regression. Any change to engine/irq.asm that moves one of these numbers must re-measure and re-baseline this file deliberately. Headroom for games lives in the frame budget (engine/README.md#frame-budget), not here. Schema: engine/README.md#budget-files.",
+  "notes": "Budgets set by the Technical Director, 2026-09-29; re-baselined from measurement after M3 stage 1 (tests/engine/irq_chain/measure.py, 1,000 frames, re-checked over 300) and after stage 2 (irq_rearm added; h3 became a re-armed IRQ). Every framework path is straight-line code in a layout with no DMA on the lines it runs, so each measured figure is exact and the budget IS the measured figure: a regression lock with no headroom, because headroom here could only hide a regression. Any change to engine/irq.asm that moves one of these numbers must re-measure and re-baseline this file deliberately. Headroom for games lives in the frame budget (engine/README.md#frame-budget), not here. Schema: engine/README.md#budget-files.",
   "checks": [
     {
       "name": "h0 start (entry 0, normal, line $20)",
@@ -38,7 +38,7 @@
       "source": "M3 acceptance: same cycle every time over 100 frames. max_cycle = IRQ_STABLE_CYCLE (6), measured 1,000 of 1,000 frames; it is part of the API, so a change must be deliberate"
     },
     {
-      "name": "h3 start (normal, line $FA)",
+      "name": "h3 start (normal, re-armed by h2, line $FA)",
       "kind": "start_cycle",
       "label": "spike_h3",
       "line": 250,
@@ -46,12 +46,15 @@
       "max_spread": 7,
       "max_cycle": 33,
       "basis": "measured",
-      "source": "Spread 7: M3 acceptance, measured 7. max_cycle: measured 26-33, as h1"
+      "source": "Spread 7: M3 acceptance, measured 7. max_cycle: measured 26-33, as h1. Since stage 2 h3 is reached through IrqRearm from h2, not a chain entry; the start is unchanged"
     },
     {
       "name": "irq_dispatch overhead",
       "kind": "profile",
-      "routine": ["irq_dispatch", "spike_h1"],
+      "routine": [
+        "irq_dispatch",
+        "spike_h1"
+      ],
       "max_cycles": 17,
       "samples": 50,
       "basis": "measured",
@@ -60,16 +63,34 @@
     {
       "name": "irq_exit overhead",
       "kind": "profile",
-      "routine": ["irq_exit", "irq_exit_rti"],
+      "routine": [
+        "irq_exit",
+        "irq_exit_rti"
+      ],
       "max_cycles": 60,
       "samples": 50,
       "basis": "measured",
       "source": "engine/README.md#irq-framework-costs: measured 60 every pass (58 on the wrap to entry 0), equal to the instruction count. Needs no DMA on the lines it runs through (the spike's layout guarantees it)"
     },
     {
+      "name": "irq_rearm overhead",
+      "kind": "profile",
+      "routine": [
+        "irq_rearm",
+        "irq_exit_rti"
+      ],
+      "max_cycles": 41,
+      "samples": 50,
+      "basis": "measured",
+      "source": "engine/README.md#irq-framework-costs: $D012, target, ack, late check, restore; measured 41 in 1,000 of 1,000 passes (M3 stage 2: spike_h2 re-arms spike_h3, irq_rearm on line 177 from cycle 21, no DMA), equal to the count (35 to jmp irq_restore + 6). Paid by every zone IRQ of the multiplexer"
+    },
+    {
       "name": "stable entry extra (stage 1 + 2)",
       "kind": "profile",
-      "routine": ["irq_stable_begin", "spike_h2"],
+      "routine": [
+        "irq_stable_begin",
+        "spike_h2"
+      ],
       "max_cycles": 106,
       "samples": 50,
       "basis": "measured",
@@ -79,9 +100,9 @@
       "name": "all IRQ time per frame",
       "kind": "irq_time_per_frame",
       "frames": 50,
-      "max_cycles": 508,
+      "max_cycles": 495,
       "basis": "measured",
-      "source": "Measured 501-508 over 1,000 frames = h0 107 + h1 99 + h2 198-205 + h3 97 (wrap exit), each span from irq_dispatch - 7 to irq_exit_rti + 6. The only variation is the stable entry's absorbed jitter"
+      "source": "Measured 488-495 over 1,000 frames (M3 stage 2 layout) and 495 in make test = h0 107 + h1 99 + h2 185-192 (ends in IrqRearm: 13 less than its old IrqDone) + h3 97 (wrap exit), each span from irq_dispatch - 7 to irq_exit_rti + 6. The only variation is the stable entry's absorbed jitter. Was 508 with four chain entries (stage 1)"
     },
     {
       "name": "no late handlers",

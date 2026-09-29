@@ -5,7 +5,7 @@ many consecutive frames and reads the raster (line, cycle) at each stop, so it g
 
   - each handler's start line and cycle over N frames (min / max / spread / histogram)
   - irq_dispatch's cycle per entry (the IRQ-taken cycle is that minus 7)
-  - irq_exit -> irq_exit_rti and irq_stable_begin -> spike_h2 costs
+  - irq_exit -> irq_exit_rti, irq_rearm -> irq_exit_rti and irq_stable_begin -> spike_h2 costs
   - IRQ time per frame, as the budget runner defines it: each IRQ spans from its irq_dispatch
     hit - 7 to its irq_exit_rti hit + 6
   - irq_late_count at the end
@@ -29,10 +29,12 @@ from vice_monitor import CPU_OP_EXEC, ViceMonitor, free_port, load_symbols  # no
 CYCLES_PER_LINE = 63  # measured: tests/timing/rasterline
 FRAME = 312 * CYCLES_PER_LINE
 HANDLERS = ["spike_h0", "spike_h1", "spike_h2", "spike_h3"]
-MARKS = ["irq_dispatch", "irq_exit", "irq_exit_rti", "irq_stable_begin", "irq_stable_stage2"]
+MARKS = ["irq_dispatch", "irq_exit", "irq_rearm", "irq_exit_rti", "irq_stable_begin", "irq_stable_stage2"]
 
 
 def stats(values: list[int]) -> str:
+    if not values:
+        return "(no passes)"
     hist = ", ".join(f"{v}:{c}" for v, c in sorted(Counter(values).items()))
     return f"min {min(values)} max {max(values)} spread {max(values) - min(values)}  [{hist}]"
 
@@ -117,6 +119,14 @@ def main() -> None:
         print(f"  dispatch before {h:10s} cycle {stats(disp[h])}")
     for h in HANDLERS:
         print(f"  irq_exit -> irq_exit_rti after {h:10s} {stats(exit_cost[h])}")
+    rearm = []
+    for i, e in enumerate(ev):
+        if e[0] == "irq_rearm":
+            nxt = next(x for x in ev[i + 1:] if x[0] in ("irq_exit_rti", "irq_dispatch"))
+            if nxt[0] == "irq_exit_rti":
+                rearm.append((nxt[1] - e[1], e[2], e[3]))
+    print(f"  irq_rearm -> irq_exit_rti {stats([r[0] for r in rearm])}"
+          f"  (irq_rearm at line {sorted({r[1] for r in rearm})}, cycle {stats([r[2] for r in rearm])})")
 
     stable = []
     stage2 = []

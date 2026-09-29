@@ -51,10 +51,11 @@ class Result:
     parts: list[Part] = field(default_factory=list)
     info: str = ""
     error: str | None = None  # the measurement itself could not be made
+    pending: str | None = None  # not run: the check belongs to a later build stage
 
     @property
     def passed(self) -> bool:
-        return self.error is None and bool(self.parts) and all(p.ok for p in self.parts)
+        return self.error is None and self.pending is None and bool(self.parts) and all(p.ok for p in self.parts)
 
 
 def irq_spans(events: list[Event], dispatch: int, rti: int) -> list[tuple[int, int]]:
@@ -120,9 +121,11 @@ def fmt(n: float) -> str:
 def eval_profile(check: Check, costs: list[int]) -> Result:
     if not costs:
         return Result(check, error="no complete start -> end pass was seen")
-    avg = sum(costs) / len(costs)
-    return Result(check, [Part("max", max(costs), "<=", check.params["max_cycles"])],
-                  info=f"min {min(costs)}, avg {avg:.1f}, {len(costs)} passes")
+    avg = round(sum(costs) / len(costs), 1)
+    parts = [Part("max", max(costs), "<=", check.params["max_cycles"])]
+    if check.params.get("max_avg_cycles") is not None:
+        parts.append(Part("avg", avg, "<=", check.params["max_avg_cycles"]))
+    return Result(check, parts, info=f"min {min(costs)}, avg {avg:.1f}, {len(costs)} passes")
 
 
 def eval_start_cycle(check: Check, hits: list[Event]) -> Result:
@@ -159,7 +162,12 @@ def eval_memory(check: Check, raw: int) -> Result:
 
 
 def format_result(spike: str, r: Result, name_width: int) -> str:
-    """One line: spike, name, figures, PASS/FAIL, basis. Failures add one indented line per problem."""
+    """One line: spike, name, figures, PASS/FAIL, basis. Failures add one indented line per problem.
+
+    A pending check (a later build stage) prints PENDING and why, with no figures.
+    """
+    if r.pending:
+        return f"{spike}  {r.check.name.ljust(name_width)}  {r.pending}  PENDING  ({r.check.basis})"
     figures = "; ".join(p.describe() for p in r.parts) or "not measured"
     status = "PASS" if r.passed else "FAIL"
     lines = [f"{spike}  {r.check.name.ljust(name_width)}  {figures}  {status}  ({r.check.basis})"]

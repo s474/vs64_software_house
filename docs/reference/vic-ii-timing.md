@@ -178,6 +178,13 @@ up to 81 cycles later. Put timing-critical writes on non-badlines, or in the bor
 Code that must finish within a region of the screen, such as an IRQ between two splits, has
 to fit into the region's lines × 63 minus the DMA on those lines.
 
+**Measured: DMA's share of main-loop time with a multiplexer** (`tests/engine/multiplexer`, M3
+stage 2, 24 sprites in 3 bands, screen on, 300 passes): the same routines measured once with
+sprites and the display off (CPU cycles) and once in the running spike (raster time):
+`mux_update` 4,984 CPU → 6,342 raster on average (+27%), `mux_select` 2,183 → 2,774, `mux_build`
+2,183 → 2,743. Main-loop code that runs through the display with a full multiplexer loses about
+a quarter of its time to DMA; budget raster time accordingly, or run heavy work in the border.
+
 ## Measuring instead of guessing
 
 Raster time is what counts, and `vice_profile(start, end)` measures exactly that: it reports

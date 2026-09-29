@@ -2,8 +2,9 @@
 
     uv run budget-runner [--no-build] [SPIKE_OR_PATH ...]      (or: make test)
 
-Exit status: 0 all checks passed; 1 a check failed or could not be measured;
-2 a budget file is malformed or the selection matched nothing.
+Exit status: 0 all checks passed (checks for a later build stage are PENDING and don't fail,
+except under --strict); 1 a check failed or could not be measured; 2 a budget file is malformed
+or the selection matched nothing.
 """
 
 from __future__ import annotations
@@ -22,16 +23,22 @@ def missing_source(budget: Budget) -> Path | None:
     return None if main.exists() else main
 
 
-def run_budget(budget: Budget, do_build: bool) -> list[Result]:
+def pending_result(budget: Budget, check, strict: bool = False) -> Result:
+    """A check for a later build stage: PENDING normally, a failure under --strict (sign-off)."""
+    why = f"stage {check.from_stage} check, spike is at stage {budget.stage}"
+    return Result(check, error=f"{why} (--strict: every stage must be done)") if strict else Result(check, pending=why)
+
+
+def run_budget(budget: Budget, do_build: bool, strict: bool = False) -> list[Result]:
     from . import session  # imports the VICE client; kept out of module load so tests need no VICE
 
     try:
         prg = session.build(budget) if do_build else REPO / "build" / budget.spike / f"{budget.spike}.prg"
         vice = session.Vice(prg, budget.warmup_frames)
     except Exception as e:  # build failure, VICE not installed, program never started
-        return [Result(c, error=str(e)) for c in budget.checks]
-    try:
-        return [vice.run(c) for c in budget.checks]
+        return [pending_result(budget, c, strict) if budget.pending(c) else Result(c, error=str(e)) for c in budget.checks]
+    try:  # a pending check runs no frames, so later memory checks see the same frames as without it
+        return [pending_result(budget, c, strict) if budget.pending(c) else vice.run(c) for c in budget.checks]
     finally:
         vice.close()
 
@@ -46,7 +53,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="budget-runner", description=__doc__.split("\n\n")[0])
     ap.add_argument("select", nargs="*", help="spike name or budget.json path (default: all)")
     ap.add_argument("--strict", action="store_true",
-                    help="treat a spike whose main.asm does not exist yet as a failure, not a skip")
+                    help="treat a spike whose main.asm does not exist yet, and a check pending a later "
+                         "build stage, as a failure")
     ap.add_argument("--no-build", action="store_true", help="use the existing build/<spike>/<spike>.prg")
     a = ap.parse_args(argv)
     try:
@@ -57,19 +65,22 @@ def main(argv: list[str] | None = None) -> int:
     if not budgets:
         print("budget-runner: error: no tests/**/budget.json files found", file=sys.stderr)
         return 2
-    total = failed = skipped = 0
+    total = failed = skipped = pending = 0
     for b in budgets:
         absent = missing_source(b)
         if absent and not a.strict:
             print(f"{b.spike}  SKIP  {absent.relative_to(REPO)} does not exist yet ({len(b.checks)} checks not run)")
             skipped += 1
             continue
-        results = run_budget(b, not a.no_build)
+        results = run_budget(b, not a.no_build, a.strict)
         report(b, results)
-        total += len(results)
-        failed += sum(not r.passed for r in results)
+        waiting = sum(r.pending is not None for r in results)
+        pending += waiting
+        total += len(results) - waiting
+        failed += sum(not r.passed and r.pending is None for r in results)
     ran = len(budgets) - skipped
     print(f"budget-runner: {total - failed}/{total} checks passed" + (f", {failed} FAILED" if failed else "")
+          + (f", {pending} pending a later stage" if pending else "")
           + f" ({ran} spike{'s' if ran != 1 else ''} run" + (f", {skipped} skipped: no source yet" if skipped else "") + ")")
     return 1 if failed else 0
 

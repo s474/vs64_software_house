@@ -172,3 +172,53 @@ def test_report_error_and_thousands_separators():
     assert "1,137 / budget 1,500" in format_result("m", eval_profile(c, [1137]), 1)
     out = format_result("m", Result(c, error="build failed"), 1)
     assert "FAIL" in out and "error: build failed" in out
+
+
+# -- build stages and average limits -------------------------------------------
+
+
+def test_profile_average_limit():
+    c = check(routine=["a", "b"], max_cycles=100, max_avg_cycles=50)
+    assert eval_profile(c, [40, 60]).passed  # avg 50
+    r = eval_profile(c, [40, 62])
+    assert not r.passed and [p.label for p in r.parts if not p.ok] == ["avg"]
+    assert "avg 51 / budget 50" in format_result("m", r, 1)
+    assert len(eval_profile(check(routine=["a", "b"], max_cycles=100), [1]).parts) == 1  # optional
+
+
+def write_budget(tmp_path, stage=None, from_stage=None):
+    c = {"name": "later", "kind": "memory", "address": "x", "size": 1, "after_frames": 1, "equals": 0,
+         "basis": "requirement"}
+    if from_stage is not None:
+        c["from_stage"] = from_stage
+    raw = {"spike": "s", "src_dir": "d", "checks": [c]}
+    if stage is not None:
+        raw["stage"] = stage
+    p = tmp_path / "budget.json"
+    p.write_text(json.dumps(raw))
+    return p
+
+
+def test_from_stage_marks_later_checks_pending(tmp_path):
+    b = load_budget(write_budget(tmp_path, stage=2, from_stage=4))
+    assert b.stage == 2 and b.checks[0].from_stage == 4 and b.pending(b.checks[0])
+    b4 = load_budget(write_budget(tmp_path, stage=4, from_stage=4))
+    assert not b4.pending(b4.checks[0])
+
+
+def test_from_stage_needs_a_stage(tmp_path):
+    with pytest.raises(BudgetError, match="has 'from_stage' but the file has no top-level 'stage'"):
+        load_budget(write_budget(tmp_path, from_stage=3))
+    with pytest.raises(BudgetError, match="'from_stage' must be an integer >= 1"):
+        load_budget(write_budget(tmp_path, stage=2, from_stage=0))
+
+
+def test_pending_result_reports_and_strict_fails(tmp_path):
+    from budget_runner.cli import pending_result
+    b = load_budget(write_budget(tmp_path, stage=2, from_stage=4))
+    r = pending_result(b, b.checks[0])
+    assert not r.passed and r.pending
+    line = format_result("m", r, 5)
+    assert line == "m  later  stage 4 check, spike is at stage 2  PENDING  (requirement)"
+    strict = pending_result(b, b.checks[0], strict=True)
+    assert strict.pending is None and "FAIL" in format_result("m", strict, 5)

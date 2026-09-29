@@ -115,9 +115,14 @@ The design in [engine/README.md](../../engine/README.md) is approved. These rule
    | Stage | Scope | Checks that must pass |
    |---|---|---|
    | 1 | `engine/irq.asm` and the `irq_chain` spike | All of `tests/engine/irq_chain/budget.json` |
-   | 2 | Multiplexer: sort, schedule, zone IRQs, double buffer. **No flicker or pinning yet**: the spike keeps ≤ 8 sprites per window. Also: measure `irq_rearm` (rule 6) | Costs, `irq_late_count`, `mux_late_count`, and all of `irq_chain/budget.json` still |
-   | 3 | Add fair flicker; the spike overloads rows | Plus `mux_max_age` (pinning off) |
+   | 2 | Multiplexer: sort, schedule, zone IRQs, double buffer. **No flicker or pinning yet**: the spike keeps ≤ 8 sprites per window. Also: measure `irq_rearm` (rule 6) | Costs, `irq_late_count`, `mux_late_count`, and all of `irq_chain/budget.json` still. **Done** (Technical Director's review, 2026-09-29: budgets re-baselined to measurement, see rules 3 and 7) |
+   | 3 | **First the fast path** (rule 3), measured and reported on its own; **then** fair flicker, with the spike overloading rows | Plus the `mux_update fast path` average and `mux_max_age` (pinning off; also reported against the P = 0 target of 2) |
    | 4 | Add pinning; the spike runs as the design describes | The full `tests/engine/multiplexer/budget.json` |
+
+   Each spike's `budget.json` has a top-level `"stage"`, and checks for later stages carry
+   `"from_stage"`. They print `PENDING` and don't fail until the stage is reached, but they fail
+   under `--strict`, which M3 sign-off uses. The raster-engineer bumps `"stage"` at the start of each
+   stage ([engine/README.md](../../engine/README.md#budget-files)).
 
 2. **Measurements beat acceptance limits.** If correctly written code measures outside a
    limit that was an estimate or an unmeasured assumption, **report it and don't bend the code
@@ -132,12 +137,29 @@ The design in [engine/README.md](../../engine/README.md) is approved. These rule
    logic in frames where no window has more than 8 sprites (most frames). The worst case may stay
    expensive. The common case must be cheap.
 
+   **Re-baselined after stage 2** (Technical Director). Stage 2 measured 6,240 raster cycles on
+   average (≈ 5,000 CPU). The 3,000 figure isn't reachable in this architecture: the design's own
+   estimates for a no-overflow frame added up to ~4,500 CPU. What the rule protects is still met:
+   the game has ≥ 7,200 cycles in every frame (≥ 7,795 measured). The rule now reads:
+   - **Fast path, first in stage 3:** merge the build into the selection's keep path (rebuild only in
+     frames with a drop or eviction), and store a constant `$D01C` when all sprites share a
+     multicolour bit. Target: **`mux_update` average ≤ 5,000 raster cycles** over 600 passes of the
+     spike (≈ 4,000 CPU).
+   - Stages 3 and 4 keep that average in frames without overflow. Flicker and pinning cost only in
+     the frames that need them, beyond the pinned pre-pass.
+   - **Promise:** `spike_idle_min` × 16 ≥ 5,300, which leaves ≥ 7,200 for game logic in every frame.
+     If a stage can't keep it, it reports rather than lowers it.
+
+   Details and the candidates that were turned down:
+   [engine/README.md#fast-path](../../engine/README.md#fast-path).
+
 4. **`make test` comes early.** The tools-engineer builds the budget runner in parallel with stage 1,
    so every stage is checked by the runner rather than by hand.
 
 5. **Framework budgets are locks** (Technical Director, after stage 1). The `irq_chain`
-   budgets equal the measured figures (irq_exit 60, dispatch 17, stable extra 106, handler
-   start cycles 41 / 33 / 6 / 33, 508 IRQ cycles a frame), with no headroom: the paths are
+   budgets equal the measured figures (irq_exit 60, irq_rearm 41, dispatch 17, stable extra 106,
+   handler start cycles 41 / 33 / 6 / 33, 495 IRQ cycles a frame since stage 2 made h3 a re-armed
+   IRQ; 508 before), with no headroom: the paths are
    straight-line code in a DMA-free layout, so any change is a regression or a deliberate
    re-baseline, never noise. A change to `engine/irq.asm` that moves one of them is reported with
    the new figure; the Technical Director re-baselines. If the runner reads a figure one cycle off
@@ -155,6 +177,19 @@ The design in [engine/README.md](../../engine/README.md) is approved. These rule
      spike is the test; raise the constant if it fails.
    - Report the last zone IRQ's end line relative to its slot's Y, so the fixed-entry spacing
      (`MUX_Y_MAX + 2`, or + 3 in the badline region) can be confirmed or corrected.
+
+   **Stage 2 outcome:** `irq_rearm` measured 41, now locked. `MUX_IRQ_LINES` = 1 held
+   (`mux_late_count` 0), but `MUX_WRITE_LINES` had to go from 1 to 2. The last zone IRQ ends 6–36
+   lines before its slot's Y, so + 2 is enough everywhere.
+
+7. **Budget units are raster time** (Technical Director, after stage 2). Every budget in
+   `make test` is a raster span in the spike, DMA included: that's what the runner measures, and
+   raster spans add up to the frame. CPU-only figures are diagnostics.
+   - Constant, DMA-free paths are locked to the measured figure.
+   - Main-loop routines, whose DMA share varies with the sprite layout, get the max over a full
+     motion cycle (≥ 600 passes) + ~5%, and the common case is checked by its average
+     ([engine/README.md#budget-units](../../engine/README.md#budget-units)).
+   - A code change that moves a figure is re-baselined deliberately, never absorbed by the margin.
 
 ## Out of scope for M3
 
