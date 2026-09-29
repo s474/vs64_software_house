@@ -42,6 +42,7 @@ Build outputs in `build/<title>/`: `.prg`, `main.vs` (labels), `main.dump` (addr
 - [6502-timing.md](docs/reference/6502-timing.md): cycle counts, page crossings, illegal opcodes
 - [kickassembler.md](docs/reference/kickassembler.md): how we build and the syntax we use
 - [coding-standards.md](docs/standards/coding-standards.md): naming, zero page, IRQ ownership, **definition of done**
+- [engine/README.md](engine/README.md): IRQ framework and multiplexer APIs, engine zero page, raster timeline, frame budget
 
 If a doc is wrong or missing something you had to find out, fix the doc in the same change, and
 mark measured facts as measured (with the probe that shows it).

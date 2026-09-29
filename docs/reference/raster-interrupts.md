@@ -73,9 +73,10 @@ flowchart LR
 
 Rules for chains in this studio:
 
-- **Only the engine's IRQ framework writes** `$FFFE/$FFFF`, `$D012` and `$D01A`. Game code asks it
-  for a slot, so two pieces of code never fight over the chain
-  (see [coding standards](../standards/coding-standards.md#irq-ownership)).
+- **Only the engine's IRQ framework writes** `$FFFE/$FFFF`, `$FFFA/$FFFB`, `$D012`, `$D019`,
+  `$D01A` and `$D011` bit 7. Game code declares a chain entry, so two pieces of code never fight
+  over the chain (see [coding standards](../standards/coding-standards.md#irq-ownership) and the
+  framework's API in [engine/README.md](../../engine/README.md#irq-framework-engineirqasm)).
 - Every game documents its chain as a **raster timeline**: which line each handler starts on, what it does,
   and its measured worst-case cost (`vice_profile`). A handler must finish before the next
   one's line, allowing for badlines and sprite DMA in between ([vic-ii-timing.md](vic-ii-timing.md)).
@@ -100,6 +101,18 @@ line: 0 to about 7 cycles of jitter, depending on what was executing.
 Stable-raster code is subtle. The engine will provide one verified implementation. Don't
 hand-roll another, and always prove timing with `vice_profile` and `vice_run_until` (which reports
 the raster line and cycle).
+
+## Unmeasured facts the engine depends on
+
+The M3 engine design ([engine/README.md](../../engine/README.md#estimates-to-measure-in-m3))
+relies on these. They're *unmeasured* here until a probe in `tests/timing/` shows them:
+
+- On which cycle of its line the raster IRQ is raised (commonly given as cycle 0, and 1 on
+  line 0). This sets how early a handler can start.
+- Whether writing `$D012` with the line the raster is already on raises the IRQ at once.
+  The framework's late check is written to be correct either way.
+- Whether a taken branch that doesn't cross a page delays the IRQ by one more instruction
+  (the 6502's "branch doesn't poll" quirk), which could push jitter past 7.
 
 ## Common bugs
 

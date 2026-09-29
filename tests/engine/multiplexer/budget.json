@@ -1,0 +1,121 @@
+{
+  "spike": "multiplexer",
+  "src_dir": "tests/engine/multiplexer",
+  "warmup_frames": 100,
+  "notes": "Budgets set by the Technical Director, 2026-09-29, for 24 bouncing sprites in a DEBUG build. Schema and rationale: engine/README.md#budget-files and #multiplexer-costs. Main-loop routines use profile_excl_irq so zone IRQs landing inside them don't count against them. 'estimate' budgets are replaced with measured figures by the raster-engineer (engine/README.md#estimates-to-measure-in-m3).",
+  "checks": [
+    {
+      "name": "mux_sort",
+      "kind": "profile_excl_irq",
+      "routine": ["mux_sort", "mux_sort_end"],
+      "max_cycles": 1500,
+      "samples": 50,
+      "basis": "estimate",
+      "source": "engine/README.md#multiplexer-costs: ~24 x 25 compares + shifts for a nearly sorted list"
+    },
+    {
+      "name": "mux_select",
+      "kind": "profile_excl_irq",
+      "routine": ["mux_select", "mux_select_end"],
+      "max_cycles": 1500,
+      "samples": 50,
+      "basis": "estimate",
+      "source": "engine/README.md#multiplexer-costs: ~24 x 45 + evictions"
+    },
+    {
+      "name": "mux_build",
+      "kind": "profile_excl_irq",
+      "routine": ["mux_build", "mux_build_end"],
+      "max_cycles": 1800,
+      "samples": 50,
+      "basis": "estimate",
+      "source": "engine/README.md#multiplexer-costs: ~24 x 75"
+    },
+    {
+      "name": "mux_update (sort + select + build)",
+      "kind": "profile_excl_irq",
+      "routine": ["mux_update", "mux_update_end"],
+      "max_cycles": 4900,
+      "samples": 50,
+      "basis": "estimate",
+      "source": "engine/README.md#frame-budget"
+    },
+    {
+      "name": "mux_irq_top (swap + slots 0-7)",
+      "kind": "profile",
+      "routine": ["mux_irq_top", "irq_exit_rti"],
+      "max_cycles": 600,
+      "samples": 50,
+      "basis": "estimate",
+      "source": "engine/README.md#multiplexer-costs"
+    },
+    {
+      "name": "mux_irq_zone (one IRQ, up to 8 slots)",
+      "kind": "profile",
+      "routine": ["mux_irq_zone", "irq_exit_rti"],
+      "max_cycles": 550,
+      "samples": 200,
+      "basis": "estimate",
+      "source": "engine/README.md#multiplexer-costs"
+    },
+    {
+      "name": "all IRQ time per frame",
+      "kind": "irq_time_per_frame",
+      "frames": 100,
+      "max_cycles": 3300,
+      "basis": "estimate",
+      "source": "engine/README.md#frame-budget"
+    },
+    {
+      "name": "no late chain entries",
+      "kind": "memory",
+      "address": "irq_late_count",
+      "size": 1,
+      "after_frames": 3000,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/README.md#handler-conventions"
+    },
+    {
+      "name": "no late sprite writes (validates scheduling constants)",
+      "kind": "memory",
+      "address": "mux_late_count",
+      "size": 1,
+      "after_frames": 3000,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/README.md#scheduling-and-the-minimum-vertical-separation"
+    },
+    {
+      "name": "no sprite missing more than 2 frames running",
+      "kind": "memory",
+      "address": "mux_max_age",
+      "size": 1,
+      "after_frames": 3000,
+      "max": 2,
+      "basis": "estimate",
+      "source": "engine/README.md#overflow-fair-flicker: design target, also the QA soak criterion"
+    },
+    {
+      "name": "no main-loop overruns",
+      "kind": "memory",
+      "address": "spike_overrun_count",
+      "size": 1,
+      "after_frames": 3000,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/README.md#multiplexer"
+    },
+    {
+      "name": "free CPU per frame (headroom)",
+      "kind": "memory",
+      "address": "spike_idle_min",
+      "size": 2,
+      "after_frames": 3000,
+      "scale": 16,
+      "min": 5000,
+      "basis": "estimate",
+      "source": "engine/README.md#frame-budget: ~7,900 left minus ~1,100 for the spike's bouncing, less margin. scale = idle-loop cycles per iteration; the raster-engineer corrects it to the counted figure"
+    }
+  ]
+}

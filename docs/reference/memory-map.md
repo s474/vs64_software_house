@@ -90,7 +90,7 @@ Example: `$D018 = $18` in bank 0 = screen at `$0400`, charset at `$2000`.
 | VIC bank | 3 (`$C000–$FFFF`) |
 | Screens | `$C000` and `$C400` (double buffered) |
 | Charset | `$C800` |
-| Sprites | `$D000–$DFFF` (the RAM under I/O; the VIC sees it, the CPU writes it with `$01=$34`) and/or `$E000+` |
+| Sprites | `$D000–$DFFF` (the RAM under I/O; the VIC sees it, the CPU writes it with `$01=$34`, **interrupts off**: with I/O out the raster IRQ can't be acknowledged. Do it at load or init time) and/or `$E000+` |
 | Code, tables, music | `$0800–$BFFF` |
 | Vectors | `$FFFA–$FFFF` point at our handlers (they're in the VIC bank, which is fine: a few bytes) |
 

@@ -1,0 +1,87 @@
+{
+  "spike": "irq_chain",
+  "src_dir": "tests/engine/irq_chain",
+  "warmup_frames": 50,
+  "notes": "Budgets set by the Technical Director, 2026-09-29. Schema and rationale: engine/README.md#budget-files. 'estimate' budgets are replaced with measured figures by the raster-engineer (engine/README.md#estimates-to-measure-in-m3). Jitter and stability limits are the M3 acceptance criteria, not estimates.",
+  "checks": [
+    {
+      "name": "h0 start (entry 0, normal, line $20)",
+      "kind": "start_cycle",
+      "label": "spike_h0",
+      "line": 32,
+      "frames": 100,
+      "max_spread": 7,
+      "max_cycle": 48,
+      "basis": "estimate",
+      "source": "Spread 7: M3 acceptance (docs/milestones/M3-engine-basics.md). max_cycle: engine/README.md#irq-framework-costs, 24 entry + 8 tick + 7 jitter + trigger cycle (unmeasured) + margin"
+    },
+    {
+      "name": "h1 start (normal, line $6A)",
+      "kind": "start_cycle",
+      "label": "spike_h1",
+      "line": 106,
+      "frames": 100,
+      "max_spread": 7,
+      "max_cycle": 40,
+      "basis": "estimate",
+      "source": "Spread 7: M3 acceptance. max_cycle: 24 entry + 7 jitter + trigger cycle (unmeasured) + margin"
+    },
+    {
+      "name": "h2 start (STABLE, line $B2)",
+      "kind": "start_cycle",
+      "label": "spike_h2",
+      "line": 178,
+      "frames": 100,
+      "max_spread": 0,
+      "basis": "requirement",
+      "source": "M3 acceptance: same cycle every time over 100 frames. The cycle itself (IRQ_STABLE_CYCLE) is recorded once measured"
+    },
+    {
+      "name": "h3 start (normal, line $FA)",
+      "kind": "start_cycle",
+      "label": "spike_h3",
+      "line": 250,
+      "frames": 100,
+      "max_spread": 7,
+      "max_cycle": 40,
+      "basis": "estimate",
+      "source": "Spread 7: M3 acceptance. max_cycle as h1"
+    },
+    {
+      "name": "irq_exit overhead",
+      "kind": "profile",
+      "routine": ["irq_exit", "irq_exit_rti"],
+      "max_cycles": 60,
+      "samples": 50,
+      "basis": "estimate",
+      "source": "engine/README.md#irq-framework-costs"
+    },
+    {
+      "name": "stable entry extra (stage 1 + 2)",
+      "kind": "profile",
+      "routine": ["irq_stable_begin", "spike_h2"],
+      "max_cycles": 170,
+      "samples": 50,
+      "basis": "estimate",
+      "source": "engine/README.md#irq-framework-costs: trigger 2 lines early, about 2.7 lines"
+    },
+    {
+      "name": "all IRQ time per frame",
+      "kind": "irq_time_per_frame",
+      "frames": 50,
+      "max_cycles": 650,
+      "basis": "estimate",
+      "source": "4 entries x 93 + 8 tick + 170 stable + 4 x ~12 handler bodies = 598, plus margin"
+    },
+    {
+      "name": "no late handlers",
+      "kind": "memory",
+      "address": "irq_late_count",
+      "size": 1,
+      "after_frames": 500,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/README.md#handler-conventions: any late run means a budget was blown"
+    }
+  ]
+}

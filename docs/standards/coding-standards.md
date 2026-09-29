@@ -48,10 +48,16 @@ Zero page is scarce and shared, so it is **allocated, never grabbed**:
 ## IRQ ownership
 
 - Only the IRQ framework (`engine/irq.asm` once it exists; until then, one clearly marked file per
-  game) writes `$FFFE/$FFFF`, `$FFFA/$FFFB`, `$D012`, `$D01A`, and the raster-compare bit of `$D011`.
+  game) writes `$FFFE/$FFFF`, `$FFFA/$FFFB`, `$D012`, `$D019`, `$D01A`, `$DC0D/$DD0D`, and the
+  raster-compare bit of `$D011`. Its API and rules are in [engine/README.md](../../engine/README.md#irq-framework-engineirqasm).
+- Every other write to `$D011` keeps **bit 7 clear** (`and #$7f`): chain lines are 0–255.
+- `$01` stays `$35` whenever interrupts are enabled. Code that needs `$34` (RAM under I/O) runs
+  with interrupts off, at init time or where no IRQ is due.
 - Each game has a **raster timeline** in its memory map doc: every handler's start line, job and
   measured worst-case cost.
-- Handlers save and restore every register they touch (KERNAL-out mode), and acknowledge `$D019`.
+- With `engine/irq.asm`, the framework saves and restores A, X and Y, clears `D`, and acknowledges
+  `$D019`; handlers do neither and end with `IrqDone()`. Without it (older code such as `hello`),
+  handlers save and restore every register they touch (KERNAL-out mode), and acknowledge `$D019`.
 - Anything shared between an IRQ and the main loop (flags, counters, buffers) is documented as such.
   Multi-byte values written by an IRQ are read with interrupts off, or double-buffered.
 
