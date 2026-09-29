@@ -248,7 +248,7 @@ Each game then picks one or two headline techniques from this shelf. That's how 
 |---|---|---|---|
 | M0 | Git repo, KickAssembler + VICE + Makefile, "hello border colour" builds and runs from `make run` | One command, from source to running | ✅ Done |
 | M1 | VICE MCP server with screenshot, memory, joystick, frame-step | Claude can boot a PRG, press fire, and describe the screenshot | ✅ Done ([mcp/vice](mcp/vice/README.md)) |
-| M2 | `CLAUDE.md`, the first five reference docs, the first four agents | An agent answers "how many cycles on a badline?" from the repo docs | ✅ Built; awaiting the agent test in a new session |
+| M2 | `CLAUDE.md`, the first five reference docs, the first four agents | An agent answers "how many cycles on a badline?" from the repo docs | ✅ Done. The Technical Director answered from the docs, then extended them with new measured probes |
 | M3 | Engine basics: stable raster IRQ framework, sprite multiplexer v1, PNG → sprite converter | Spike demos pass automated cycle-budget tests | |
 | M4 | **Training game:** a small single-screen game (Robotron- or Galaga-like) | Playable, tested, and you find it fun for five minutes | |
 | M5 | First real title: pitch → feasibility spike → vertical slice | Vertical slice you'd be proud to show on CSDb or Lemon64 | |
