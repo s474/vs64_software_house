@@ -88,7 +88,8 @@ KickAssembler scripts can import data directly, so converters aren't always need
 
 For anything with C64 constraints to check (colour limits per cell, sprite sizes), the Tools
 Engineer writes a Python converter in `tools/` that validates and emits `.bin` files, and the
-source loads those.
+source loads those. Sprite sheets: [`tools/png2sprites`](../../tools/png2sprites/README.md); `make`
+converts `NAME.hires.png` / `NAME.mc.png` in a game's source directory automatically.
 
 ## Conventions
 

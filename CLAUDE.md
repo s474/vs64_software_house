@@ -15,6 +15,7 @@ Target: **PAL C64** (6510 + VIC-II 6569 + SID), KickAssembler 5.25, VICE 3.10 (`
 | Run in VICE for a human | `make run GAME=<title>` |
 | Release build | `make BUILD=release GAME=<title>` (no `DEBUG` define) |
 | Crunched PRG / disk image | `make crunch` / `make d64` |
+| Test the tools | `make test-tools` (pytest for `tools/png2sprites`) |
 | Test the VICE MCP server | `cd mcp/vice && uv run smoke_test.py` |
 
 Build outputs in `build/<title>/`: `.prg`, `main.vs` (labels), `main.dump` (address of every source line).
