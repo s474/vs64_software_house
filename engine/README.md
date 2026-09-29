@@ -267,6 +267,8 @@ when too many share a row. Decisions from the brief: 24 sprites, flicker rather 
 | `MUX_FREE_AFTER` | 22 | Engine | A hardware sprite is free to rewrite on line `Y_old + 22`. *Estimate*: display on Y+1 to Y+21 is unmeasured |
 | `MUX_IRQ_LINES` | 1 | Engine | Lines from a zone IRQ's trigger to its first write. *Estimate* |
 | `MUX_WRITE_LINES` | 1 | Engine | Lines to write one slot, allowing for DMA. *Estimate* |
+| `MUX_MAX_PINNED` | 4 | Engine | Most sprites honoured as pinned in one frame (decision, not a measurement) |
+| `MUX_PIN_EVICT_MAX` | 8 | Engine | Most evictions pinned sprites may make in one `mux_update`. Bounds the worst case. *Estimate*: set from cost, revisit once measured |
 
 Sprites with Y outside `MUX_Y_MIN`–`MUX_Y_MAX` (including `MUX_OFF`) are not shown and cost
 nothing.
@@ -283,7 +285,7 @@ it calls `mux_update` in the same frame; nothing reads them until then, so there
 | `mux_y` | 24 | Y (as the VIC-II register). `MUX_OFF` to hide |
 | `mux_ptr` | 24 | Sprite pointer: data at VIC bank base + ptr × 64 |
 | `mux_col` | 24 | Colour, bits 0–3 |
-| `mux_flags` | 24 | Bit 0: multicolour. Bits 1–7 reserved, write 0 (bit 7 is proposed for "pinned", an [open question](#open-questions-for-simon)) |
+| `mux_flags` | 24 | Bit 0: multicolour. Bit 7: **pinned**, never evicted by flicker (at most 4: see [Pinned sprites](#pinned-sprites)). Bits 1–6 reserved, write 0 |
 
 Registers the multiplexer owns (nothing else writes them): `$D000–$D010`, `$D015`, `$D01C`,
 `$D027–$D02E`, and `MUX_SCREEN+$3F8…$3FF`. The game owns the shared multicolours
@@ -302,7 +304,7 @@ mux_init:
 // In:  nothing
 // Out: C=0 queued for the next mux_irq_top; C=1 skipped (the previous build hasn't been shown yet)
 // Uses: A, X, Y, zp_tmp0-zp_tmp3
-// Cost: <= 4,900 cycles (estimate; budget in tests/engine/multiplexer/budget.json)
+// Cost: <= 5,600 cycles (estimate; budget in tests/engine/multiplexer/budget.json)
 mux_update:
 
 // Chain entry 0 (IrqNormal(MUX_TOP_LINE, mux_irq_top)). Internal: mux_irq_zone.
@@ -408,11 +410,18 @@ nothing vanishes permanently, so the choice rotates. Each virtual sprite has an 
 Y order:
 
 ```
+pinned[v] = flags bit 7, for the first MUX_MAX_PINNED such sprites in virtual order 0-23
+pin_evictions = 0
 for each shown-range sprite v in mux_order:
     if v fits after the kept list: keep v
+    elif pinned[v]:                                        // see "Pinned sprites"
+        while v doesn't fit and pin_evictions < MUX_PIN_EVICT_MAX
+              and an unpinned sprite is among the last 8 kept:
+            remove the youngest unpinned of the last 8 kept; pin_evictions += 1
+        keep v if it fits now, else drop v (mux_pin_drop_count += 1)
     else:
-        w = the youngest of the last 8 kept (lowest age; on a tie, the later one)
-        if age[v] > age[w] and v fits once w is removed:
+        w = the youngest UNPINNED of the last 8 kept (lowest age; on a tie, the later one)
+        if w exists and age[v] > age[w] and v fits once w is removed:
             remove w (shift up to 7 kept entries, re-simulate them), keep v
         else: drop v
 age[v] = 0 if kept, else age[v] + 1
@@ -421,13 +430,59 @@ age[v] = 0 if kept, else age[v] + 1
 Removing a kept sprite never breaks the ones after it (their "8 places earlier" sprite moves
 up the screen, which only gives them more time), so one pass is enough. The effect: a sprite
 dropped last frame beats one that was shown, so crowded sprites take turns. Worked through
-by hand: 9 on a row, the two extras alternate (each missing at most 1 frame in 2); 24 on one
-row, three sets of 8 rotate (each missing 2 frames in 3). **The design target is that no
-sprite in the shown range is ever missing for more than 2 consecutive frames, however
-crowded.** That's a target, not a proof; the spike checks it with `mux_max_age` (DEBUG
-high-water mark of any age) and the QA soak test checks it over 10,000 frames.
+by hand, with nothing pinned: 9 on a row, the two extras alternate (each missing at most 1
+frame in 2); 24 on one row, three sets of 8 rotate (each missing 2 frames in 3).
 
-With ≤ 8 sprites in every window, nothing is ever dropped and nothing flickers.
+**Flicker target for unpinned sprites.** With P pinned sprites in a crowded window, the
+unpinned ones share 8 − P hardware sprites, so n unpinned sprites competing in one window
+should each be missing for at most **⌈n / (8 − P)⌉ − 1 consecutive frames**:
+
+| Pinned in the window (P) | Unpinned competing (n) | Longest run missing |
+|---|---|---|
+| 0 | up to 24 | 2 |
+| 1 | up to 21 | 2 |
+| 1 | 23 | 3 |
+| 4 | up to 12 | 2 |
+| 4 | 20 | 4 |
+
+That's a design target, not a proof. `mux_max_age` (the DEBUG high-water mark) covers
+**unpinned sprites only**; pinned sprites have their own counter. A pinned sprite's forced
+evictions take the youngest unpinned sprite first, the same choice the age rule makes, so
+they don't break the rotation. They just take capacity from it.
+
+With ≤ 8 sprites in every window, nothing is ever dropped and nothing flickers, pinned or not.
+So the QA soak criterion from the brief (no sprite missing more than 2 frames when ≤ 8 are on
+a row) is unaffected by pinning.
+
+### Pinned sprites
+
+Decision (Simon): the player's sprite must not flicker. A virtual sprite with `mux_flags`
+bit 7 set is **pinned**: it's never chosen for eviction, and when it doesn't fit it evicts
+unpinned sprites until it does.
+
+- **Selection.** A pinned sprite that fits is kept like any other. One that doesn't evicts
+  the youngest unpinned sprite among the last 8 kept, and repeats (each removal brings an
+  earlier kept sprite into the last 8) until it fits. It ignores ages: a pinned sprite beats
+  any unpinned one. Unpinned sprites never evict a pinned one.
+- **At most 4.** The first 4 sprites with bit 7 set, in virtual order 0–23, are pinned; any
+  more are treated as unpinned that frame and flicker normally. So the game should pin its
+  most important sprites at the lowest indices (the player at 0). Each frame with more than 4
+  pinned increments `mux_pin_excess_count` (DEBUG).
+- **Why 4 is always schedulable.** With the estimated constants, 4 pinned sprites never fill
+  a hardware-sprite window (8), and a row of 4 needs 22 + 1 + 4 = 27 clear lines above it once
+  the unpinned sprites there are evicted, which eviction provides. So **with ≤ 4 pinned sprites
+  in the shown range, every one is shown every frame**, unless the eviction cap runs out.
+- **The cap.** `MUX_PIN_EVICT_MAX` (8, *estimate*) bounds the evictions pinned sprites may
+  make in one `mux_update`, so the worst case stays about 8 × 350 = 2,800 cycles
+  (*estimate*) above normal selection. Reaching it needs several pinned sprites inside dense
+  crowds in the same frame. If a pinned sprite still doesn't fit, it's **dropped for that frame**
+  (never shown in the wrong place, never left half-written) and `mux_pin_drop_count` increments
+  (DEBUG, saturating). Its age still counts, and next frame it evicts as before.
+- **Off-screen.** A pinned sprite with Y outside `MUX_Y_MIN`–`MUX_Y_MAX` is hidden, as any
+  sprite is. That isn't a drop and isn't counted.
+- **Effect on the other sprites.** Every pinned eviction is an unpinned sprite
+  dropped, so pinning a sprite that sits in a crowd makes the others flicker more (see the
+  table above). That's the trade Simon chose.
 
 ### Multiplexer costs
 
@@ -437,9 +492,10 @@ All *estimates* until measured in the `multiplexer` spike (DEBUG build, which is
 | Routine | Budget (cycles) | Where it runs | Basis |
 |---|---|---|---|
 | `mux_sort` → `mux_sort_end` | 1,500 | Main loop | *estimate*: ~24 × 25 compares + shifts for 24 bouncing sprites |
-| `mux_select` → `mux_select_end` | 1,500 | Main loop | *estimate*: ~24 × 45 + evictions |
+| `mux_select` → `mux_select_end` | 2,200 | Main loop | *estimate*: ~24 × 45, + ~150 for the pinned pre-pass, + evictions at ~350 each (shift 3 kept arrays ≤ 7 entries, re-simulate ≤ 7), allowing ~2 per frame in the spike |
 | `mux_build` → `mux_build_end` | 1,800 | Main loop | *estimate*: ~24 × 75 (4 copies, 2 cumulative bytes, free line) |
-| `mux_update` → `mux_update_end` (all three) | 4,900 | Main loop | Sum + call overhead |
+| `mux_update` → `mux_update_end` (all three) | 5,600 | Main loop | Sum + call overhead |
+| Worst case, not budgeted | + ~2,800 on select | Main loop | *estimate*: `MUX_PIN_EVICT_MAX` (8) pinned evictions × ~350. Costs at most a repeated frame, as the sort's worst case does |
 | `mux_irq_top` → `irq_exit_rti` | 600 | IRQ, line 16 | *estimate*: swap + 8 slots × ~60 + `$D015`/`$D010`/`$D01C` + re-arm |
 | `mux_irq_zone` → `irq_exit_rti`, one IRQ | 550 | IRQ | *estimate*: up to 8 slots × ~60 + re-arm |
 | All IRQ time in one frame | 3,300 | IRQ | *estimate*: see the frame budget |
@@ -449,7 +505,9 @@ All *estimates* until measured in the `multiplexer` spike (DEBUG build, which is
 | Label | Meaning | Spike requires |
 |---|---|---|
 | `mux_late_count` | Slots the zone IRQ reached on or after their Y line | 0 |
-| `mux_max_age` | Highest `mux_age` ever reached | ≤ 2 |
+| `mux_max_age` | Highest `mux_age` ever reached by an **unpinned** sprite | ≤ 4 (the target for 4 pinned + 20 unpinned; see the flicker table) |
+| `mux_pin_drop_count` | Times a pinned sprite in the shown range was dropped (saturating) | 0 |
+| `mux_pin_excess_count` | Frames with more than `MUX_MAX_PINNED` sprites flagged pinned (saturating) | 0 in the budget run; the soak test forces it on purpose |
 | `mux_drop_count` | Sprites dropped in the last `mux_update` | (reported only) |
 
 ---
@@ -519,10 +577,18 @@ flowchart TB
 Rules for other chain entries in a multiplexer game:
 
 - None between `MUX_TOP_LINE` and `MUX_Y_MAX + 2`. The zone IRQs' lines are dynamic and must
-  not interleave with fixed entries (v1; a mid-screen split with sprites is an
-  [open question](#open-questions-for-simon)).
+  not interleave with fixed entries.
 - Entries at `MUX_Y_MAX + 2` or later, up to 255. The last zone IRQ writes its slots before
   the slot's Y (≤ `MUX_Y_MAX`) by construction, so it's done by then.
+
+**Status panels: only at the bottom in v1.** A game gets a bottom panel by lowering
+`MUX_Y_MAX` so no sprite reaches the panel, and adding a fixed chain entry at the panel's
+first line (≥ `MUX_Y_MAX + 2`) for its colour or mode change. Note that a sprite at Y is
+displayed on lines Y+1 to Y+21 (*estimate*), so for no sprite pixels over a panel starting on
+line P, `MUX_Y_MAX` = P − 22. A **top panel is not supported**: `MUX_Y_MIN` is fixed by the
+engine, and no fixed entry may sit between `MUX_TOP_LINE` and `MUX_Y_MAX + 2`. Nor are
+splits anywhere in the play area. Either would need a future extension (a configurable
+`MUX_Y_MIN`, or zone scheduling that works around fixed splits), which isn't designed.
 - Nothing before `MUX_TOP_LINE`: lines 0–15 are where the previous frame's lowest sprites
   finish (a sprite at Y=249 is displayed until line 270, *estimate*) and `mux_irq_top` needs
   them finished.
@@ -541,13 +607,13 @@ PAL, screen on, 24 virtual sprites, DEBUG build.
 | Badlines | −1,075 | 25 × **measured** 43 ([vic-ii-timing.md](../docs/reference/vic-ii-timing.md#badlines)) |
 | Sprite DMA, 24 sprites | −2,448 | 24 × 21 lines × **measured** 2 = 1,008, plus ≤ 240 lines × 2 groups × **measured** 3 = 1,440 ([vic-ii-timing.md](../docs/reference/vic-ii-timing.md#sprite-dma)). The 21 lines per sprite and the 240 lines are *estimates* |
 | All IRQs: framework, `mux_irq_top`, ≤ 16 zone IRQs, one game entry | −3,300 | *estimate*: ≈ 640 + 16 × (≈ 95 overhead + ≈ 60 per slot) + ≈ 100 |
-| `mux_update` (main loop) | −4,900 | *estimate* |
-| **Left for game logic, music and everything else** | **≈ 7,900** (40%) | |
+| `mux_update` (main loop) | −5,600 | *estimate*, including pinned evictions |
+| **Left for game logic, music and everything else** | **≈ 7,200** (37%) | |
 
 The IRQ and `mux_update` figures are raster time, so they include DMA that lands on them;
 that DMA is also in the DMA row. The table double-counts it on purpose, as margin.
 
-What this means for a game: about 7,900 cycles a frame for a 50 Hz game with 24 sprites.
+What this means for a game: about 7,200 cycles a frame for a 50 Hz game with 24 sprites.
 Music (M3 doesn't include it; a typical player's cost is *unmeasured*) comes out of that.
 
 ---
@@ -644,8 +710,26 @@ overload. Sprite data from a PNG through `tools/png2sprites`, wired into `make`.
   `spike_idle_min` (16-bit, the fewest iterations seen in a frame, after warm-up) and
   `spike_overrun_count` (frames where the work didn't finish before the next tick). The idle
   loop's cost per iteration is counted and written in its header (budget.json assumes 16).
-- Screenshots: `screenshots/multiplexer-24-sprites.png`, and one with an overloaded row
-  (`screenshots/multiplexer-overload.png`).
+- **Pinned sprites: 0–3 are pinned** (the maximum, so capacity is tested at its worst).
+  Sprite 0 is the "player": it sweeps the whole shown range from top to bottom and back, so
+  it passes through every crowd the bouncing sprites form. Sprite 1 tracks sprite 0's Y at a
+  different X for part of each sweep, so two pinned sprites regularly share a row inside a
+  crowd. Sprites 2 and 3 bounce like the others. Sprites 4–23 are unpinned.
+- `budget.json` requires `mux_pin_drop_count` = 0 and `mux_pin_excess_count` = 0 over 3,000
+  frames, and `mux_max_age` ≤ 4 (the flicker target for 4 pinned + 20 unpinned).
+- Screenshots: `screenshots/multiplexer-24-sprites.png`, one with an overloaded row
+  (`screenshots/multiplexer-overload.png`), and one with the player inside that row
+  (`screenshots/multiplexer-pinned-in-crowd.png`).
+
+**QA soak test (10,000 frames)**, in addition to the brief's no-crash / no-jam /
+≤ 2-missing-frames checks:
+
+- The player never drops out: `mux_pin_drop_count` = 0 at the end, and, sampled every frame
+  (or every few frames if that's too slow through the MCP), `mux_age[0]` = 0 whenever sprite 0's
+  Y is in the shown range.
+- Excess pins are handled: set bit 7 of `mux_flags+4` with `vice_write_memory`, run 100 frames,
+  and check `mux_pin_excess_count` > 0, sprites 0–3 still never dropped, sprite 4 flickers but
+  its missing runs stay within the unpinned target, and nothing crashes. Then clear the bit.
 
 ---
 
@@ -667,6 +751,10 @@ records them in the reference docs as measured, and updates this page and the bu
 | 9 | Zone IRQ trigger-to-first-write, and per-slot write time, under worst DMA | 1 line / 1 line | `MUX_IRQ_LINES`, `MUX_WRITE_LINES` | Spike, with `mux_late_count` = 0 as the test |
 | 10 | Sort, select, build and IRQ costs | See the tables | Budgets | `multiplexer` spike |
 | 11 | Badline steal when the badline starts during IRQ entry (3 consecutive writes) | 40 | Only for cycle-exact code across a badline | Listed as unmeasured in vic-ii-timing.md |
+| 12 | Cost of one eviction (remove, shift, re-simulate) | ~350 | Select budget, `MUX_PIN_EVICT_MAX` | `multiplexer` spike: profile an eviction path |
+| 13 | Pinned pre-pass (effective pinned set, excess count) | ~150 | Select budget | `multiplexer` spike |
+| 14 | Whether `MUX_PIN_EVICT_MAX` = 8 is ever reached in the spike and soak | Not reached | The pinned guarantee | Soak: `mux_pin_drop_count` = 0; if not, raise the cap and re-cost it |
+| 15 | Flicker targets in the table in [Overflow](#overflow-fair-flicker) | ⌈n / (8 − P)⌉ − 1 | `mux_max_age` checks | Spike and soak |
 
 ---
 
@@ -675,19 +763,21 @@ records them in the reference docs as measured, and updates this page and the bu
 Deliberately out of v1, so they don't get assumed:
 
 - Chain lines ≥ 256; more than 16 chain entries; changing handlers at run time.
-- Sprite X/Y expansion, per-sprite background priority, and double-buffered screens (sprite
-  pointers go to one `MUX_SCREEN`).
-- Fixed chain entries inside the multiplexer's region.
+- Sprite X/Y expansion (a decision: see below), per-sprite background priority, and
+  double-buffered screens (sprite pointers go to one `MUX_SCREEN`).
+- Fixed chain entries inside the multiplexer's region, so no top panel and no splits in the
+  play area; a bottom panel only ([Raster timeline](#raster-timeline)).
+- More than 4 pinned sprites.
 - `BRK` goes through the IRQ vector like an IRQ and will put the chain out of step. A stray
   `BRK` means a crash anyway; a DEBUG trap for it is possible later (about 10 cycles per IRQ).
 - NTSC (out of scope for M3).
 
-## Open questions for Simon
+## Decisions
 
-1. **Mid-screen splits with sprites.** v1 can't have a fixed raster split (a colour or mode
-   change) inside the sprite area. A status panel at the top or bottom works. Is that enough
-   for M4?
-2. **Pinned sprites.** Should the player's sprite never flicker? Proposal: `mux_flags` bit 7
-   = pinned (never evicted), at most 4 pinned. Cheap to add (the eviction skips them), but
-   pinned sprites make the others flicker more in a crowd.
-3. **Expanded sprites** (X/Y double size) are unsupported in v1. Needed for M4?
+Simon's answers to the design's open questions (2026-09-29):
+
+| Question | Decision |
+|---|---|
+| Splits inside the sprite area | Not in v1. A **bottom panel** is enough for now (`MUX_Y_MAX` plus a fixed entry below it). A top panel or play-area splits need a future extension, not designed yet |
+| Should the player's sprite flicker? | **No**: "player sprite flickering is bad." Pinned sprites are in v1: `mux_flags` bit 7, at most 4 ([Pinned sprites](#pinned-sprites)) |
+| Expanded (double-size) sprites | **Not needed for now.** Unsupported in v1: `$D017` and `$D01D` must be 0 |

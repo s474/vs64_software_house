@@ -2,12 +2,15 @@
   "spike": "multiplexer",
   "src_dir": "tests/engine/multiplexer",
   "warmup_frames": 100,
-  "notes": "Budgets set by the Technical Director, 2026-09-29, for 24 bouncing sprites in a DEBUG build. Schema and rationale: engine/README.md#budget-files and #multiplexer-costs. Main-loop routines use profile_excl_irq so zone IRQs landing inside them don't count against them. 'estimate' budgets are replaced with measured figures by the raster-engineer (engine/README.md#estimates-to-measure-in-m3).",
+  "notes": "Budgets set by the Technical Director, 2026-09-29, for 24 bouncing sprites, 0-3 pinned, in a DEBUG build. Schema and rationale: engine/README.md#budget-files and #multiplexer-costs. Main-loop routines use profile_excl_irq so zone IRQs landing inside them don't count against them. 'estimate' budgets are replaced with measured figures by the raster-engineer (engine/README.md#estimates-to-measure-in-m3).",
   "checks": [
     {
       "name": "mux_sort",
       "kind": "profile_excl_irq",
-      "routine": ["mux_sort", "mux_sort_end"],
+      "routine": [
+        "mux_sort",
+        "mux_sort_end"
+      ],
       "max_cycles": 1500,
       "samples": 50,
       "basis": "estimate",
@@ -16,16 +19,22 @@
     {
       "name": "mux_select",
       "kind": "profile_excl_irq",
-      "routine": ["mux_select", "mux_select_end"],
-      "max_cycles": 1500,
+      "routine": [
+        "mux_select",
+        "mux_select_end"
+      ],
+      "max_cycles": 2200,
       "samples": 50,
       "basis": "estimate",
-      "source": "engine/README.md#multiplexer-costs: ~24 x 45 + evictions"
+      "source": "engine/README.md#multiplexer-costs: ~24 x 45 + ~150 pinned pre-pass + ~2 evictions x ~350"
     },
     {
       "name": "mux_build",
       "kind": "profile_excl_irq",
-      "routine": ["mux_build", "mux_build_end"],
+      "routine": [
+        "mux_build",
+        "mux_build_end"
+      ],
       "max_cycles": 1800,
       "samples": 50,
       "basis": "estimate",
@@ -34,8 +43,11 @@
     {
       "name": "mux_update (sort + select + build)",
       "kind": "profile_excl_irq",
-      "routine": ["mux_update", "mux_update_end"],
-      "max_cycles": 4900,
+      "routine": [
+        "mux_update",
+        "mux_update_end"
+      ],
+      "max_cycles": 5600,
       "samples": 50,
       "basis": "estimate",
       "source": "engine/README.md#frame-budget"
@@ -43,7 +55,10 @@
     {
       "name": "mux_irq_top (swap + slots 0-7)",
       "kind": "profile",
-      "routine": ["mux_irq_top", "irq_exit_rti"],
+      "routine": [
+        "mux_irq_top",
+        "irq_exit_rti"
+      ],
       "max_cycles": 600,
       "samples": 50,
       "basis": "estimate",
@@ -52,7 +67,10 @@
     {
       "name": "mux_irq_zone (one IRQ, up to 8 slots)",
       "kind": "profile",
-      "routine": ["mux_irq_zone", "irq_exit_rti"],
+      "routine": [
+        "mux_irq_zone",
+        "irq_exit_rti"
+      ],
       "max_cycles": 550,
       "samples": 200,
       "basis": "estimate",
@@ -87,14 +105,34 @@
       "source": "engine/README.md#scheduling-and-the-minimum-vertical-separation"
     },
     {
-      "name": "no sprite missing more than 2 frames running",
+      "name": "unpinned sprites missing at most 4 frames running",
       "kind": "memory",
       "address": "mux_max_age",
       "size": 1,
       "after_frames": 3000,
-      "max": 2,
+      "max": 4,
       "basis": "estimate",
-      "source": "engine/README.md#overflow-fair-flicker: design target, also the QA soak criterion"
+      "source": "engine/README.md#overflow-fair-flicker: target ceil(n/(8-P))-1 with P=4 pinned, n=20 unpinned. mux_max_age covers unpinned sprites only. The brief's <=2 criterion for <=8 per row is a QA soak check"
+    },
+    {
+      "name": "pinned sprites never dropped",
+      "kind": "memory",
+      "address": "mux_pin_drop_count",
+      "size": 1,
+      "after_frames": 3000,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/README.md#pinned-sprites: with <=4 pinned in the shown range, each is shown every frame"
+    },
+    {
+      "name": "no more than 4 pinned",
+      "kind": "memory",
+      "address": "mux_pin_excess_count",
+      "size": 1,
+      "after_frames": 3000,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/README.md#pinned-sprites: the spike pins exactly 4 (sprites 0-3)"
     },
     {
       "name": "no main-loop overruns",
@@ -115,7 +153,7 @@
       "scale": 16,
       "min": 5000,
       "basis": "estimate",
-      "source": "engine/README.md#frame-budget: ~7,900 left minus ~1,100 for the spike's bouncing, less margin. scale = idle-loop cycles per iteration; the raster-engineer corrects it to the counted figure"
+      "source": "engine/README.md#frame-budget: ~7,200 left minus ~1,100 for the spike's bouncing, less margin. scale = idle-loop cycles per iteration; the raster-engineer corrects it to the counted figure"
     }
   ]
 }
