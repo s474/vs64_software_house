@@ -82,7 +82,7 @@
       "frames": 100,
       "max_cycles": 3300,
       "basis": "estimate",
-      "source": "engine/README.md#frame-budget"
+      "source": "engine/README.md#frame-budget: ~640 top + 16 zone IRQs x (78 framework overhead, measured parts + counted irq_rearm 41, + ~60 per slot) + ~100 game entry = ~2,950; 3,300 keeps ~350 for the unmeasured per-slot cost and DMA inside the IRQs. Raster span, DMA included"
     },
     {
       "name": "no late chain entries",

@@ -25,7 +25,8 @@
 //   irq_dispatch -> handler                    17 (+8 on entry 0: the frame tick)
 //   Normal handler's first instruction         cycle 26-33 of its line (entry 0: 34-41)
 //   irq_exit -> irq_exit_rti                   60 (58 on the wrap to entry 0)
-//   irq_rearm -> irq_exit_rti                  35 (counted, not yet exercised: M3 stage 2)
+//   irq_rearm -> irq_exit_rti                  41 (counted: 35 to jmp irq_restore + 6 restore; not yet
+//                                              exercised, M3 stage 2 measures it)
 //   rti                                        6
 //   Whole normal entry, excluding its work     7 + 17 + 3 (jmp irq_exit) + 60 + 6 = 93 (+8 entry 0)
 //   Stable: irq_stable_begin -> handler        99-106; handler starts at IRQ_STABLE_CYCLE, every frame
@@ -35,7 +36,8 @@
 //   - Stable entries: lines line-2 .. line must not be badlines and must have the same sprite
 //     DMA every frame. Stage 1 must start by about cycle 40 of line-2 (counted; measured 26-33),
 //     or its fallback runs the handler unstable and counts a late run.
-//   - irq_exit runs into the line after a handler's line; if that's a badline it costs 43 more.
+//   - Costs above are raster time with no DMA. DMA landing inside an IRQ (badline 43, sprites)
+//     lengthens its raster span by that much; see engine/README.md#dma-inside-an-irq.
 //   - The late check can't catch a last entry that runs past line 311.
 //   - A BRK goes through $FFFE like an IRQ and puts the chain out of step (v1 limit).
 
@@ -313,7 +315,7 @@ irq_late_now:
 #endif
         jmp irq_jmp                     // 3  the target was already written
 
-// TIMING: 35 cycles to irq_exit_rti (counted; the irq_chain spike doesn't use it).
+// TIMING: 41 cycles to irq_exit_rti: 35 to the jmp, 6 in irq_restore (counted; not yet measured).
 // Fire `handler` (X = lo, Y = hi) at line A, without advancing the chain.
 // In: A = line, X/Y = handler, from a handler (IrqRearm)
 irq_rearm:
@@ -327,7 +329,7 @@ irq_rearm:
         beq irq_late_now                // 2
         bit IRQ_VIC_CTRL1               // 4
         bmi irq_late_now                // 2
-        jmp irq_restore                 // 3  = 35
+        jmp irq_restore                 // 3  = 35, + 6 in irq_restore = 41 to irq_exit_rti
 
 // NMI (RESTORE) with the KERNAL out: ignore it.
 irq_nmi:

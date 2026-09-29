@@ -111,7 +111,7 @@ The design in [engine/README.md](../../engine/README.md) is approved. These rule
    | Stage | Scope | Checks that must pass |
    |---|---|---|
    | 1 | `engine/irq.asm` and the `irq_chain` spike | All of `tests/engine/irq_chain/budget.json` |
-   | 2 | Multiplexer: sort, schedule, zone IRQs, double buffer. **No flicker or pinning yet**: the spike keeps ≤ 8 sprites per window | Costs, `irq_late_count`, `mux_late_count` |
+   | 2 | Multiplexer: sort, schedule, zone IRQs, double buffer. **No flicker or pinning yet**: the spike keeps ≤ 8 sprites per window. Also: measure `irq_rearm` (rule 6) | Costs, `irq_late_count`, `mux_late_count`, and all of `irq_chain/budget.json` still |
    | 3 | Add fair flicker; the spike overloads rows | Plus `mux_max_age` (pinning off) |
    | 4 | Add pinning; the spike runs as the design describes | The full `tests/engine/multiplexer/budget.json` |
 
@@ -130,6 +130,27 @@ The design in [engine/README.md](../../engine/README.md) is approved. These rule
 
 4. **`make test` comes early.** The tools-engineer builds the budget runner in parallel with stage 1,
    so every stage is checked by the runner rather than by hand.
+
+5. **Framework budgets are locks** (Technical Director, after stage 1). The `irq_chain`
+   budgets equal the measured figures (irq_exit 60, dispatch 17, stable extra 106, handler
+   start cycles 41 / 33 / 6 / 33, 508 IRQ cycles a frame), with no headroom: the paths are
+   straight-line code in a DMA-free layout, so any change is a regression or a deliberate
+   re-baseline, never noise. A change to `engine/irq.asm` that moves one of them is reported with
+   the new figure; the Technical Director re-baselines. If the runner reads a figure one cycle off
+   `measure.py`, that's a runner bug to find, not a budget to loosen.
+
+6. **DMA inside an IRQ is latency, not cost** ([engine/README.md](../../engine/README.md#dma-inside-an-irq)).
+   Only spikes that lock framework costs must keep badlines and sprite DMA out of each entry's
+   span (trigger line and, for small handlers, the next line: why `irq_chain` uses $69 and $B1).
+   Games and the multiplexer budget raster spans, DMA included. Stage 2 must:
+   - Add an `IrqRearm` entry to the `irq_chain` spike on DMA-free lines and report
+     `irq_rearm` → `irq_exit_rti` (41 *counted*, including the 6-cycle restore; earlier docs said
+     35). The Technical Director then adds its locked check to `irq_chain/budget.json`.
+   - Treat `MUX_IRQ_LINES` = 1 as at risk: a zone IRQ triggered on a badline starts its handler
+     43 cycles later (81 with sprites 0–7), i.e. on the next line. `mux_late_count` = 0 in the
+     spike is the test; raise the constant if it fails.
+   - Report the last zone IRQ's end line relative to its slot's Y, so the fixed-entry spacing
+     (`MUX_Y_MAX + 2`, or + 3 in the badline region) can be confirmed or corrected.
 
 ## Out of scope for M3
 

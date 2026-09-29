@@ -215,7 +215,9 @@ Constraints:
   gap between badlines ($AF–$B1 is fine with the default YSCROLL=3: badlines are at 51 + 8n,
   measured, [vic-ii-timing.md](../docs/reference/vic-ii-timing.md#badlines)), and never inside
   the multiplexer's region.
-- Cost: 99 cycles more than a normal entry (**measured**, see [Costs](#irq-framework-costs)).
+- Its exit may run into a badline: that only lengthens the entry's span
+  ([DMA inside an IRQ](#dma-inside-an-irq)), it doesn't affect stability.
+- Cost: 99–106 cycles more than a normal entry (**measured**, see [Costs](#irq-framework-costs)).
 - An NMI (RESTORE key) during the stage costs one frame of stability. Accepted.
 
 ### Jitter guarantee
@@ -231,10 +233,42 @@ DMA on that line: 43 cycles for a badline, 81 for a badline with sprites 0–7 a
 (**measured**, [vic-ii-timing.md](../docs/reference/vic-ii-timing.md#badline-and-sprites-on-the-same-line)).
 Trigger normal entries on non-badlines when their start time matters.
 
-**The line after an entry matters too.** A handler that starts on cycle ~30 and does a few
-cycles of work runs `irq_exit` into the next line. If that line is a badline, the exit costs
-43 cycles more (**measured**: `irq_exit` 102–103 after entries on $6A and $B2, the `irq_chain`
-spike's first layout, against 60 elsewhere). Budget for it, or keep the next line clear.
+### DMA inside an IRQ
+
+The framework costs below are raster time on lines with no DMA. A badline (43 cycles,
+**measured**) or sprite DMA anywhere in an IRQ's span, from the trigger to the `rti`, lengthens
+that span by the cycles stolen. A normal handler starts on cycle 26–33, so with W cycles of work
+its `irq_exit` starts at about cycle 36 + W and, for any small handler, runs into the next line
+(**measured**: `irq_exit` 102–103 when the next lines were badlines 107 and 179, the `irq_chain`
+spike's first layout at $6A and $B2, against 60 everywhere else).
+
+What that does and doesn't cost:
+
+- **No CPU time.** The VIC takes those cycles whatever code is running: if the IRQ didn't span
+  the badline, the main loop would lose the same 43. The [frame budget](#frame-budget) counts every
+  badline and sprite DMA once in its DMA rows, so an IRQ spanning DMA costs the frame nothing
+  extra. (Its IRQ rows are raster time, so that DMA is counted twice, on purpose, as margin.)
+- **Latency.** Whatever follows the IRQ happens later: the next chain entry can't start before
+  this one's `rti`, and the main loop resumes later. This matters where IRQs are packed
+  closely, which in practice means the multiplexer's zone IRQs.
+- **Measurement.** A `profile` check's max includes any DMA inside the span.
+
+Rules:
+
+1. **Spikes that lock a framework path to its measured cost** (`irq_chain`) place each entry so
+   no badline or sprite DMA falls between its trigger and its `rti`. For a small handler that's
+   the trigger line and the next one: that's why the spike uses $69 and $B1.
+2. **Games don't have to.** Put fixed entries where the effect needs them and budget each
+   entry's **raster span**: framework overhead + work + the DMA on the lines it covers (43 per
+   badline, up to 81 for a badline with sprites 0–7, **measured**,
+   [vic-ii-timing.md](../docs/reference/vic-ii-timing.md#badline-and-sprites-on-the-same-line)).
+   A game that scrolls vertically moves its badlines with YSCROLL and couldn't keep them clear
+   anyway. Keep DMA out of an entry's span only when its *timing* matters: another entry close
+   behind it, or a register write that must land by a given cycle.
+3. **Stable entries** keep their hard rule (lines `line − 2` to `line` free of badlines, same
+   sprite DMA every frame). Their exit may cross a badline.
+4. **Multiplexer budgets** are raster spans in the display area, DMA included by design. Zone IRQs
+   can't avoid badlines, and their budgets and scheduling constants must allow for them.
 
 ### Frame sync
 
@@ -261,13 +295,26 @@ cycles, no DMA on the lines involved.
 | `irq_dispatch`: 3 self-mod saves (12), `cld` (2), `jmp` (3) | 17 | **measured** (`vice_profile irq_dispatch → spike_h1`: 17 every pass) |
 | **Handler starts** after the IRQ is taken | **24** | **measured** (dispatch hit + 17) |
 | Frame tick stub, entry 0 only | +8 | **measured** (h0 starts 25 after dispatch) |
-| `irq_exit` → `irq_exit_rti` (advance, `$D012`, target, ack, late check, restore) | **60** (58 on the wrap) | **measured**, every pass. Exactly the budget: no margin |
-| `irq_rearm` → `irq_exit_rti` | 35 | *counted*: not exercised until M3 stage 2 |
+| `irq_exit` → `irq_exit_rti` (advance, `$D012`, target, ack, late check, restore) | **60** (58 on the wrap) | **measured**, every pass; equals the instruction count. The budget is locked to it |
+| `irq_rearm` → `irq_exit_rti` (`$D012`, target, ack, late check, restore) | 41 | *counted*: 35 to its `jmp irq_restore` + 6 restore. (Was given as 35, which left out the restore.) Measured in M3 stage 2 |
 | `rti` + the handler's `jmp irq_exit` | 9 | [6502-timing.md](../docs/reference/6502-timing.md) |
 | **Total per normal entry, excluding its work** | **93** (+8 on entry 0) | **measured** parts |
 | Stable entry, extra: `irq_stable_begin` → handler | **99–106** (1.7 lines) | **measured** |
 | **Total per stable entry, excluding its work** | **192–199** | **measured** parts |
-| All four `irq_chain` entries, per frame (runner's IRQ-span definition) | **501–508** | **measured**, 1,000 frames |
+| Total per re-armed IRQ (`IrqRearm`, e.g. a zone IRQ), excluding its work | 78: 7 + 17 + 7 (macro) + 41 + 6 | measured parts + *counted* 41 |
+| All four `irq_chain` entries, per frame (runner's IRQ-span definition) | **501–508** | **measured**, 1,000 frames: h0 107 + h1 99 + h2 198–205 + h3 97 |
+
+**Budgets for these are locks, not allowances.** Each path is straight-line code measured
+where no DMA touches it, so the figure is exact and repeatable, and
+`tests/engine/irq_chain/budget.json` sets each budget *equal* to it. Headroom there could only
+hide a regression, and every framework cycle is paid by every IRQ (up to 18 a frame in a
+multiplexer game). A change to `irq.asm` that moves one of these figures is re-measured and
+re-baselined on purpose. Games get their headroom from the [frame budget](#frame-budget).
+
+**Why `irq_exit` stays at 60.** Reviewed after stage 1: the only removable parts are the raster
+bit 8 check (6: it catches a handler overrunning into lines 256–311) and the dispatch-target
+write (16: the price of the single-entry dispatcher, a design decision). Both are worth what they
+cost. At most one `irq_exit` runs per chain entry; zone IRQs use `irq_rearm` (41).
 
 The exit's 60 cycles: `irq_next` table (10 for index advance), `$D012` (8), target (16), ack (6),
 late check against the line (8) and raster bit 8 (6, so a handler that overruns into lines
@@ -534,7 +581,7 @@ All *estimates* until measured in the `multiplexer` spike (DEBUG build, which is
 | Worst case, not budgeted | + ~2,800 on select | Main loop | *estimate*: `MUX_PIN_EVICT_MAX` (8) pinned evictions × ~350. Costs at most a repeated frame, as the sort's worst case does |
 | `mux_irq_top` → `irq_exit_rti` | 600 | IRQ, line 16 | *estimate*: swap + 8 slots × ~60 + `$D015`/`$D010`/`$D01C` + re-arm |
 | `mux_irq_zone` → `irq_exit_rti`, one IRQ | 550 | IRQ | *estimate*: up to 8 slots × ~60 + re-arm |
-| All IRQ time in one frame | 3,300 | IRQ | *estimate*: see the frame budget |
+| All IRQ time in one frame | 3,300 | IRQ | *estimate*: see the frame budget. Framework overhead per zone IRQ is 78 (was assumed ≈ 95) |
 
 ### Debug counters (DEBUG builds)
 
@@ -607,8 +654,8 @@ flowchart TB
 
 | Line | Handler | Job | Budget (cycles) |
 |---|---|---|---|
-| `$10` (16) | `mux_irq_top` (entry 0) | Frame tick, swap, slots 0–7 | 600 + ~40 framework (*estimate*) |
-| ≈ 52–249, dynamic | `mux_irq_zone` | Slots 8–23 as hardware sprites free | 550 per IRQ; ≤ 16 IRQs (*estimate*) |
+| `$10` (16) | `mux_irq_top` (entry 0) | Frame tick, swap, slots 0–7 | 600 (*estimate*) + 32 framework before the handler (**measured**: 7 + 17 + 8) + 6 `rti` |
+| ≈ 52–249, dynamic | `mux_irq_zone` | Slots 8–23 as hardware sprites free | 550 per IRQ (*estimate*, raster span, DMA included) + 30 framework (7 + 17 + 6); ≤ 16 IRQs |
 | `$FB` (251) | Game entry 1 (optional) | Anything that must run at a fixed time: music (later), colour splits in the border | Its own; lines 251–311 are free of other IRQs |
 
 Rules for other chain entries in a multiplexer game:
@@ -617,6 +664,13 @@ Rules for other chain entries in a multiplexer game:
   not interleave with fixed entries.
 - Entries at `MUX_Y_MAX + 2` or later, up to 255. The last zone IRQ writes its slots before
   the slot's Y (≤ `MUX_Y_MAX`) by construction, so it's done by then.
+- **With DMA, + 2 isn't always enough.** After the last write, the last zone IRQ reaches
+  `irq_exit`'s late check 47 cycles later (3 + 44, *counted*), plus any DMA in between: up to
+  81 on a badline with 8 sprites (**measured**), 128 in all, which is just over 2 lines (126). If
+  that happens, the fixed entry runs late (it still runs, and `irq_late_count` counts it). With
+  the default `MUX_Y_MAX` = `$F9` there are no badlines after 243, so + 2 holds. A bottom panel
+  that puts `MUX_Y_MAX` inside the badline region (≤ 243, the last badline with YSCROLL=3) uses **`MUX_Y_MAX + 3`**, unless
+  stage 2 measures the last zone IRQ's end and shows + 2 is enough.
 
 **Status panels: only at the bottom in v1.** A game gets a bottom panel by lowering
 `MUX_Y_MAX` so no sprite reaches the panel, and adding a fixed chain entry at the panel's
@@ -643,7 +697,7 @@ PAL, screen on, 24 virtual sprites, DEBUG build.
 | Whole frame | 19,656 | **Measured** ([vic-ii-timing.md](../docs/reference/vic-ii-timing.md#frame-geometry)) |
 | Badlines | −1,075 | 25 × **measured** 43 ([vic-ii-timing.md](../docs/reference/vic-ii-timing.md#badlines)) |
 | Sprite DMA, 24 sprites | −2,448 | 24 × 21 lines × **measured** 2 = 1,008, plus ≤ 240 lines × 2 groups × **measured** 3 = 1,440 ([vic-ii-timing.md](../docs/reference/vic-ii-timing.md#sprite-dma)). The 21 lines per sprite and the 240 lines are *estimates* |
-| All IRQs: framework, `mux_irq_top`, ≤ 16 zone IRQs, one game entry | −3,300 | *estimate*: ≈ 640 + 16 × (≈ 95 overhead + ≈ 60 per slot) + ≈ 100 |
+| All IRQs: framework, `mux_irq_top`, ≤ 16 zone IRQs, one game entry | −3,300 | *estimate*: ≈ 640 + 16 × (78 overhead, measured parts + counted re-arm, + ≈ 60 per slot) + ≈ 100 ≈ 2,950, leaving ≈ 350 for the unmeasured per-slot cost and DMA inside the IRQs |
 | `mux_update` (main loop) | −5,600 | *estimate*, including pinned evictions |
 | **Left for game logic, music and everything else** | **≈ 7,200** (37%) | |
 
@@ -718,8 +772,8 @@ Four entries changing the border colour, screen on (badlines active), no sprites
 | 3 | `$FA` (250) | Normal | `spike_h3` | Last display line, below the last badline (243) |
 
 - Entries 1 and 2 were first designed at `$6A` and `$B2`. Their exits then ran into badlines
-  107 and 179, and `irq_exit` measured 102–103 instead of 60, so both moved up one line
-  (see [Jitter guarantee](#jitter-guarantee)).
+  107 and 179, and `irq_exit` measured 102–103 instead of 60, so both moved up one line. That's a
+  rule for spikes that lock costs, not for games ([DMA inside an IRQ](#dma-inside-an-irq)).
 - The **main loop must generate worst-case jitter**: a loop mixing 7-cycle instructions
   (`inc abs,x`) with 2- and 3-cycle ones, not `jmp *`. Otherwise the normal handlers show 3
   cycles of spread and the stable one proves nothing. **A fixed-length loop isn't enough**
@@ -786,7 +840,7 @@ records them in the reference docs as measured, and updates this page and the bu
 |---|---|---|---|---|
 | 1 | Raster IRQ trigger cycle within the line (and whether line 0 differs) | **Measured**: IRQ sequence starts on cycle 2 at the earliest (lines 32, 105, 175, 250). Line 0 still unmeasured | Handler start cycle, `max_cycle` checks | `vice_run_until` on a handler after a `jmp *` loop |
 | 2 | Writing `$D012` with the current line: does the IRQ latch immediately? | Assumed "maybe": the late check handles both | Late-check correctness | Probe |
-| 3 | Framework costs: dispatch, exit, re-arm, tick, stable extra | **Measured** 17 / 60 / (35 counted) / 8 / 99–106 | Every IRQ budget | `irq_chain` spike, `vice_profile` |
+| 3 | Framework costs: dispatch, exit, re-arm, tick, stable extra | **Measured** 17 / 60 / (41 counted) / 8 / 99–106. Re-arm to be measured in stage 2: an `IrqRearm` entry in `irq_chain` on DMA-free lines | Every IRQ budget | `irq_chain` spike, `vice_profile` |
 | 4 | `IRQ_STABLE_CYCLE`: the stable handler's start cycle | **Measured**: 6 | Stable handler users | `irq_chain` spike, `start_cycle` |
 | 5 | Maximum normal jitter with the worst main loop | **Measured**: 7 (8 never seen in 4,000 IRQs, taken branches included) | Acceptance | `irq_chain` spike, `start_cycle` |
 | 6 | Sprite DMA lines per sprite (display on Y+1 … Y+21) | 21 | DMA budget, `MUX_FREE_AFTER` | Extend `tests/timing/sprites` |
