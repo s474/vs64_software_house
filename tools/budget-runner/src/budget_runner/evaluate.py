@@ -155,6 +155,8 @@ def eval_profile(check: Check, costs: list[int]) -> Result:
     parts = [Part("max", max(costs), "<=", check.params["max_cycles"])]
     if check.params.get("max_avg_cycles") is not None:
         parts.append(Part("avg", avg, "<=", check.params["max_avg_cycles"]))
+    if check.params.get("min_cycles") is not None:  # an exact figure a probe must hit: a drop is a failure
+        parts.append(Part("min", min(costs), ">=", check.params["min_cycles"]))
     return Result(check, parts, info=f"min {min(costs)}, avg {avg:.1f}, {len(costs)} passes")
 
 

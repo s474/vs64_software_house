@@ -4,6 +4,7 @@
 #   make crunch          Exomizer self-extracting build -> $(GAME)-sfx.prg
 #   make d64             disk image containing the crunched build
 #   make test            budget runner: build + run the engine spikes in VICE, check budget.json
+#   make test-long       the same checks with ~34x the samples and frames (LONG_SCALE=n to change)
 #   make test-tools      pytest for the Python tools
 #   make clean
 # Pick a game with GAME=<name> (default: hello). For programs outside games/, also set
@@ -49,7 +50,7 @@ ifeq ($(shell [ -f $(STAMP) ] && [ "`cat $(STAMP)`" = "$(DEFINES)" ] && echo sam
 $(shell rm -f $(PRG))
 endif
 
-.PHONY: all run run-sfx crunch d64 clean test test-tools
+.PHONY: all run run-sfx crunch d64 clean test test-long test-tools
 
 all: $(PRG)
 
@@ -82,6 +83,12 @@ test-tools:
 # Pass ARGS to select spikes: make test ARGS=irq_chain
 test:
 	@uv run --quiet --package budget-runner budget-runner $(ARGS)
+
+# Long run: the same checks with every sample / frame count multiplied by LONG_SCALE (default 34:
+# the multiplexer's 600-pass main-loop checks become ~20,000 passes). Pass ARGS to select spikes.
+LONG_SCALE ?= 34
+test-long:
+	@uv run --quiet --package budget-runner budget-runner --scale $(LONG_SCALE) $(ARGS)
 
 crunch: $(SFX)
 

@@ -1,6 +1,6 @@
 """budget-runner: build every tests/**/budget.json spike, run it in VICE, check the budgets.
 
-    uv run budget-runner [--no-build] [SPIKE_OR_PATH ...]      (or: make test)
+    uv run budget-runner [--no-build] [--scale N] [SPIKE_OR_PATH ...]      (or: make test / make test-long)
 
 Exit status: 0 all checks passed (checks for a later build stage are PENDING and don't fail,
 except under --strict); 1 a check failed or could not be measured; 2 a budget file is malformed
@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 from .evaluate import Result, format_result
-from .spec import REPO, Budget, BudgetError, find_budgets, load_budget
+from .spec import REPO, Budget, BudgetError, find_budgets, load_budget, scaled
 
 
 def missing_source(budget: Budget) -> Path | None:
@@ -60,9 +60,14 @@ def main(argv: list[str] | None = None) -> int:
                     help="treat a spike whose main.asm does not exist yet, and a check pending a later "
                          "build stage, as a failure")
     ap.add_argument("--no-build", action="store_true", help="use the existing build/<spike>/<spike>.prg")
+    ap.add_argument("--scale", type=int, default=1, metavar="N",
+                    help="long run: multiply every check's samples / frames / after_frames by N "
+                         "(limits and warm-up unchanged; make test-long)")
     a = ap.parse_args(argv)
+    if a.scale < 1:
+        ap.error("--scale must be >= 1")
     try:
-        budgets = [load_budget(p) for p in find_budgets(REPO, a.select)]
+        budgets = [scaled(load_budget(p), a.scale) for p in find_budgets(REPO, a.select)]
     except BudgetError as e:
         print(f"budget-runner: error: {e}", file=sys.stderr)
         return 2
@@ -85,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     ran = len(budgets) - skipped
     print(f"budget-runner: {total - failed}/{total} checks passed" + (f", {failed} FAILED" if failed else "")
           + (f", {pending} pending a later stage" if pending else "")
-          + f" ({ran} spike{'s' if ran != 1 else ''} run" + (f", {skipped} skipped: no source yet" if skipped else "") + ")")
+          + f" ({ran} spike{'s' if ran != 1 else ''} run" + (f", long run x{a.scale}" if a.scale > 1 else "") + (f", {skipped} skipped: no source yet" if skipped else "") + ")")
     return 1 if failed else 0
 
 

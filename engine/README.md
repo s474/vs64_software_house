@@ -1156,8 +1156,8 @@ Check kinds (`kind` defaults to `profile`, so the brief's single-object example 
 
 | `kind` | Fields | Measures | Passes if |
 |---|---|---|---|
-| `profile` | `routine: [start, end]`, `max_cycles`, `samples` (default 50), optional `max_avg_cycles` | Raster cycles from executing `start` to executing `end`, as `vice_profile` (includes DMA and anything that interrupts it) | max ≤ `max_cycles`, and the average over the samples ≤ `max_avg_cycles` if given (the common-case check: use enough samples to cover the spike's whole motion; the average is compared unrounded, and `max_avg_cycles` may not exceed `max_cycles`) |
-| `profile_excl_irq` | as `profile` | As `profile`, minus time spent in IRQs inside the span. An IRQ spans from its `irq_dispatch` hit − 7 cycles to its `irq_exit_rti` hit + 6 | As `profile`: max ≤ `max_cycles`, and average ≤ `max_avg_cycles` if given |
+| `profile` | `routine: [start, end]`, `max_cycles`, `samples` (default 50), optional `max_avg_cycles`, optional `min_cycles` | Raster cycles from executing `start` to executing `end`, as `vice_profile` (includes DMA and anything that interrupts it) | max ≤ `max_cycles`, and the average over the samples ≤ `max_avg_cycles` if given (the common-case check: use enough samples to cover the spike's whole motion; the average is compared unrounded, and `max_avg_cycles` may not exceed `max_cycles`), and min ≥ `min_cycles` if given (a lower bound, for a probe that must hit an exact figure: set both limits to it; may not exceed `max_cycles`) |
+| `profile_excl_irq` | as `profile` | As `profile`, minus time spent in IRQs inside the span. An IRQ spans from its `irq_dispatch` hit − 7 cycles to its `irq_exit_rti` hit + 6 | As `profile`: max ≤ `max_cycles`, average ≤ `max_avg_cycles` and min ≥ `min_cycles` if given |
 | `start_cycle` | `label`, `line`, `frames` (default 100), `max_spread`, optional `max_cycle` | Raster line and cycle each time `label` is about to execute, over consecutive frames (`vice_run_until` reports the same) | Every hit on `line`, max − min cycle ≤ `max_spread`, and max ≤ `max_cycle` if given |
 | `irq_time_per_frame` | `max_cycles`, `frames` | Sum of IRQ spans (as above) per frame | max over the frames ≤ `max_cycles` |
 | `memory` | `address` (label), `size` (1 or 2, little-endian), `after_frames`, one of `equals` / `max` / `min`, optional `scale` | Value after running `after_frames` more frames, times `scale` | Comparison holds |
@@ -1191,7 +1191,17 @@ make test                    # every tests/**/budget.json
 make test ARGS=irq_chain     # one spike (a name, or a path to any budget.json, e.g. a scratch copy)
 uv run budget-runner --no-build irq_chain   # reuse the existing build
 uv run budget-runner --strict               # a missing main.asm or a PENDING check is a failure (M3 sign-off)
+make test-long                              # long run: every samples / frames / after_frames x 34 (~20,000 passes for a 600-sample check; ~30 min for the multiplexer)
+make test-long LONG_SCALE=10 ARGS=multiplexer   # another factor, one spike
+uv run budget-runner --scale 34 multiplexer     # the same, without make
 ```
+
+A long run exists to find maxima a short window misses: the limits must hold in any window, so it
+uses the same budget files and the same limits, with `samples` (profile kinds), `frames`
+(`start_cycle`, `irq_time_per_frame`) and `after_frames` (`memory`) multiplied by the scale. The
+`memory` check's own `scale` field, `warmup_frames` and every limit are unchanged. The summary line
+ends with `long run xN`. Wall time is about linear in the scale (see below); the multiplexer
+spike at 34 took 28 minutes (2026-09-30; every checkpoint stop is a round trip to VICE, so the IRQ-excluding profile checks dominate). Its maxima matched the earlier ad-hoc 20,000-pass runs to within 1-2 cycles. Use a smaller `LONG_SCALE` for a quicker soak.
 
 Exit status: 0 all checks passed (PENDING checks don't count); 1 a check failed, could not be measured, or a build failed;
 2 a budget file is malformed or the selection matched nothing. Code: `tools/budget-runner`

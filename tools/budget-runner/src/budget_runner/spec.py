@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[4]
@@ -14,8 +14,8 @@ COMPARISONS = ("equals", "max", "min")
 
 # kind -> (required fields, optional fields with defaults)
 FIELDS: dict[str, tuple[tuple[str, ...], dict[str, object]]] = {
-    "profile": (("routine", "max_cycles"), {"samples": 50, "max_avg_cycles": None}),
-    "profile_excl_irq": (("routine", "max_cycles"), {"samples": 50, "max_avg_cycles": None}),
+    "profile": (("routine", "max_cycles"), {"samples": 50, "max_avg_cycles": None, "min_cycles": None}),
+    "profile_excl_irq": (("routine", "max_cycles"), {"samples": 50, "max_avg_cycles": None, "min_cycles": None}),
     "start_cycle": (("label", "line", "max_spread"), {"frames": 100, "max_cycle": None}),
     "irq_time_per_frame": (("max_cycles", "frames"), {}),
     "memory": (("address", "size", "after_frames"), {"scale": 1}),
@@ -108,9 +108,26 @@ def parse_check(path: Path, index: int, raw: object) -> Check:
     if params.get("max_avg_cycles") is not None:
         if _int(where, "max_avg_cycles", params["max_avg_cycles"]) > params["max_cycles"]:
             raise BudgetError(f"{where}: 'max_avg_cycles' is above 'max_cycles', so it could never fail")
+    if params.get("min_cycles") is not None:
+        if _int(where, "min_cycles", params["min_cycles"]) > params["max_cycles"]:
+            raise BudgetError(f"{where}: 'min_cycles' is above 'max_cycles', so it could never pass")
     from_stage = _int(where, "from_stage", raw["from_stage"], 1) if "from_stage" in raw else None
     return Check(name=name, kind=kind, basis=basis, source=str(raw.get("source", "")), params=params,
                  from_stage=from_stage)
+
+
+def scaled(budget: Budget, factor: int) -> Budget:
+    """A copy of the budget for a long run: every sample and frame count multiplied by `factor`.
+
+    Scales `samples` (profile kinds), `frames` (start_cycle, irq_time_per_frame) and `after_frames`
+    (memory). `warmup_frames` and all limits stay as they are: the limits must hold in any window.
+    """
+    if factor == 1:
+        return budget
+    counts = ("samples", "frames", "after_frames")
+    checks = [replace(c, params={k: v * factor if k in counts else v for k, v in c.params.items()})
+              for c in budget.checks]
+    return replace(budget, checks=checks)
 
 
 def load_budget(path: Path) -> Budget:

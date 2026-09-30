@@ -393,3 +393,60 @@ def test_pending_check_is_pending_even_when_the_build_fails(tmp_path, monkeypatc
     assert cli.main([str(p)]) == 1
     out = capsys.readouterr().out
     assert "error: build failed" in out and "later  stage 2 check" in out and "0/1 checks passed, 1 FAILED, 1 pending" in out
+
+
+# -- min_cycles (lower bound) ------------------------------------------------
+
+
+def test_min_cycles_passes_at_the_bound_and_fails_below_it():
+    c = check(routine=["a", "b"], max_cycles=100, min_cycles=90)
+    assert eval_profile(c, [90, 95, 100]).passed
+    r = eval_profile(c, [89, 95, 100])
+    assert not r.passed
+    text = format_result("s", r, 1)
+    assert "min: got 89, required >= 90" in text
+
+
+def test_min_cycles_is_optional_and_validated():
+    assert eval_profile(check(routine=["a", "b"], max_cycles=100), [1, 100]).passed
+    with pytest.raises(BudgetError, match="'min_cycles' is above 'max_cycles'"):
+        check(routine=["a", "b"], max_cycles=100, min_cycles=101)
+    with pytest.raises(BudgetError, match="'min_cycles' must be"):
+        check(routine=["a", "b"], max_cycles=100, min_cycles=-1)
+    c = check(kind="profile_excl_irq", routine=["a", "b"], max_cycles=10, min_cycles=10)  # an exact figure
+    assert not eval_profile(c, [10, 9]).passed and eval_profile(c, [10, 10]).passed
+
+
+# -- long runs (--scale) -----------------------------------------------------
+
+
+def test_scaled_multiplies_counts_not_limits_or_warmup(tmp_path):
+    from budget_runner.spec import scaled
+
+    p = tmp_path / "budget.json"
+    p.write_text(json.dumps({"spike": "s", "src_dir": "d", "warmup_frames": 100, "checks": [
+        {"name": "p", "basis": "measured", "routine": ["a", "b"], "max_cycles": 10, "samples": 600},
+        {"name": "d", "basis": "measured", "routine": ["a", "b"], "max_cycles": 10},
+        {"name": "s", "kind": "start_cycle", "basis": "measured", "label": "x", "line": 5, "max_spread": 7,
+         "frames": 100},
+        {"name": "i", "kind": "irq_time_per_frame", "basis": "measured", "max_cycles": 9, "frames": 100},
+        {"name": "m", "kind": "memory", "basis": "requirement", "address": "x", "size": 1, "after_frames": 3000,
+         "max": 2, "scale": 16},
+    ]}))
+    b = load_budget(p)
+    big = scaled(b, 10)
+    assert [c.params.get("samples") for c in big.checks[:2]] == [6000, 500]
+    assert big.checks[2].params["frames"] == 1000 and big.checks[3].params["frames"] == 1000
+    m = big.checks[4].params
+    assert m["after_frames"] == 30000 and m["scale"] == 16 and m["max"] == 2  # memory's own 'scale' untouched
+    assert big.warmup_frames == 100 and big.checks[0].params["max_cycles"] == 10
+    assert b.checks[0].params["samples"] == 600  # the original is not modified
+    assert scaled(b, 1) is b
+
+
+def test_cli_rejects_a_scale_below_one(capsys):
+    from budget_runner import cli
+
+    with pytest.raises(SystemExit) as e:
+        cli.main(["--scale", "0"])
+    assert e.value.code == 2
