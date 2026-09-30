@@ -9,7 +9,7 @@ the code, not after.
 | Module | File | Status |
 |---|---|---|
 | IRQ framework | `engine/irq.asm` | **Implemented** (M3 stage 1). Costs measured in `tests/engine/irq_chain` |
-| Sprite multiplexer v1 | `engine/multiplexer.asm` (+ `engine/multiplexer_flicker.asm`, the slow path) | **Stage 3 implemented** (sort, fast-path select with the build merged in, fair flicker, zone IRQs, double buffer; no pinning yet). Measured in `tests/engine/multiplexer` |
+| Sprite multiplexer v1 | `engine/multiplexer.asm` (+ `engine/multiplexer_flicker.asm`, the slow path) | **Stage 3 implemented** (sort, fast-path select with the build merged in, fair flicker, zone IRQs, double buffer; no pinning yet), plus the stage 3.5 [wrap-ghost fix](#wrap-ghosts). Measured in `tests/engine/multiplexer` and `tests/engine/multiplexer_ghost` |
 
 **How to read the numbers.** Every figure is marked:
 
@@ -51,7 +51,7 @@ What a game must provide:
 | A chain: `IrqChainBegin()`, 1–16 entries, `IrqChainEnd()` | Game source | IRQ framework |
 | Handlers that end in `IrqDone()` | Game source | IRQ framework |
 | `MUX_SCREEN`: the screen whose last 8 bytes are the sprite pointers | `.const` before the import | Multiplexer |
-| `MUX_Y_MAX`: largest sprite Y the multiplexer shows (≤ `$F9`) | `.const` before the import | Multiplexer |
+| `MUX_Y_MAX`: largest sprite Y the multiplexer shows (`$50`–`$F9`, 80–249; the lower bound is for [`mux_irq_park`](#wrap-ghosts)) | `.const` before the import | Multiplexer |
 | Entry 0 of the chain is `mux_irq_top` at `MUX_TOP_LINE` | Chain | Multiplexer |
 
 Engine modules emit their code and tables where they're imported, so the game places them
@@ -345,7 +345,9 @@ when too many share a row. Decisions from the brief: 24 sprites, flicker rather 
 | `MUX_OFF` | `$FF` | Engine | Y value that hides a virtual sprite |
 | `MUX_TOP_LINE` | `$10` (16) | Engine | Line of `mux_irq_top` (chain entry 0) |
 | `MUX_Y_MIN` | `$1E` (30) | Engine | Smallest Y shown. Y=29 is displayed on lines 30–50, all border |
-| `MUX_Y_MAX` | ≤ `$F9` (249) | **Game** | Largest Y shown. Y=249 is the last with a visible line (250) |
+| `MUX_Y_MAX` | `$50`–`$F9` (80–249) | **Game** | Largest Y shown. Y=249 is the last with a visible line (250). At least 80 (assembly error otherwise), so no fixed chain entry can sit on lines 77–79, where `mux_irq_park` runs: see [Wrap ghosts](#wrap-ghosts) |
+| `MUX_WRAP_Y` | 55 | Engine | Largest Y the VIC-II matches a second time in a PAL frame (on line 256 + Y): 311 − 256. See [Wrap ghosts](#wrap-ghosts) |
+| `MUX_PARK_LINE` | 77 | Engine | `MUX_WRAP_Y` + 22: the first line on which every slot at Y ≤ 55 has finished displaying, so its hardware sprite can be disabled |
 | `MUX_SCREEN` | e.g. `$0400` | **Game** | Screen whose `+$3F8…$3FF` get the sprite pointers |
 | `MUX_FREE_AFTER` | 22 | Engine | A hardware sprite is free to rewrite on line `Y_old + 22`. *Estimate*: display on Y+1 to Y+21 is unmeasured (no glitches seen in the stage 2 screenshots) |
 | `MUX_IRQ_LINES` | 1 | Engine | Lines from a zone IRQ's trigger to its first write. **Measured** (stage 2, 2,000 zone IRQs): 0 or 1, and 2 once; the slack in `MUX_WRITE_LINES` absorbed it (`mux_late_count` 0) |
@@ -392,7 +394,10 @@ mux_init:
 //       tests/engine/multiplexer/budget.json
 mux_update:
 
-// Chain entry 0 (IrqNormal(MUX_TOP_LINE, mux_irq_top)). Internal: mux_irq_zone.
+// Chain entry 0 (IrqNormal(MUX_TOP_LINE, mux_irq_top)). Internal, re-armed from it:
+// mux_irq_zone (slots 8+) and mux_irq_park (wrap ghosts, line 77-79).
+// Cost: measured 378 (> 8 slots) / 381 (<= 8 slots, wrap ghosts to park) / 393 (<= 8 slots,
+//       none), constant paths, from mux_irq_top to irq_exit_rti; + 32 framework before it
 mux_irq_top:
 ```
 
@@ -417,7 +422,7 @@ sequenceDiagram
     Z->>Z: write slots 8+ as each hardware sprite frees
     M->>M: mux_update: sort, select, build back buffer
     M->>T: zp_mux_ready = 1
-    Z->>Z: last slot written: IrqDone()
+    Z->>Z: last slot written: IrqDone(), or park wrap ghosts first (see Wrap ghosts)
     Note over T,M: next frame
     T->>T: ready? front ^= 32, copy end index, ready = 0
 ```
@@ -532,7 +537,9 @@ Details the design left open, as implemented in `engine/multiplexer.asm`:
 - **The selection walk ends on a sentinel**: `mux_order[24]` = 24 with `mux_y[24]` = `$FF`, so the
   walk needs no counter; it stops at the first Y above `MUX_Y_MAX`.
 - `mux_irq_top` writes all 8 hardware sprites every frame and enables only the first min(n, 8) with
-  `$D015`, so a frame with fewer than 8 sprites needs no special path.
+  `$D015`, so a frame with fewer than 8 sprites needs no special path. (Stage 3.5: a hardware
+  sprite whose last slot is at Y ≤ 55 is also disabled after it has been displayed: see
+  [Wrap ghosts](#wrap-ghosts).)
 - **Stage 2 has no flicker and no pinning.** A sprite that doesn't fit is dropped for the frame
   (`mux_drop_count`, age +1), with no rotation; `mux_flags` bit 7 is ignored.
 
@@ -596,6 +603,113 @@ flowchart TD
   before w, so free lines don't move and only v needs checking. If v fits, the commit shifts
   `mux_kept`/`mux_s_y` down, puts v in slot k−1, re-simulates from max(w, base + 8), and counts
   w as dropped (age + 1).
+
+### Wrap ghosts
+
+Fixed in stage 3.5 (2026-09-30). Probe: `tests/engine/multiplexer_ghost`.
+
+**Cause.** The VIC-II compares each sprite's Y register with raster line bits 0–7 only
+([vic-ii-timing.md](../docs/reference/vic-ii-timing.md#sprite-y-and-the-frame-wrap)). A PAL frame
+has lines 0–311, so a sprite with Y ≤ 55 (`MUX_WRAP_Y` = 311 − 256) matches **twice**: on line
+Y, and again on line 256 + Y. Up to stage 3 the multiplexer left each hardware sprite enabled
+with the Y of its last slot, so every hardware sprite whose last slot of the frame was at
+Y ≤ 55 was displayed a second time from line 257 + Y, across the frame wrap, into the top border
+of the next frame (to line Y − 35: line 20 for Y = 55). With normal borders nothing shows, but
+the DMA does land:
+
+- **Inside `mux_irq_top`** on lines 16–20 whenever a ghost has Y ≥ 51. **Measured** (stage 3
+  long runs): the five outliers of 3,000 passes (398–421 instead of 378/387) were each a frame
+  with hardware sprites left at Y 53–55. In the probe before the fix it measured 419 (8 ghosts at
+  Y 48–55) and 421–422 (4 ghosts at Y 55), against 378/381 after.
+- In the lower border for Y 30–50, where it costs whichever code runs there.
+- With the top/bottom border opened (a game effect), the ghosts are **visible**:
+  [before](../screenshots/multiplexer-ghost-before-phase0.png) against
+  [after](../screenshots/multiplexer-ghost-after-phase0-final.png) (the probe opens the border).
+
+Which slots can ghost: slot k ≥ 8 is at least `MUX_GAP_MIN` (25) below slot k − 8, which is at
+Y ≥ 30, so zone slots are at Y ≥ 55. The ghosts are therefore slots 0–7 with no later slot on
+the same hardware sprite (frames with fewer than 16 slots), plus one edge case: slot 8 at exactly
+Y = 55 with slot 0 at 30 (the probe's phase 3).
+
+**Fix.** Disable those hardware sprites once their last slot has been displayed, before line
+256 + Y comes round:
+
+```mermaid
+flowchart TD
+    B["mux_build (main loop)<br/>last min(n, 8) slots at Y ≤ 55 → mux_b_park mask"] --> T["mux_irq_top, line 16<br/>writes $D015 = mux_b_d015 as before"]
+    T -->|"> 8 slots"| Z["mux_irq_zone ... last slot"]
+    T -->|"≤ 8 slots, mask = 0"| D1["IrqDone (393)"]
+    T -->|"≤ 8 slots, mask ≠ 0"| P["IrqRearm(mux_irq_park) at line 77 (381)"]
+    Z --> ZD{"mux_zone_done:<br/>mask?"}
+    ZD -->|"0"| D2["IrqDone (+10)"]
+    ZD -->|"≠ 0, raster ≥ 77"| NOW["mux_zone_park: clear now (94 in all)"]
+    ZD -->|"≠ 0, raster < 77"| RA["mux_zone_park: IrqRearm(mux_irq_park)<br/>at max(77, raster + 3) (89 in all)"]
+    RA --> P2["mux_irq_park, line 77-79 (80)<br/>$D015 = mux_b_d015 AND NOT mask"]
+    P --> P2
+```
+
+- **`mux_build`** (main loop): the last min(n, 8) slots are each one hardware sprite's last slot
+  of the frame, and they're in Y order, so the ones at Y ≤ 55 are a prefix of them. It ORs their
+  `$D015` bits into `mux_b_park` (a per-buffer value at `mux_s_xlo` + 24). 43 cycles counted with
+  no ghost, + 28 per ghost.
+- **`mux_irq_top`**, ≤ 8 slots: tests `mux_b_park`; if it's non-zero it re-arms `mux_irq_park`
+  at `MUX_PARK_LINE` (77) instead of ending the entry.
+- **`mux_zone_done`**, > 8 slots: tests `mux_b_park` (10 cycles more than `IrqDone` alone). If it's
+  non-zero, `mux_zone_park` clears the bits at once when the raster is already on line 77 or
+  later, else re-arms `mux_irq_park` at max(77, raster + 3) (3 lines of margin for `irq_rearm`'s
+  late check, as `mux_zone_rearm`).
+- **`mux_irq_park`** writes `$D015` = `mux_b_d015` AND NOT mask and ends the chain entry. The
+  zone IRQs never write `$D015`, so the base value is still the frame's. The next `mux_irq_top`
+  re-enables them from `mux_b_d015` as usual.
+- **Why line 77.** A slot at Y ≤ 55 is displayed on lines Y + 1 to Y + 21 (*estimate*, as
+  `MUX_FREE_AFTER`), so all of them are done by line 76. Disabling earlier, on a line where the
+  sprite is still being displayed, would cut it off.
+
+**Costs** (VICE 3.10 x64sc PAL, 2026-09-30, **measured**, all constant; DEBUG and release are
+the same: the park code has no DEBUG part):
+
+| Path | Raster cycles | Measured in |
+|---|---|---|
+| `mux_irq_top` → `irq_exit_rti`, > 8 slots | **378** (unchanged) | both spikes, every pass |
+| `mux_irq_top` → `irq_exit_rti`, ≤ 8 slots, ghosts to park (re-arms `mux_irq_park`) | **381** | `multiplexer_ghost`, 640 of 640 such passes; release the same |
+| `mux_irq_top` → `irq_exit_rti`, ≤ 8 slots, nothing to park (`IrqDone`) | **393** (was 387: + 6 for the test) | `multiplexer`, 54 of 3,001 passes |
+| `mux_irq_park` → `irq_exit_rti` | **80** (17 work + 3 `jmp` + `irq_exit` 60) | `multiplexer_ghost`, 1,921 of 1,921; starts on line 77, cycle 26–28 |
+| `mux_zone_done` → `irq_exit_rti`, parks at once (`mux_park_now`) | **94** | `multiplexer_ghost` phase 4 (chain ends on line 80), 40 passes |
+| `mux_zone_done` → `irq_exit_rti`, re-arms `mux_irq_park` | **89**, then 80 + 30 framework for `mux_irq_park` | `multiplexer_ghost` phase 1 (chain ends on line 62), 33 passes |
+| `mux_zone_done`, nothing to park | + 10 on `IrqDone` | `multiplexer`: zone IRQ min 154 → 164 |
+| `mux_build`, ghost scan | + 43 counted (+ 28 per ghost) | (in `mux_build`'s budget) |
+
+A frame with ghosts pays at most one extra IRQ (80 + 30 framework = 110) and saves the ghosts'
+DMA (up to 19 cycles a line for 21 lines, much of it inside `mux_irq_top`). `mux_irq_top`'s
+paths are now all DMA-free, so its budget is a lock again: 393.
+
+**Constraint: `MUX_Y_MAX` ≥ 80.** `mux_irq_park` is a re-armed IRQ on lines 77–79 of the
+multiplexer's region, and fixed chain entries must start at `MUX_Y_MAX` + 2 or later
+([Raster timeline](#raster-timeline)). `.errorif MUX_Y_MAX < MUX_PARK_LINE + 3` enforces it; a
+game with a bottom panel starting above line ~102 would need a different park scheme.
+
+### Zone code page alignment
+
+A taken branch that crosses a page costs 1 more cycle
+([6502-timing.md](../docs/reference/6502-timing.md)), which would make the zone blocks'
+per-slot cost depend on where the linker happened to put them. Since stage 3.5:
+
+- `mux_irq_zone`, `mux_zone_done`, `mux_zone_rearm` and the 16 `MuxZoneBlock`s start on a fresh
+  page (`.align $100`). The blocks start at a fixed page offset, `MUX_ZONE_OFFSET` (64 DEBUG /
+  90 release), chosen so that every page boundary inside the 16 blocks falls on straight-line
+  code: DEBUG blocks are 81/87 bytes and fit at offsets 57–72, release ones 66/72 at 88–92.
+  The dispatch code fills the gap before them; an `.errorif` stops the build if it grows past
+  the offset.
+- Every branch in a `MuxZoneBlock` is checked at assembly time with
+  `mux_crosses(next, target)` (the high bytes of the address after the branch and of its target
+  differ): the DEBUG late check's three and the next-slot test's five. A layout change that puts
+  one across a page is an assembly error, not a silent cycle.
+- `mux_zone_park` and `mux_irq_park` follow the blocks; they aren't per-slot code and have no
+  such check (their costs above were measured in this layout).
+- The `multiplexer` spike's zone and per-frame figures in this layout are in
+  [Multiplexer costs](#multiplexer-costs), stage 3.5: the zone IRQ's minimum and maximum both
+  moved +10 (the `mux_zone_done` test), and the per-frame IRQ total didn't grow (3,631 → 3,613).
+  The per-slot fast-path cost wasn't re-profiled on its own.
 
 ### Overflow: fair flicker
 
@@ -761,6 +875,32 @@ raster cycles, the dry run and re-simulation included (derived, not profiled one
 measured 4,269 avg (4,264 before flicker; +7 is the fast-frame exit test), and 4,300 in the
 overloaded spike's fast frames, whose motion and DMA differ.
 
+(The table's `mux_irq_top` "proposed 387" was superseded: the Technical Director set an interim
+482 for the wrap-ghost outliers, and stage 3.5 re-locked it at 393, below.)
+
+*Stage 3.5, the wrap-ghost fix* (2026-09-30, raster-engineer): the `multiplexer` spike (overloaded,
+as phase B) in one trace per run, with the budget runner's own `Vice.trace` / `profile_costs` /
+`irq_time_by_frame` and a warm-up of 1,000 frames: the stage 3 long-run method. min / avg / max,
+raster cycles, DEBUG:
+
+| Routine | Stage 3, 20,000 passes | Stage 3.5, 3,000 | Stage 3.5, 20,000 | Budget now |
+|---|---|---|---|---|
+| `mux_sort` | 455 / 700 / 3,336 | 474 / 701 / 3,269 | 455 / 700 / 3,335 | 3,550 (as is) |
+| `mux_select` | 2,335 / 3,804 / 8,149 | 2,336 / 3,844 / 8,089 | 2,294 / 3,807 / 8,146 | 8,600 (as is) |
+| `mux_build` | 142 / 641 / 2,246 | 185 / 707 / 2,227 | 185 / 694 / 2,342 | **2,500** (was 2,400): + 43 ghost scan |
+| `mux_update`, all frames | 3,522 / 5,175 / 10,783 | 3,565 / 5,284 / 10,823 | 3,565 / 5,233 / 10,830 | **11,400** (was 11,350) |
+| `mux_update`, fast frames | 3,520 / **4,204** / 6,990 | 3,563 / 4,278 / 7,022 | 3,563 / **4,264** / 7,033 | **7,400** max (was 7,350); avg ≤ 5,000 |
+| `mux_irq_top` → `irq_exit_rti` | 378 / 387 + five outliers 398–421 | 378 ×2,947, 393 ×54 | 378 ×19,695, 393 ×306 | **393**, a lock (was 482, interim) |
+| `mux_irq_zone` → `irq_exit_rti` | 154 / 804 / 2,693 | 164 / 809 / 2,701 | 164 / 812 / 2,703 | 2,850 (as is) |
+| All IRQ time per frame | 516 / 2,084 / 3,631 | 522 / 2,086 / 3,595 | 522 / 2,097 / 3,613 | 3,850 (as is) |
+| `mux_max_age`, late counters, overruns | 2, 0, 0, 0 | 2, 0, 0, 0 | 2, 0, 0, 0 | (as is) |
+| Free per frame (`spike_idle_min` × 16) | 5,808 | 5,776 | **5,760** | ≥ 5,300 |
+
+Budgets moved only where the new 20,000-pass max + ~5% was over the old limit, which the added
+code explains (`mux_build` +43 counted per frame). The `multiplexer_ghost` probe's figures are in
+[Wrap ghosts](#wrap-ghosts). `make test` on the final build: 28/28 checks pass (2 stage 4 checks
+pending).
+
 ### Budget units
 
 Decided after stage 2 (Technical Director): **every multiplexer budget is raster time in the
@@ -781,8 +921,9 @@ The cost of this choice is noise. A main-loop routine's DMA share depends on whe
 its code: `mux_select` spans 2,364–3,295 raster cycles for a CPU cost that is flat to 1%.
 So:
 
-- **Where a path is constant and DMA-free, the budget is a lock** (`mux_irq_top` 378, and the
-  whole `irq_chain` file).
+- **Where a path is constant and DMA-free, the budget is a lock** (`mux_irq_top` 393, its
+  worst of three constant paths since the [wrap-ghost fix](#wrap-ghosts); `mux_irq_park` 80; and
+  the whole `irq_chain` file).
 - **Everywhere else the budget is the max over a full motion cycle (≥ 600 passes) + ~5%**, rounded up
   to 50. The 5% covers phase differences between runs, not code growth: a code change re-baselines.
 - **The common case is checked by its average** (`max_avg_cycles` on `mux_update`, 600 passes),
@@ -890,7 +1031,7 @@ A game using the multiplexer, PAL, default YSCROLL=3 (badlines on 51 + 8n up to 
 ```mermaid
 flowchart TB
     A["Line $10 (16), top border<br/>Entry 0: mux_irq_top<br/>frame tick, buffer swap, slots 0-7,<br/>$D015 / $D010 / $D01C"]
-    B["Lines ≈ $34-$F9 (52-249), display<br/>mux_irq_zone, re-armed as hardware sprites free<br/>up to 16 IRQs, slots 8-23"]
+    B["Lines ≈ $34-$F9 (52-249), display<br/>mux_irq_zone, re-armed as hardware sprites free<br/>up to 16 IRQs, slots 8-23<br/>+ mux_irq_park on line 77-79 in frames with wrap ghosts"]
     C["Line $FB (251), lower border<br/>Entry 1: game handler (optional)<br/>no badlines; music goes here later"]
     D["Lines 252-311 and 0-15<br/>no IRQs"]
     M["Main loop, whenever no IRQ runs<br/>irq_wait_frame, game logic, mux_update"]
@@ -901,14 +1042,16 @@ flowchart TB
 
 | Line | Handler | Job | Budget (cycles) |
 |---|---|---|---|
-| `$10` (16) | `mux_irq_top` (entry 0) | Frame tick, swap, slots 0–7 | 378 (**measured**, a lock) + 32 framework before the handler (**measured**: 7 + 17 + 8) + 6 `rti` |
-| ≈ 52–249, dynamic | `mux_irq_zone` | Slots 8–23 as hardware sprites free | 1,600 per IRQ (**measured** max 1,500 with 8 slots, waits and DMA) + 30 framework (7 + 17 + 6); ≤ 16 IRQs. All IRQs together ≤ 3,750 a frame |
+| `$10` (16) | `mux_irq_top` (entry 0) | Frame tick, swap, slots 0–7 | 393, a lock: paths 378 / 381 / 393 (**measured**, stage 3.5, [Wrap ghosts](#wrap-ghosts)) + 32 framework before the handler (**measured**: 7 + 17 + 8) + 6 `rti` |
+| ≈ 52–249, dynamic | `mux_irq_zone` | Slots 8–23 as hardware sprites free | 2,850 per IRQ (**measured** max 2,703 over 37,763 IRQs, stage 3.5: up to 14 slots with waits and DMA) + 30 framework (7 + 17 + 6); ≤ 16 IRQs. All IRQs together ≤ 3,850 a frame |
+| 77–79, only in frames with [wrap ghosts](#wrap-ghosts) | `mux_irq_park` (re-armed by `mux_irq_top` or the last zone IRQ) | Disable the hardware sprites whose last slot is at Y ≤ 55 | 80 (**measured**, a lock) + 30 framework |
 | `$FB` (251) | Game entry 1 (optional) | Anything that must run at a fixed time: music (later), colour splits in the border | Its own; lines 251–311 are free of other IRQs |
 
 Rules for other chain entries in a multiplexer game:
 
 - None between `MUX_TOP_LINE` and `MUX_Y_MAX + 2`. The zone IRQs' lines are dynamic and must
-  not interleave with fixed entries.
+  not interleave with fixed entries. `mux_irq_park` (lines 77–79) is in the same region, which is
+  why `MUX_Y_MAX` must be ≥ 80.
 - Entries at `MUX_Y_MAX + 2` or later, up to 255. The last zone IRQ writes its slots before
   the slot's Y (≤ `MUX_Y_MAX`) by construction, so it's done by then.
 - **With DMA, + 2 isn't always enough.** After the last write, the last zone IRQ reaches
@@ -951,7 +1094,7 @@ happen to land. The old table counted them twice.
 | Item | Raster cycles per frame | Basis |
 |---|---|---|
 | Whole frame | 19,656 | **Measured** ([vic-ii-timing.md](../docs/reference/vic-ii-timing.md#frame-geometry)) |
-| All IRQs: framework, `mux_irq_top`, zone IRQs, one fixed game entry | ≤ 3,750 | **Measured** 2,067–3,562 over 600 frames (stage 2 spike) + ~5% |
+| All IRQs: framework, `mux_irq_top`, zone IRQs, `mux_irq_park`, one fixed game entry | ≤ 3,850 | **Measured** 516–3,631 over 20,000 frames (stage 3) + ~5%; 522–3,613 after the stage 3.5 wrap-ghost fix. Stage 2 was 3,750 from 2,067–3,562 |
 | `mux_update`, common case (no overflow) | **4,264** avg (stage 3 fast path; target ≤ 5,000; stage 2 was 6,240) | **Measured**, 600 passes |
 | `mux_update`, worst frame in the spike | 10,774 (a crowded flicker frame; over the stage 2 budget of 9,050, re-baseline proposed to the Technical Director). The sort stress is 6,950 | **Measured**, 1,500 passes (stage 3). Pinned evictions (stage 4) are measured when built |
 | **Left for game logic, music and everything else** | **≥ 7,200 promised** | Checked in every frame by `spike_idle_min` × 16 ≥ 5,300 (see below). Stage 2 measured ≥ 7,795 in the worst frame |
@@ -1088,7 +1231,7 @@ How the runner reads the schema, where the text above left room:
 
 ## Spikes
 
-Both live in `tests/engine/<spike>/main.asm`, built with
+All live in `tests/engine/<spike>/main.asm`, built with
 `make GAME=<spike> SRC_DIR=tests/engine/<spike>`. Labels named here are what `budget.json` uses.
 
 ### `irq_chain`
@@ -1193,6 +1336,34 @@ The design for stages 3–4:
 - Excess pins are handled: set bit 7 of `mux_flags+4` with `vice_write_memory`, run 100 frames,
   and check `mux_pin_excess_count` > 0, sprites 0–3 still never dropped, sprite 4 flickers but
   its missing runs stay within the unpinned target, and nothing crashes. Then clear the bit.
+
+### `multiplexer_ghost`
+
+Regression probe for the [wrap ghosts](#wrap-ghosts) (stage 3.5). Five static layouts, 32 frames
+each, cycling (write `probe_lock` = 0–4 to hold one, `$FF` to cycle):
+
+| Phase | Layout | Path it exercises |
+|---|---|---|
+| 0 | 8 sprites at Y 48–55 | ≤ 8 slots, 8 ghosts: `mux_irq_top` re-arms `mux_irq_park` |
+| 1 | 8 at Y 30–51 + 4 at Y 120 | 12 slots, hardware sprites 4–7 ghost; the zone chain ends on line ~62, so `mux_zone_park` re-arms `mux_irq_park` |
+| 2 | 8 at Y 48–55 + 8 at Y 120 | 16 slots, no ghost (control) |
+| 3 | 8 at Y 30–37 + 1 at Y 55 | Slot 8 itself at Y = 55 (the zone-slot edge case) |
+| 4 | 8 at Y 52–55 + 4 at Y 100 | Ghosts on 4–7, the zone chain ends on line 80: `mux_zone_park` clears at once |
+
+- Chain: entry 0 `mux_irq_top`, entry 1 `probe_open` at `$F9` (RSEL = 0, opening the top and
+  bottom border so ghosts are visible in `area="full"` screenshots), entry 2 `probe_close` at
+  `$FC`. `MUX_Y_MAX` = `$C0`.
+- `probe_open` (DEBUG) counts in `probe_ghost_frames` every frame in which, on line 249, an enabled
+  hardware sprite has Y ≤ 55 (each such frame would display a ghost). `budget.json` requires 0 after
+  800 frames, locks `mux_irq_top` at 381 and `mux_irq_park` at 80, and requires both late counters 0.
+- Results (2026-09-30): before the fix, `probe_ghost_frames` counted every frame of phases 0, 1, 3
+  and 4 and `mux_irq_top` measured 419–422; after it, 0 over 3,200 frames, and on line 249 in
+  phase 4 `$D015` = `$0F` with sprites 4–7 still at Y 55. Screenshots (`area="full"`):
+  [before, phase 0](../screenshots/multiplexer-ghost-before-phase0.png),
+  [before, phase 4](../screenshots/multiplexer-ghost-before-phase4.png),
+  [after, phase 0](../screenshots/multiplexer-ghost-after-phase0-final.png),
+  [after, phase 4](../screenshots/multiplexer-ghost-after-phase4-final.png),
+  [after, phase 0, release build](../screenshots/multiplexer-ghost-after-phase0-release.png).
 
 ---
 

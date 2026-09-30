@@ -127,6 +127,24 @@ passes, in the border so no badline is involved):
   are *unmeasured*). A 32-sprite multiplexer (4 bands) costs about 1,600 cycles in DMA alone,
   before any multiplexer code runs.
 
+### Sprite Y and the frame wrap
+
+The VIC-II compares a sprite's Y register with **raster bits 0–7 only**. On PAL (lines 0–311) an
+enabled sprite with Y ≤ 55 (311 − 256) therefore starts its display **twice** a frame: on line Y
+and again on line 256 + Y, from where it runs 21 lines across the frame wrap into the top of the
+next frame (to line Y − 35 when Y ≥ 35: line 20 for Y = 55). Its DMA lands there too, even with
+the border closed.
+
+**Measured** (tests/engine/multiplexer_ghost, 2026-09-30): with the top/bottom border opened,
+sprites left enabled at Y 48–55 show their tails at the top of the next frame
+(`screenshots/multiplexer-ghost-before-phase0.png`), and an IRQ on line 16 measured 419–422
+raster cycles instead of 378/381, the ghosts' DMA on lines 16–20. Disabling the sprites after
+their first display removes both (engine/README.md#wrap-ghosts).
+
+Consequence: anything that leaves sprites enabled with a small Y at the end of a frame (a
+multiplexer's top row, a title screen) must disable them, or move them to Y ≥ 56, once they've
+been displayed. Y-expanded sprites (42 lines) are not covered by this measurement.
+
 ## Badline and sprites on the same line
 
 The steals add up exactly, with no overlap. The badline has **no free cycles at all** when

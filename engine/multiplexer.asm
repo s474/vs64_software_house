@@ -15,7 +15,7 @@
 //   mux_ptr, mux_col, mux_flags (bit 0 multicolour; bit 7 pinned: stage 4).
 //
 // The game defines before the import: MUX_SCREEN (screen whose +$3F8 are the sprite pointers) and
-// MUX_Y_MAX (largest Y shown, <= $F9).
+// MUX_Y_MAX (largest Y shown, $50-$F9: >= 80 so mux_irq_park on lines 77-79 is in the zone region).
 //
 // Registers owned: $D000-$D010, $D015, $D01C, $D027-$D02E, MUX_SCREEN+$3F8..$3FF.
 // $D017 and $D01D must be 0 (21-line sprites only).
@@ -27,6 +27,9 @@
 // it in, writes slots 0-7 and re-arms at slot 8's free line. mux_irq_zone writes slot k (on
 // hardware sprite k & 7), carries on with k+1 if its sprite is free (waiting up to 2 lines),
 // re-arms if it's further away, and ends the chain entry (IrqDone) after the last slot.
+// Wrap ghosts (stage 3.5, engine/README.md#wrap-ghosts): hardware sprites whose last slot is at
+// Y <= 55 are disabled on line 77 or later (mux_irq_park, or mux_zone_park at the end of the zone
+// chain), so they don't match again on line 256 + Y. MUX_Y_MAX must be >= 80 for that.
 //
 // Fast path (engine/README.md#fast-path): while every sprite fits, the selection writes each
 // kept sprite's slot (Y, X, pointer, colour, cumulative $D010, free line, done line) as it goes,
@@ -41,9 +44,13 @@
 //   mux_select             2,364 / 2,832 / 3,295    2,771 / 3,455 / 3,933   (now includes the build)
 //   mux_build              2,349 / 2,767 / 3,272    142 / 186 / 283         (now the per-buffer tail)
 //   mux_update             5,263 / 6,240 / 8,595    3,526 / 4,264 / 6,896   (target avg <= 5,000)
-//   mux_irq_top -> rti     378                      378 (387 when <= 8 slots: IrqDone, not IrqRearm)
+//   mux_irq_top -> rti     378                      378 (stage 3.5: see below)
 //   mux_irq_zone -> rti    744 / 968 / 1,482        631 / 897 / 1,484 (1,000 IRQs)
 //   zone slot, back to back 78 (DEBUG)              62 (DEBUG, uniform multicolour; 53 release, counted)
+// Stage 3.5 (wrap-ghost fix, 2026-09-30; tests/engine/multiplexer and multiplexer_ghost, constant
+// paths, DEBUG and release alike): mux_irq_top -> rti 378 (> 8 slots) / 381 (<= 8, ghosts to park)
+// / 393 (<= 8, none); mux_irq_park -> rti 80; mux_zone_done -> rti 94 (parks at once) / 89
+// (re-arms mux_irq_park); mux_build + 43 counted for the ghost scan.
 // Overflow frames (fair flicker) and the overloaded spike: engine/README.md#multiplexer-costs.
 //
 // Constraints:
@@ -73,6 +80,13 @@
                                         // >= 7 lines of margin on full rows (README #9)
 .const MUX_GAP_MIN     = MUX_FREE_AFTER + MUX_IRQ_LINES + MUX_WRITE_LINES   // 25: y[k] - y[k-8] at least
 .const MUX_BUF         = 32             // buffer 1's base index in the slot arrays
+// Wrap ghosts (engine/README.md#wrap-ghosts): the VIC compares sprite Y with raster bits 0-7, so on
+// PAL a sprite left enabled at Y <= MUX_WRAP_Y matches again on line 256 + Y and is displayed a
+// second time across the frame wrap. A hardware sprite whose last slot of the frame has such a Y
+// is disabled once that slot has been displayed, on or after MUX_PARK_LINE (Y + 21 <= 76 done).
+.const MUX_WRAP_Y      = 311 - 256      // 55: largest Y with a second matching line (PAL, 312 lines)
+.const MUX_PARK_LINE   = MUX_WRAP_Y + 22   // 77: every slot at Y <= 55 has finished displaying
+.errorif MUX_Y_MAX < MUX_PARK_LINE + 3, "MUX_Y_MAX must be >= 80: mux_irq_park runs on lines 77-79, before any fixed entry"
 
 // Spare indices 24-31 of each buffer hold per-buffer values (written by mux_update, read by mux_irq_top).
 .const MUX_SPARE       = 24
@@ -109,6 +123,7 @@ mux_s_done:     .fill 64, 0             // simulated line on which the zone IRQ 
 .label mux_b_d015 = mux_s_ptr  + MUX_SPARE   // $D015 for the frame
 .label mux_b_d010 = mux_s_d010 + MUX_SPARE   // $D010 after slots 0-7
 .label mux_b_d01c = mux_s_d01c + MUX_SPARE   // $D01C after slots 0-7
+.label mux_b_park = mux_s_xlo  + MUX_SPARE   // $D015 bits to clear after the frame's slots (wrap ghosts)
 
 .function mux_zone_blk(j, mixed) {
         .if (mixed) {
@@ -204,6 +219,7 @@ mux_init:
         sta mux_b_d015
         sta mux_b_d010
         sta mux_b_d01c
+        sta mux_b_park
         sta mux_dirty
         sta MUX_VIC_ENABLE
 #if DEBUG
@@ -434,6 +450,30 @@ mux_build:
 !:      tay                             // min(count, 8)
         lda mux_t_d015,y
         sta mux_b_d015,x
+// Wrap ghosts: the last min(count, 8) slots are each one hardware sprite's last slot of the frame.
+// They're in Y order, so those at Y <= MUX_WRAP_Y are a prefix of them: collect their $D015 bits
+// in mux_b_park (mux_irq_park / mux_zone_done clear them after line MUX_PARK_LINE).
+// Cost (counted): 43 when the first of them is below MUX_WRAP_Y (the usual case); + 28 per ghost
+        sty zp_tmp1                     // 3  min(count, 8)
+        lda zp_tmp2                     // 3
+        sec                             // 2
+        sbc zp_tmp1                     // 3
+        tay                             // 2  first of the last min(count, 8) slots
+        lda #0                          // 2
+        sta zp_tmp0                     // 3  mask
+!gh:    cpy zp_tmp2                     // 3
+        bcs !gd+                        // 2
+        lda mux_s_y,y                   // 4
+        cmp #MUX_WRAP_Y + 1             // 2
+        bcs !gd+                        // 3
+        lda zp_tmp0                     //    ghost: add hardware sprite (slot & 7)
+        ora mux_t_bit,y
+        sta zp_tmp0
+        iny
+        bne !gh-                        //    always
+!gd:    lda zp_tmp0                     // 3
+        sta mux_b_park,x                // 5
+        ldy zp_tmp1                     // 3  = 43 with no ghost
         lda mux_mc_mode                 // uniform: $D01C is 0 or $FF for the whole frame
         beq !+
         lda #$ff
@@ -487,8 +527,10 @@ mux_update_end:
 // ------------------------------------------------------------------------------------------
 // TIMING: chain entry 0, line MUX_TOP_LINE (16, top border: no badlines, no sprites yet).
 // Swap in the back buffer if one is ready, write $D015/$D010/$D01C and slots 0-7, re-arm at
-// slot 8's free line (or end the entry if there are <= 8 slots). Budget 378 (a lock, measured).
-// Cost: measured 378 from mux_irq_top to irq_exit_rti, every pass (constant path; + 32 framework before it)
+// slot 8's free line; with <= 8 slots, re-arm mux_irq_park at line 77 if there are wrap ghosts,
+// else end the entry. Budget 393 (a lock, measured: the worst of the three paths).
+// Cost: measured from mux_irq_top to irq_exit_rti, every pass (constant paths, top border, no DMA;
+// + 32 framework before it): 378 (> 8 slots), 381 (<= 8, ghosts to park), 393 (<= 8, none)
 mux_irq_top:
         lda zp_mux_ready                // 3
         beq !keep+                      // 2
@@ -527,9 +569,14 @@ mux_irq_top:
         stx zp_mux_slot                 // 3
         lda mux_s_free,x                // 4  >= 52, far below line 16: no race with the late check
         IrqRearm(mux_irq_zone)
-!done:  IrqDone()
+!done:  lda mux_b_park - 8,x            // 4  <= 8 slots (X = base + 8): any wrap ghosts to park?
+        bne !park+                      // 2
+        IrqDone()
+!park:  lda #MUX_PARK_LINE              // 2  far below line 16: no race with the late check
+        IrqRearm(mux_irq_park)
 
 // ------------------------------------------------------------------------------------------
+.align $100                             // the zone code's page: see MUX_ZONE_OFFSET
 // TIMING: zone IRQ, re-armed at slot zp_mux_slot's free line. Budget: see budget.json (raster
 // span, DMA included). Dispatches to the block for hardware sprite (slot & 7): 22 cycles.
 mux_irq_zone:
@@ -541,9 +588,16 @@ mux_irq_zone:
 mux_zone_jmp:
         jmp mux_zone_jmp                // 3  = 22 (operand written above)
 
-// End of the frame's slots: advance the chain.
+// End of the frame's slots: advance the chain, parking the wrap ghosts first if there are any
+// (mux_zone_park, after the blocks). Cost: 10 more than IrqDone alone with nothing to park (counted;
+// the zone IRQ minimum measured 154 -> 164). With ghosts, measured to irq_exit_rti: 94 parking at
+// once, 89 re-arming mux_irq_park (tests/engine/multiplexer_ghost phases 4 and 1)
 mux_zone_done:
-        IrqDone()
+        ldx zp_mux_front                // 3
+        lda mux_b_park,x                // 4
+        beq !+                          // 3
+        jmp mux_zone_park
+!:      IrqDone()
 
 // The next slot's sprite frees 3 or more lines from now: re-arm at its free line.
 // (3 lines of margin, so irq_rearm's own late check can't see the line even if a badline
@@ -559,17 +613,22 @@ mux_zone_rearm:
 // and the end test runs only off the fast path. In: X = slot index (base included).
 // Cost per slot, block to block, next slot free already (counted): uniform 53 (release) /
 // 62 (DEBUG: + 9 late check); mixed + 8 for $D01C. Stage 2 was 67 / 78.
+// A taken branch that crosses a page costs 1 more cycle (6502-timing.md), so every branch in a
+// block is checked at assembly time: 'next' is the address after the branch, 'target' its target.
+.function mux_crosses(next, target) { .return (>next) != (>target) }
+
 .macro MuxZoneBlock(j, mixed) {
         lda mux_s_y,x                   // 4
         sta MUX_VIC_SPR + 1 + j * 2     // 4
 #if DEBUG
         cmp MUX_VIC_RASTER              // 4  Y - raster: late if the raster is already on or past Y
-        beq !late+                      // 2
-        bcs !ok+                        // 3
-!late:  inc mux_late_count
-        bne !ok+
-        dec mux_late_count
-!ok:
+        beq late                        // 2
+n1:     bcs ok                          // 3
+late:   inc mux_late_count
+        bne ok
+n3:     dec mux_late_count
+ok:
+        .errorif mux_crosses(n1, late) || mux_crosses(late, ok) || mux_crosses(n3, ok), "mux zone block: a late-check branch crosses a page"
 #endif
         lda mux_s_xlo,x                 // 4
         sta MUX_VIC_SPR + j * 2         // 4
@@ -586,21 +645,33 @@ mux_zone_rearm:
         inx                             // 2
         lda mux_s_free,x                // 4  next slot's free line ($FF after the last slot)
         cmp MUX_VIC_RASTER              // 4
-        bcc !next+                      // 3  free < raster: go   (= 13 from inx)
-        cpx zp_mux_end                  // 3
-        bne !+                          // 3
-        jmp mux_zone_done
-!:      sbc #2                          // 2  C = 0 (X < end): A = free - 3
+        bcc next                        // 3  free < raster: go   (= 13 from inx)
+n4:     cpx zp_mux_end                  // 3
+        bne more                        // 3
+n5:     jmp mux_zone_done
+more:   sbc #2                          // 2  C = 0 (X < end): A = free - 3
         cmp MUX_VIC_RASTER              // 4
-        bcc !wait+                      // 2  free - 3 < raster: frees within 2 lines
-        jmp mux_zone_rearm
-!wait:  lda mux_s_free,x                // 4
-!w:     cmp MUX_VIC_RASTER              // 4
-        beq !next+                      // 2
-        bcs !w-                         // 3  free > raster: wait
-!next:
+        bcc wait                        // 2  free - 3 < raster: frees within 2 lines
+n6:     jmp mux_zone_rearm
+wait:   lda mux_s_free,x                // 4
+w:      cmp MUX_VIC_RASTER              // 4
+        beq next                        // 2
+n7:     bcs w                           // 3  free > raster: wait
+next:
+        .errorif mux_crosses(n4, next) || mux_crosses(n5, more) || mux_crosses(n6, wait) || mux_crosses(n7, next) || mux_crosses(next, w), "mux zone block: a branch crosses a page"
 }
 
+// The blocks start at a fixed page offset, chosen (by counting the block layout, and enforced by
+// the .errorif in the macro) so that every page boundary inside them falls on straight-line code,
+// never inside a branch's span: DEBUG blocks are 81 / 87 bytes and fit at offsets 57-72, release
+// ones 66 / 72 at 88-92. mux_irq_zone, mux_zone_done and mux_zone_rearm fill the gap before them.
+#if DEBUG
+.const MUX_ZONE_OFFSET = 64
+#else
+.const MUX_ZONE_OFFSET = 90
+#endif
+        .errorif (* & $ff) > MUX_ZONE_OFFSET, "zone dispatch code runs past MUX_ZONE_OFFSET"
+        .fill MUX_ZONE_OFFSET - (* & $ff), 0    // never executed
 mux_zone_blocks:                        // uniform multicolour: $D01C is written once, by mux_irq_top
 mux_zone_0:     MuxZoneBlock(0, false)
 mux_zone_1:     MuxZoneBlock(1, false)
@@ -621,3 +692,32 @@ mux_zone_m6:    MuxZoneBlock(6, true)
 mux_zone_m7:    MuxZoneBlock(7, true)
         jmp mux_zone_m0
 mux_zone_blocks_end:
+
+// ------------------------------------------------------------------------------------------
+// Wrap ghosts, from mux_zone_done: park now if every ghost slot has finished displaying, else
+// re-arm mux_irq_park.
+mux_zone_park:                          // A = mask, X = front base
+        ldy MUX_VIC_RASTER              // 4  (the last slot is at Y <= MUX_Y_MAX: raster bit 8 is 0)
+        cpy #MUX_PARK_LINE              // 2
+        bcs mux_park_now                // 3  every ghost slot has finished displaying: clear now
+        tya                             //    else re-arm at max(MUX_PARK_LINE, raster + 3): 3 lines
+        adc #3                          //    of margin for irq_rearm's late check (C = 0)
+        cmp #MUX_PARK_LINE
+        bcs !+
+        lda #MUX_PARK_LINE
+!:      IrqRearm(mux_irq_park)
+
+// TIMING: re-armed IRQ on line MUX_PARK_LINE (77) to 79, only in frames with wrap ghosts: clear
+// the $D015 bits of the hardware sprites whose last slot is at Y <= MUX_WRAP_Y, so they don't
+// match again on line 256 + Y. Their slots finished displaying by line Y + 21 <= 76. No budget of
+// its own: counted in all IRQ time per frame. Cost: measured 80 to irq_exit_rti, every pass (1,921
+// of 1,921, starts on line 77 cycle 26-28; tests/engine/multiplexer_ghost budget.json locks it)
+mux_irq_park:
+        ldx zp_mux_front                // 3
+        lda mux_b_park,x                // 4
+mux_park_now:                           // A = mask, X = front base
+        eor #$ff                        // 2
+        and mux_b_d015,x                // 4  $D015 as mux_irq_top wrote it (zone IRQs don't write it)
+        sta MUX_VIC_ENABLE              // 4
+        IrqDone()                       // 3  = 20 to irq_exit
+

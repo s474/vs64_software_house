@@ -1,0 +1,63 @@
+{
+  "spike": "multiplexer_ghost",
+  "src_dir": "tests/engine/multiplexer_ghost",
+  "warmup_frames": 100,
+  "stage": 3,
+  "notes": "Regression probe for the wrap ghosts (engine/README.md#wrap-ghosts), added by the raster-engineer in M3 stage 3.5; the two profile locks are for the Technical Director to confirm. Five static layouts, 32 frames each, cycling (160 frames a cycle), all with sprites at Y 30-55 whose hardware sprites end the frame there. The top border is DMA-free once the ghosts are parked, so mux_irq_top is exact.",
+  "checks": [
+    {
+      "name": "mux_irq_top, sprites at Y <= 55 (no ghost DMA in it)",
+      "kind": "profile",
+      "routine": [
+        "mux_irq_top",
+        "irq_exit_rti"
+      ],
+      "max_cycles": 381,
+      "samples": 200,
+      "basis": "measured",
+      "source": "Measured 2026-09-30 with vice_profile in this probe: 378 every pass with > 8 slots (re-arms the zone IRQ), 381 every pass with <= 8 slots and ghosts to park (re-arms mux_irq_park). Before the fix: 419 (phase 0, 8 ghosts at Y 48-55) and 421-422 (phase 4, 4 ghosts at Y 55), the ghosts' DMA on lines 16-20. Long run on the final layout (3,200 frames = 20 phase cycles, one trace, 2026-09-30): 378 x2,561 and 381 x640, nothing else; release build 381 every pass in phase 0"
+    },
+    {
+      "name": "mux_irq_park",
+      "kind": "profile",
+      "routine": [
+        "mux_irq_park",
+        "irq_exit_rti"
+      ],
+      "max_cycles": 80,
+      "samples": 50,
+      "basis": "measured",
+      "source": "Measured 2026-09-30 with vice_profile in this probe: 80 every pass on line 77 (17 work + 3 jmp + irq_exit 60). Long run on the final layout (3,200 frames, 2026-09-30): 80 in 1,921 of 1,921 passes, starting on line 77 cycle 26-28; release build 80 every pass. Phase 4 parks from mux_zone_done instead (mux_zone_done -> irq_exit_rti 94; the re-arm path 89)"
+    },
+    {
+      "name": "no wrap ghosts",
+      "kind": "memory",
+      "address": "probe_ghost_frames",
+      "size": 1,
+      "after_frames": 800,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/README.md#wrap-ghosts: no hardware sprite is enabled at Y <= 55 on line 249. Before the fix: every frame of phases 0, 1, 3 and 4. After the fix: 0 over 3,200 frames of all five phases (DEBUG)"
+    },
+    {
+      "name": "no late chain entries",
+      "kind": "memory",
+      "address": "irq_late_count",
+      "size": 1,
+      "after_frames": 0,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/README.md#handler-conventions"
+    },
+    {
+      "name": "no late sprite writes",
+      "kind": "memory",
+      "address": "mux_late_count",
+      "size": 1,
+      "after_frames": 0,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/README.md#scheduling-and-the-minimum-vertical-separation"
+    }
+  ]
+}
