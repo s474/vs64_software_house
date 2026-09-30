@@ -4,7 +4,7 @@ import pytest
 
 from budget_runner.evaluate import (
     FRAME, Event, Result, eval_irq_time, eval_memory, eval_profile, eval_start_cycle,
-    format_result, irq_time_by_frame, irq_spans, profile_costs, union_length,
+    SampleCounter, format_result, irq_time_by_frame, irq_spans, profile_costs, union_length,
 )
 from budget_runner.spec import BudgetError, find_budgets, load_budget, parse_check
 from pathlib import Path
@@ -99,6 +99,101 @@ def test_profile_excl_irq_subtracts_nested_irq_only():
     # the routine running inside an IRQ that began before it is not subtracted
     inside = [ev(D, 50), ev(A, 100), ev(B, 300), ev(R, 320)]
     assert profile_costs(inside, A, B, D, R) == [200]
+
+
+def _reference_costs(events, a, b, d, r):
+    """The original O(spans) per sample implementation, as the oracle for the bisect version."""
+    from budget_runner.evaluate import IRQ_SEQUENCE, RTI_TAIL
+    spans = irq_spans(events, d, r)
+    costs, started = [], None
+    for e in events:
+        if e.pc == a:
+            started = e.t
+        elif e.pc == b and started is not None:
+            nested = [(s, f) for s, f in spans if s + IRQ_SEQUENCE > started and f - RTI_TAIL < e.t]
+            costs.append(e.t - started - union_length(nested))
+            started = None
+    return costs
+
+
+def _random_events(seed, n):
+    import random
+    rnd, t, out = random.Random(seed), 0, []
+    for _ in range(n):
+        t += rnd.randint(1, 60)
+        out.append(ev(rnd.choice([A, A, B, B, D, R]), t))
+    return out
+
+
+def test_profile_costs_with_irqs_match_reference_on_random_traces():
+    for seed in range(40):
+        events = _random_events(seed, 120)
+        assert profile_costs(events, A, B, D, R) == _reference_costs(events, A, B, D, R)
+
+
+def test_sample_counter_matches_profile_costs_at_every_prefix():
+    for seed in range(10):
+        events = _random_events(seed, 80)
+        counter = SampleCounter(A, B)
+        seen = []
+        for e in events:
+            seen.append(e)
+            assert counter.update(seen) == len(profile_costs(seen, A, B))
+
+
+def test_sample_counter_reads_each_event_once():
+    class Counting(list):
+        reads = 0
+
+        def __getitem__(self, i):
+            Counting.reads += 1
+            return super().__getitem__(i)
+
+    events, counter = Counting(), SampleCounter(A, B)
+    for i in range(500):
+        events.append(ev(A if i % 2 == 0 else B, 100 + i * 20))
+        counter.update(events)
+    assert counter.count == 250
+    assert Counting.reads == 500  # linear; rescanning every time would read ~125,000
+
+
+def test_vice_profile_does_not_rescan_events_per_sample(monkeypatch):
+    """Drive Vice._profile on a fake monitor: profile_costs runs once, not once per sample."""
+    from budget_runner import session
+
+    class FakeMon:
+        def __init__(self, pcs):
+            self.pcs, self.i, self.cur = pcs, 0, None
+
+        def checkpoint_set(self, *a):
+            return type("C", (), {"number": 1})()
+
+        def checkpoint_delete(self, n):
+            pass
+
+        def exit(self):
+            self.cur = self.pcs[self.i]
+            self.i += 1
+
+        def wait_stopped(self, timeout):
+            return True
+
+        def registers(self):
+            return {"PC": self.cur[0], "LIN": self.cur[1], "CYC": self.cur[2]}
+
+    samples = 300
+    pcs = []
+    for k in range(samples + 5):
+        pcs += [(A, 10 + k % 200, 5), (B, 10 + k % 200, 30)]
+    v = session.Vice.__new__(session.Vice)
+    v.symbols = {"a": A, "b": B}
+    v.mon = FakeMon(pcs)
+    calls = []
+    real = session.profile_costs
+    monkeypatch.setattr(session, "profile_costs", lambda *a, **k: calls.append(1) or real(*a, **k))
+    r = v._profile(check(routine=["a", "b"], max_cycles=100, samples=samples))
+    assert r.passed and len(calls) == 1
+    assert v.mon.i == 2 * samples  # stopped as soon as the last sample completed
 
 
 def test_nested_irqs_are_counted_once():

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .evaluate import (
     FRAME, CYCLES_PER_LINE, Event, Result, eval_irq_time, eval_memory, eval_profile,
-    eval_start_cycle, irq_time_by_frame, profile_costs,
+    SampleCounter, eval_start_cycle, irq_time_by_frame, profile_costs,
 )
 from .spec import REPO, Budget, Check
 
@@ -122,9 +122,10 @@ class Vice:
         a, b = (self.addr(x) for x in p["routine"])
         extra = [self.addr("irq_dispatch"), self.addr("irq_exit_rti")] if excl_irq else []
         dr = tuple(extra) if extra else (None, None)
+        counter = SampleCounter(a, b)  # incremental: each stop costs O(1), not a rescan of all events
         events = self.trace(
             [a, b, *extra],
-            lambda ev: len(profile_costs(ev, a, b, *dr)) >= p["samples"],
+            lambda ev: counter.update(ev) >= p["samples"],
             f"{p['routine'][0]} -> {p['routine'][1]}")
         return eval_profile(check, profile_costs(events, a, b, *dr)[: p["samples"]])
 

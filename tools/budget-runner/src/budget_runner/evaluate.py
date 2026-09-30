@@ -6,6 +6,7 @@ An Event is one execution of a watched address, with its raster position and an 
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from dataclasses import dataclass, field
 
 from .spec import Check
@@ -89,6 +90,7 @@ def profile_costs(events: list[Event], start: int, end: int,
     IRQ the routine may itself be running inside is not subtracted.
     """
     spans = irq_spans(events, dispatch, rti) if dispatch is not None and rti is not None else []
+    span_starts = [s for s, _ in spans]  # spans are sorted by start
     costs, started = [], None
     for e in events:
         if e.pc == start:
@@ -96,11 +98,39 @@ def profile_costs(events: list[Event], start: int, end: int,
         elif e.pc == end and started is not None:
             cost = e.t - started
             if spans:
-                nested = [(s, f) for s, f in spans if s + IRQ_SEQUENCE > started and f - RTI_TAIL < e.t]
+                # Only spans starting in (started - 7, e.t) can be nested: a span starting at or
+                # after e.t - 7 has its rti hit after e.t. Bisect instead of scanning every span.
+                lo = bisect_right(span_starts, started - IRQ_SEQUENCE)
+                hi = bisect_right(span_starts, e.t - IRQ_SEQUENCE)
+                nested = [(s, f) for s, f in spans[lo:hi] if f - RTI_TAIL < e.t]
                 cost -= union_length(nested)
             costs.append(cost)
             started = None
     return costs
+
+
+class SampleCounter:
+    """Counts complete start -> end pairs incrementally: O(new events) per call, not O(all events).
+
+    Gives the same count as len(profile_costs(events, start, end)).
+    """
+
+    def __init__(self, start: int, end: int):
+        self.start, self.end = start, end
+        self.count = 0
+        self._seen = 0
+        self._started = False
+
+    def update(self, events: list[Event]) -> int:
+        for i in range(self._seen, len(events)):
+            pc = events[i].pc
+            if pc == self.start:
+                self._started = True
+            elif pc == self.end and self._started:
+                self.count += 1
+                self._started = False
+        self._seen = len(events)
+        return self.count
 
 
 def irq_time_by_frame(events: list[Event], dispatch: int, rti: int, frames: int) -> list[int]:
