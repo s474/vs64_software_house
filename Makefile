@@ -37,6 +37,18 @@ SPRITE_BINS := $(patsubst $(SRC_DIR)/%.png,$(OUT_DIR)/%.bin,$(SPRITE_PNGS))
 SOURCES   := $(wildcard $(SRC_DIR)/*.asm $(SRC_DIR)/*.inc engine/*.asm) $(SPRITE_BINS)
 DEFINES   := $(if $(filter release,$(BUILD)),,-define DEBUG)
 
+# Build stamp: build/<game>/.build-defines holds the DEFINES the PRG was built with. When it differs
+# from this run's DEFINES (BUILD= was switched, in either direction), the stale PRG is deleted
+# while the makefile is read, before make looks at any timestamp, so the PRG rebuilds. Done at
+# parse time because make 3.81 (macOS) compares whole seconds: a prerequisite stamp rewritten in
+# the same second as the PRG would not look newer, and deleting the PRG from a recipe is too
+# late (make has already decided it is up to date). The PRG recipe writes the stamp after a
+# successful build. Any new build-wide setting that changes the output belongs in DEFINES.
+STAMP := $(OUT_DIR)/.build-defines
+ifeq ($(shell [ -f $(STAMP) ] && [ "`cat $(STAMP)`" = "$(DEFINES)" ] && echo same),)
+$(shell rm -f $(PRG))
+endif
+
 .PHONY: all run run-sfx crunch d64 clean test test-tools
 
 all: $(PRG)
@@ -47,6 +59,7 @@ $(PRG): $(SOURCES)
 	@mkdir -p $(OUT_DIR)
 	$(JAVA) -jar $(KICKASS_JAR) $(MAIN) -o $(PRG) -odir $(abspath $(OUT_DIR)) \
 		-libdir $(CURDIR) -vicesymbols -symbolfile -bytedumpfile main.dump -showmem $(DEFINES)
+	@echo "$(DEFINES)" > $(STAMP)
 
 # Absolute paths, so the rules do not depend on the directory uv runs from.
 $(OUT_DIR)/%.hires.bin $(OUT_DIR)/%.hires.col $(OUT_DIR)/%.hires.inc: $(SRC_DIR)/%.hires.png $(wildcard tools/png2sprites/src/png2sprites/*.py) Makefile
