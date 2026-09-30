@@ -349,7 +349,7 @@ when too many share a row. Decisions from the brief: 24 sprites, flicker rather 
 | `MUX_WRAP_Y` | 55 | Engine | Largest Y the VIC-II matches a second time in a PAL frame (on line 256 + Y): 311 − 256. See [Wrap ghosts](#wrap-ghosts) |
 | `MUX_PARK_LINE` | 77 | Engine | `MUX_WRAP_Y` + 22: the first line on which every slot at Y ≤ 55 has finished displaying, so its hardware sprite can be disabled |
 | `MUX_SCREEN` | e.g. `$0400` | **Game** | Screen whose `+$3F8…$3FF` get the sprite pointers |
-| `MUX_FREE_AFTER` | 22 | Engine | A hardware sprite is free to rewrite on line `Y_old + 22`. *Estimate*: display on Y+1 to Y+21 is unmeasured (no glitches seen in the stage 2 screenshots) |
+| `MUX_FREE_AFTER` | 22 | Engine | A hardware sprite is free to rewrite on line `Y_old + 22`. Display on Y+1 to Y+21 is **measured** (`tests/timing/sprite_wrap`); that a rewrite on `Y_old + 22` never marks the last line is still estimate #8 |
 | `MUX_IRQ_LINES` | 1 | Engine | Lines from a zone IRQ's trigger to its first write. **Measured** (stage 2, 2,000 zone IRQs): 0 or 1, and 2 once; the slack in `MUX_WRITE_LINES` absorbed it (`mux_late_count` 0) |
 | `MUX_WRITE_LINES` | **2** | Engine | Lines to write one slot, allowing for DMA. **Measured** (stage 2): 1 failed (`mux_late_count` 139 in 3,000 frames); a slot takes 78 cycles block to block with no DMA (DEBUG), up to ~2 lines with DMA. 2 gives 0 late, with ≥ 7 lines of margin on back-to-back full rows |
 | `MUX_MAX_PINNED` | 4 | Engine | Most sprites honoured as pinned in one frame (decision, not a measurement) |
@@ -661,8 +661,8 @@ flowchart TD
 - **`mux_irq_park`** writes `$D015` = `mux_b_d015` AND NOT mask and ends the chain entry. The
   zone IRQs never write `$D015`, so the base value is still the frame's. The next `mux_irq_top`
   re-enables them from `mux_b_d015` as usual.
-- **Why line 77.** A slot at Y ≤ 55 is displayed on lines Y + 1 to Y + 21 (*estimate*, as
-  `MUX_FREE_AFTER`), so all of them are done by line 76. Disabling earlier, on a line where the
+- **Why line 77.** A slot at Y ≤ 55 is displayed on lines Y + 1 to Y + 21 (**measured**,
+  `tests/timing/sprite_wrap`, which also measures the wrap itself), so all of them are done by line 76. Disabling earlier, on a line where the
   sprite is still being displayed, would cut it off.
 
 **Costs** (VICE 3.10 x64sc PAL, 2026-09-30, **measured**, all constant; DEBUG and release are
@@ -672,7 +672,7 @@ the same: the park code has no DEBUG part):
 |---|---|---|
 | `mux_irq_top` → `irq_exit_rti`, > 8 slots | **378** (unchanged) | both spikes, every pass |
 | `mux_irq_top` → `irq_exit_rti`, ≤ 8 slots, ghosts to park (re-arms `mux_irq_park`) | **381** | `multiplexer_ghost`, 640 of 640 such passes; release the same |
-| `mux_irq_top` → `irq_exit_rti`, ≤ 8 slots, nothing to park (`IrqDone`) | **393** (was 387: + 6 for the test) | `multiplexer`, 54 of 3,001 passes |
+| `mux_irq_top` → `irq_exit_rti`, ≤ 8 slots, nothing to park (`IrqDone`) | **393** (was 387: + 6 for the test) | `multiplexer`, 54 of 3,001 passes; re-measured 2026-09-30 (Technical Director), DEBUG and release: 378 ×2,946 / 393 ×54 of 3,000 |
 | `mux_irq_park` → `irq_exit_rti` | **80** (17 work + 3 `jmp` + `irq_exit` 60) | `multiplexer_ghost`, 1,921 of 1,921; starts on line 77, cycle 26–28 |
 | `mux_zone_done` → `irq_exit_rti`, parks at once (`mux_park_now`) | **94** | `multiplexer_ghost` phase 4 (chain ends on line 80), 40 passes |
 | `mux_zone_done` → `irq_exit_rti`, re-arms `mux_irq_park` | **89**, then 80 + 30 framework for `mux_irq_park` | `multiplexer_ghost` phase 1 (chain ends on line 62), 33 passes |
@@ -1070,7 +1070,7 @@ Rules for other chain entries in a multiplexer game:
 **Status panels: only at the bottom in v1.** A game gets a bottom panel by lowering
 `MUX_Y_MAX` so no sprite reaches the panel, and adding a fixed chain entry at the panel's
 first line (≥ `MUX_Y_MAX + 2`) for its colour or mode change. Note that a sprite at Y is
-displayed on lines Y+1 to Y+21 (*estimate*), so for no sprite pixels over a panel starting on
+displayed on lines Y+1 to Y+21 (**measured**, `tests/timing/sprite_wrap`), so for no sprite pixels over a panel starting on
 line P, `MUX_Y_MAX` = P − 22. A **top panel is not supported**: `MUX_Y_MIN` is fixed by the
 engine, and no fixed entry may sit between `MUX_TOP_LINE` and `MUX_Y_MAX + 2`. Nor are
 splits anywhere in the play area. Either would need a future extension (a configurable
@@ -1379,7 +1379,7 @@ records them in the reference docs as measured, and updates this page and the bu
 | 3 | Framework costs: dispatch, exit, re-arm, tick, stable extra | **Measured** 17 / 60 / 41 / 8 / 99–106 (re-arm in stage 2: `irq_chain` `spike_h2` → `spike_h3`, line 177) | Every IRQ budget | `irq_chain` spike, `vice_profile` |
 | 4 | `IRQ_STABLE_CYCLE`: the stable handler's start cycle | **Measured**: 6 | Stable handler users | `irq_chain` spike, `start_cycle` |
 | 5 | Maximum normal jitter with the worst main loop | **Measured**: 7 (8 never seen in 4,000 IRQs, taken branches included) | Acceptance | `irq_chain` spike, `start_cycle` |
-| 6 | Sprite DMA lines per sprite (display on Y+1 … Y+21) | 21 | DMA budget, `MUX_FREE_AFTER` | Extend `tests/timing/sprites` |
+| 6 | Sprite DMA lines per sprite (display on Y+1 … Y+21) | **Measured**: 21 (42 Y-expanded), DMA at the ends of lines Y … Y+20, display Y+1 … Y+21 | DMA budget, `MUX_FREE_AFTER` | `tests/timing/sprite_wrap` (2026-09-30) |
 | 7 | Latest cycle on line Y at which writing the sprite's Y still shows it from Y+1 | Before ~cycle 55 | Scheduling, `MUX_WRITE_LINES` | Probe |
 | 8 | Earliest line/cycle to rewrite X, pointer and colour without marking the previous occupant's last line | Line Y_old + 22 | `MUX_FREE_AFTER` | Probe with screenshots |
 | 9 | Zone IRQ trigger-to-first-write, and per-slot write time, under worst DMA | **Measured** (stage 2): first write 0–1 lines after the free line (2 once in 2,000); a slot 78 cycles with no DMA, up to ~2 lines with it. `MUX_WRITE_LINES` raised to 2 (1 gave 139 late slots in 3,000 frames) | `MUX_IRQ_LINES`, `MUX_WRITE_LINES` | `multiplexer` spike, `measure.py`, `mux_late_count` = 0 |

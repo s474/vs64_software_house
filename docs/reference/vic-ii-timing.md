@@ -13,6 +13,7 @@ it gave:
 | [tests/timing/badline_writes](../../tests/timing/badline_writes/main.asm) | Badline steal while the CPU runs write cycles (`INC abs`, `JSR`) |
 | [tests/timing/sprites](../../tests/timing/sprites/main.asm) | Sprite DMA per line; sprites and a badline on the same line |
 | [tests/timing/sprites/trace_badline.py](../../tests/timing/sprites/trace_badline.py) | Instruction trace: which cycles of the badline the CPU actually gets |
+| [tests/timing/sprite_wrap](../../tests/timing/sprite_wrap/main.asm) + [sweep.py](../../tests/timing/sprite_wrap/sweep.py) | Sprite DMA and display line by line: first/last line, Y expansion, the Y wrap across line 311 → 0 (2026-09-30) |
 
 If you rely on a figure marked *unmeasured*, measure it before you build on it.
 
@@ -38,8 +39,13 @@ If you rely on a figure marked *unmeasured*, measure it before you build on it.
   `WaitFrameStart` relies on reading it and they all synchronise correctly.
 - The 320×200 display window with 25 rows (`RSEL`=1, `$D011` bit 3) and the default
   `YSCROLL`=3 covers raster lines 51–250 ($33–$FA). With 24 rows (`RSEL`=0) it's 55–246. *Unmeasured.*
-- Sprite Y coordinates are raster lines: a sprite at Y is displayed from line Y+1, so Y=50
-  lines up with the first text row. *Unmeasured.*
+- Sprite Y coordinates are raster lines: a sprite at Y is displayed on lines Y+1 to Y+21.
+  **Measured (tests/timing/sprite_wrap):** its first DMA is at the end of line Y, and it shows on
+  Y+1 onward (Y=56: DMA 56–76, shown 57–77). So Y=50 starts on line 51, the first text row
+  (badline $33, measured).
+- VICE renders raster lines 16–287. In a `vice_screenshot` "full" image, buffer row = raster line
+  − 1 (text row 0, raster 51, is row 50). **Measured** with a reference character in text row 0
+  (tests/timing/sprite_wrap/sweep.py).
 - VICE's normal PAL frame is 384×272: 32 px of side border and 36 lines of top and bottom border
   around the 320×200 window. This is what `vice_screenshot` returns by default. Checked pixel for
   pixel against `x64sc -exitscreenshot` (see `BORDER_LEFT` in `mcp/vice/server.py`).
@@ -94,7 +100,8 @@ That gives one badline per text row: 25 per frame with the default settings.
 A sprite whose DMA is active on a line costs CPU time on that line. That's every line it's
 displayed on, whether or not the line is under the border. **Measured:** sprites on lines 17–37,
 all in the top border, cost exactly what the table below says (tests/timing/sprites `spr_blk`).
-The number of DMA lines per sprite (21, or 42 if Y-expanded) is *unmeasured*.
+**Measured (tests/timing/sprite_wrap):** a sprite has **21** DMA lines, or **42** if Y-expanded
+(`$D017`), from the end of line Y to the end of line Y+20 (Y+41). The sprite shows on the line after each fetch.
 
 The VIC-II fetches sprites in order 0→7: sprites 0–2 at the end of a raster line and 3–7 at the
 start of the next. **Measured (trace):** sprites 0–2 halt the CPU at the end of the line (it
@@ -123,27 +130,82 @@ passes, in the border so no badline is involved):
 
 - Assign sprite numbers in **consecutive runs** (e.g. a multiplexer fills 0, 1, 2… in order), never
   scattered.
-- A band of 8 sprites costs about 21 × 19 = 399 cycles per frame (19 is measured; the 21 lines
-  are *unmeasured*). A 32-sprite multiplexer (4 bands) costs about 1,600 cycles in DMA alone,
-  before any multiplexer code runs.
+- A band of 8 sprites costs 21 × 19 = **399** cycles per frame (both factors measured). A
+  32-sprite multiplexer (4 bands) costs about 1,600 cycles in DMA alone, before any multiplexer
+  code runs.
 
 ### Sprite Y and the frame wrap
 
-The VIC-II compares a sprite's Y register with **raster bits 0–7 only**. On PAL (lines 0–311) an
-enabled sprite with Y ≤ 55 (311 − 256) therefore starts its display **twice** a frame: on line Y
-and again on line 256 + Y, from where it runs 21 lines across the frame wrap into the top of the
-next frame (to line Y − 35 when Y ≥ 35: line 20 for Y = 55). Its DMA lands there too, even with
-the border closed.
+**Measured (tests/timing/sprite_wrap, VICE 3.10 x64sc PAL, 2026-09-30):** the VIC-II compares a
+sprite's Y register with **raster bits 0–7 only**. On PAL (lines 0–311) a sprite with
+**Y ≤ 55** (311 − 256) therefore matches **twice** a frame: on line Y, and again on line
+256 + Y. Each match starts a full sprite: DMA at the end of the matching line and the 20 after
+it, display on the 21 lines after the match (42 when Y-expanded). The second one runs across the
+311 → 0 wrap into the top of the next frame, up to line Y − 35 when Y ≥ 35 (line 20 for Y = 55).
+At **Y ≥ 56** the second match would be on line 312 or later, which PAL doesn't have, so there's
+only one display.
 
-**Measured** (tests/engine/multiplexer_ghost, 2026-09-30): with the top/bottom border opened,
-sprites left enabled at Y 48–55 show their tails at the top of the next frame
-(`screenshots/multiplexer-ghost-before-phase0.png`), and an IRQ on line 16 measured 419–422
-raster cycles instead of 378/381, the ghosts' DMA on lines 16–20. Disabling the sprites after
-their first display removes both (engine/README.md#wrap-ghosts).
+| Sprite 0 at | First display (DMA lines) | Second display (DMA lines) |
+|---|---|---|
+| Y = 0 | 1–21 (0–20) | 257–277 (256–276) |
+| Y = 10 | 11–31 (10–30) | 267–287 (266–286) |
+| Y = 35 | 36–56 (35–55) | 292–311 and 0 of the next frame (291–311) |
+| **Y = 55** | 56–76 (55–75) | **0–20** of the next frame (311, 0–19) |
+| **Y = 56** | 57–77 (56–76) | **none** (no DMA on lines 256–311 or 0–55) |
+| Y = 55, Y-expanded | 56–97 (55–96: 42 lines) | 0–41 of the next frame (311, 0–40: 42 lines) |
 
-Consequence: anything that leaves sprites enabled with a small Y at the end of a frame (a
-multiplexer's top row, a title screen) must disable them, or move them to Y ≥ 56, once they've
-been displayed. Y-expanded sprites (42 lines) are not covered by this measurement.
+- **DMA lines are measured for every line** in 0–100 and 256–311, 32 passes each (the probe's
+  32 start phases), with the screen off so no badline interferes. The block started on line L
+  measures exactly the DMA that feeds display line L + 1; see the probe's header.
+- **Display lines are measured from VICE's frame buffer** (screen on, top/bottom border open)
+  where VICE renders them, lines 16–287. On every rendered, probed line they are the DMA lines
+  + 1, in all six configurations. Lines 0–15 aren't rendered, so the Y = 55 tail shows as lines
+  16–20 there; its lines 0–15 are known from their DMA.
+- **The wrapped lines cost the same DMA as any sprite line**, with the screen on or off: sprite 0
+  alone **5** cycles a line, sprites 0–7 all at Y = 55 **19** a line on lines 311 and 0–19, every
+  pass (the figures in [Sprite DMA](#sprite-dma)). A full band of 8 ghosts costs 21 × 19 = **399**
+  cycles, spent on lines 311 and 0–19 of the next frame. This probe opens the top/bottom border;
+  with it closed the DMA is the same (the `multiplexer` spike, below).
+
+```mermaid
+flowchart LR
+    A["Line 55<br/>Y = 55 matches<br/>DMA at the end of the line"] --> B["Lines 56–76<br/>displayed (21)"]
+    B --> C["Line 311<br/>311 AND $FF = 55: matches again<br/>DMA at the end of the line"]
+    C --> D["Next frame, lines 0–20<br/>displayed again (21)<br/>DMA at the ends of 0–19<br/>(sprite 0 alone: 5 a line)"]
+    D --> A
+```
+
+Rerun (the probe's header has the details):
+
+```
+make GAME=sprite_wrap SRC_DIR=tests/timing/sprite_wrap
+cd mcp/vice && uv run python ../../tests/timing/sprite_wrap/sweep.py      # ~80 s, all configurations
+```
+
+By hand, one line: `vice_start build/sprite_wrap/sprite_wrap.prg` runs the default configuration
+(sprite 0 at Y = 55, probe on line 311). `vice_profile wrap_blk_hi wrap_blk_hi_end` then gives
+**67** (62 + 5) every pass. With `vice_write_memory spr_y 38` (Y = 56) it gives **62**, no DMA.
+Screenshots, top/bottom border open, yellow bar = text row 0 (raster 51):
+
+- [screenshots/sprite-wrap-y55-y10-y30-y56-border-open-full.png](../../screenshots/sprite-wrap-y55-y10-y30-y56-border-open-full.png):
+  white Y = 55 (tail at the top, 16–20), yellow Y = 10 (again at the bottom, 267–287), green
+  Y = 30 (its second display starts on 287, the last rendered line), pink Y = 56 (no second display).
+- [screenshots/sprite-wrap-y55-yexpanded-vs-y56-border-open-full.png](../../screenshots/sprite-wrap-y55-yexpanded-vs-y56-border-open-full.png):
+  Y = 55 Y-expanded (tail on 16–41) against Y = 56.
+
+**Also seen in the engine** (M3 stage 3.5, 2026-09-30, [engine/README.md#wrap-ghosts](../../engine/README.md#wrap-ghosts)):
+in `tests/engine/multiplexer_ghost` (border open), sprites the multiplexer left enabled at Y
+48–55 showed their tails at the top of the next frame
+(`screenshots/multiplexer-ghost-before-phase0.png`), and its IRQ on line 16 took 419–422 raster
+cycles instead of 378/381, the ghosts' DMA on lines 16–20. In the `multiplexer` spike (normal
+borders) the same DMA made the five 398–421 outliers of that IRQ, each a frame with sprites left
+at Y 53–55. Disabling the sprites after their first display removes both.
+
+**Consequence:** anything that leaves sprites enabled with Y ≤ 55 at the end of a frame (a
+multiplexer's top row, a title screen) gets them displayed again, with DMA, on lines 256 + Y
+onward. It must disable them, or move them to Y ≥ 56, once they've been displayed, which means
+after line Y + 21. With the border closed the ghost is invisible, but its DMA still lands: in
+the lower border from line 257 + Y, and for Y ≥ 35 on lines 0 to Y − 35 of the next frame.
 
 ## Badline and sprites on the same line
 
@@ -190,7 +252,7 @@ up to 81 cycles later. Put timing-critical writes on non-badlines, or in the bor
 |---|---|---|
 | Whole frame | 19,656 | Measured (rasterline) |
 | Badlines, screen on | −1,075 | 25 × measured 43 |
-| 8 sprites × 21 lines | −399 | Measured 19 × *unmeasured* 21 lines |
+| 8 sprites × 21 lines | −399 | Measured 19 × measured 21 lines (sprites, sprite_wrap) |
 | **Left for all code** | **≈18,180** | |
 
 Code that must finish within a region of the screen, such as an IRQ between two splits, has
