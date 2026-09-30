@@ -8,9 +8,9 @@
 #   make test-tools      pytest for the Python tools
 #   make clean
 # Pick a game with GAME=<name> (default: hello). For programs outside games/, also set
-# SRC_DIR, e.g. make GAME=badline SRC_DIR=tests/timing/badline BUILD=release drops the DEBUG
-# define (matching VS64's "build" setting). Tool paths can be overridden from
-# the environment, e.g. KICKASS_JAR=~/tools/KickAss.jar make
+# SRC_DIR, e.g. make GAME=badline SRC_DIR=tests/timing/badline
+# BUILD=release drops the DEBUG define (matching VS64's "build" setting). Tool paths can
+# be overridden from the environment, e.g. KICKASS_JAR=~/tools/KickAss.jar make
 
 GAME        ?= hello
 BUILD       ?= debug
