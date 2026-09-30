@@ -72,7 +72,9 @@
 .const MUX_OFF         = $ff
 .const MUX_TOP_LINE    = $10
 .const MUX_Y_MIN       = $1e
-.const MUX_FREE_AFTER  = 22             // estimate (README #6/#8)
+.const MUX_FREE_AFTER  = 22             // display on Y+1 .. Y+21 measured (README #6: tests/timing/sprite_wrap,
+                                        // docs/reference/vic-ii-timing.md); that a rewrite on Y_old + 22 never
+                                        // marks the old occupant's last line is still estimate #8
 .const MUX_IRQ_LINES   = 1              // measured: first write 0-1 lines after the free line in 1,999 of
                                         // 2,000 zone IRQs, 2 once (README #9); the slack in WRITE_LINES covers it
 .const MUX_WRITE_LINES = 2              // measured: 1 gave mux_late_count 139 in 3,000 frames (a slot takes
@@ -528,7 +530,8 @@ mux_update_end:
 // TIMING: chain entry 0, line MUX_TOP_LINE (16, top border: no badlines, no sprites yet).
 // Swap in the back buffer if one is ready, write $D015/$D010/$D01C and slots 0-7, re-arm at
 // slot 8's free line; with <= 8 slots, re-arm mux_irq_park at line 77 if there are wrap ghosts,
-// else end the entry. Budget 393 (a lock, measured: the worst of the three paths).
+// else end the entry. Budget 393 (a lock, measured: the worst of the three paths; the 393 path runs
+// every pass in tests/engine/multiplexer_top, the 381 path in tests/engine/multiplexer_ghost).
 // Cost: measured from mux_irq_top to irq_exit_rti, every pass (constant paths, top border, no DMA;
 // + 32 framework before it): 378 (> 8 slots), 381 (<= 8, ghosts to park), 393 (<= 8, none)
 mux_irq_top:

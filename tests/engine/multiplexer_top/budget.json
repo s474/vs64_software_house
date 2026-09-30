@@ -1,0 +1,41 @@
+{
+  "spike": "multiplexer_top",
+  "src_dir": "tests/engine/multiplexer_top",
+  "warmup_frames": 100,
+  "stage": 3,
+  "notes": "Holds mux_irq_top on its worst path (393: <= 8 slots, none at Y <= 55, so mux_b_park = 0 and it ends with IrqDone) every frame, so make test exercises the 393 lock deterministically. The multiplexer spike takes that path in only ~1.8% of frames and multiplexer_ghost never does. Added by the raster-engineer in M3 stage 3.5 (2026-09-30). Five static layouts, 32 frames each, cycling (160 frames a cycle), every shown Y >= 56. The lock is the one the Technical Director set in tests/engine/multiplexer/budget.json; it is not re-based here.",
+  "checks": [
+    {
+      "name": "mux_irq_top, <= 8 slots and no ghosts (the 393 path, every pass)",
+      "kind": "profile",
+      "routine": [
+        "mux_irq_top",
+        "irq_exit_rti"
+      ],
+      "max_cycles": 393,
+      "samples": 200,
+      "basis": "measured",
+      "source": "The lock from tests/engine/multiplexer/budget.json (mux_irq_top, 393: the worst of the three constant paths). Measured 2026-09-30 with vice_profile in this spike (DEBUG): 393 in 320 of 320 passes (two full phase cycles), min = avg = max; handler reached on line 16 cycle 36-37. Top border, no DMA: no sprite is at Y <= 55"
+    },
+    {
+      "name": "no wrap ghosts",
+      "kind": "memory",
+      "address": "probe_ghost_frames",
+      "size": 1,
+      "after_frames": 320,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/README.md#wrap-ghosts: every Y here is >= 56, so no hardware sprite may be enabled at Y <= 55 on line 249"
+    },
+    {
+      "name": "no late chain entries",
+      "kind": "memory",
+      "address": "irq_late_count",
+      "size": 1,
+      "after_frames": 0,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/README.md#handler-conventions"
+    }
+  ]
+}
