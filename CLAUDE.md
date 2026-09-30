@@ -17,11 +17,13 @@ Target: **PAL C64** (6510 + VIC-II 6569 + SID), KickAssembler 5.25, VICE 3.10 (`
 | Crunched PRG / disk image | `make crunch` / `make d64` |
 | Test the tools | `make test-tools` (pytest for every Python project under `tools/`) |
 | Check engine budgets in VICE | `make test` (builds each `tests/**/budget.json` spike, runs it headless, fails on an overrun; `make test ARGS=irq_chain` for one) |
+| Long budget run (soak) | `make test-long` (every sample/frame count x 34, ~30 min for the multiplexer; `make test-long LONG_SCALE=10 ARGS=multiplexer` for another factor or one spike). For milestone sign-off, not every change |
 | Test the VICE MCP server | `cd mcp/vice && uv run smoke_test.py` |
 | Set up / refresh the Python environment | `uv sync --all-packages` (one workspace: root `.venv` and `uv.lock`) |
 
 Build outputs in `build/<title>/`: `.prg`, `main.vs` (labels), `main.dump` (address of every source line).
-`make clean` and VS64's clean delete all of `build/`.
+`make clean` and VS64's clean delete all of `build/`, so **scripts or data you'll need again go in
+`tests/` or `tools/`, never `build/`** (stage 3's long-run scripts were lost that way).
 
 ## Layout
 
@@ -55,6 +57,8 @@ mark measured facts as measured (with the probe that shows it).
 - **Verify in VICE, don't assume.** Use the `vice_*` MCP tools: `vice_start` the build,
   `vice_run_frames` / `vice_joystick` to drive it, `vice_screenshot` to see it, `vice_read_memory` to
   check state, and `vice_profile` for any timing claim. Addresses accept labels from the build.
+- **Call `vice_stop` when you've finished with VICE.** The emulator belongs to the session's MCP
+  server, not to you, so otherwise it keeps running after you've reported.
 - Screenshots: always pass a descriptive `name`; they land in `screenshots/`. Mention the paths
   when reporting (as relative Markdown links).
 - Follow the [definition of done](docs/standards/coding-standards.md#verification-done-means-all-of-these)
