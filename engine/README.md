@@ -9,7 +9,7 @@ the code, not after.
 | Module | File | Status |
 |---|---|---|
 | IRQ framework | `engine/irq.asm` | **Implemented** (M3 stage 1). Costs measured in `tests/engine/irq_chain` |
-| Sprite multiplexer v1 | `engine/multiplexer.asm` | **Stage 2 implemented** (sort, select, build, zone IRQs, double buffer; no flicker or pinning yet). Measured in `tests/engine/multiplexer` |
+| Sprite multiplexer v1 | `engine/multiplexer.asm` (+ `engine/multiplexer_flicker.asm`, the slow path) | **Stage 3 implemented** (sort, fast-path select with the build merged in, fair flicker, zone IRQs, double buffer; no pinning yet). Measured in `tests/engine/multiplexer` |
 
 **How to read the numbers.** Every figure is marked:
 
@@ -387,8 +387,9 @@ mux_init:
 // In:  nothing
 // Out: C=0 queued for the next mux_irq_top; C=1 skipped (the previous build hasn't been shown yet)
 // Uses: A, X, Y, zp_tmp0-zp_tmp3
-// Cost: measured 6,240 avg / 8,595 max raster cycles in the spike (stage 2); fast-path target
-//       <= 5,000 avg (stage 3). Budgets in tests/engine/multiplexer/budget.json
+// Cost: measured 4,264 avg raster cycles in frames with no overflow (stage 3 fast path; stage 2
+//       was 6,240), more in frames that flicker: see Multiplexer costs. Budgets in
+//       tests/engine/multiplexer/budget.json
 mux_update:
 
 // Chain entry 0 (IrqNormal(MUX_TOP_LINE, mux_irq_top)). Internal: mux_irq_zone.
@@ -535,6 +536,67 @@ Details the design left open, as implemented in `engine/multiplexer.asm`:
 - **Stage 2 has no flicker and no pinning.** A sprite that doesn't fit is dropped for the frame
   (`mux_drop_count`, age +1), with no rotation; `mux_flags` bit 7 is ignored.
 
+### As built (stage 3)
+
+What changed from stage 2, in `engine/multiplexer.asm` and `engine/multiplexer_flicker.asm`:
+
+```mermaid
+flowchart TD
+    S["mux_sort"] --> M["mode: OR / AND of the 24 multicolour bits<br/>(uniform → constant $D01C)"]
+    M --> K["skip sprites above MUX_Y_MIN<br/>point the loops' mux_order operand"]
+    K --> L1["loop 1: slots 0-7<br/>write Y, X, ptr, colour, $D010"]
+    L1 --> L2["loop 2: slots 8+<br/>gap check, simulation, same writes"]
+    L2 -->|"all fit"| B["mux_build: sentinel, per-buffer values,<br/>ages cleared once if dirty"]
+    L2 -->|"first sprite that doesn't fit"| SL["mux_slow (multiplexer_flicker.asm)<br/>fill mux_kept; evict a younger one or drop"]
+    SL --> B2["mux_build + mux_rebuild<br/>from the first changed slot; ages of kept = 0"]
+    B --> F["mux_update_fast (fast frames only)"]
+    F --> E["mux_update_end"]
+    B2 --> E
+```
+
+- **Fast path** ([Fast path](#fast-path)). The selection writes each kept sprite's slot arrays
+  directly (`mux_s_y/xlo/ptr/col/d010/free/done`); there's no second walk. Two loops: slots 0–7
+  (always fit, no simulation, 68–70 cycles per slot, counted) and slots 8+ (108 per slot for a
+  new zone IRQ, 124 when carrying on in the previous slot's IRQ). Sprites above `MUX_Y_MIN` are
+  skipped once up front (they sort first), and both loops read `mux_order` through a
+  self-modified low byte (`mux_order + skipped − base`), so no order counter is kept.
+- **Trimmed simulation.** A new IRQ fits exactly when `y − y[k−8] ≥ MUX_GAP_MIN` (25), which
+  is checked first and bounds every later sum below 256, so the three overflow branches are
+  gone. Carrying on also needs `done[k−1] + MUX_WRITE_LINES ≤ y`. `done` per slot lives in
+  `mux_s_done` (main loop only), which the eviction re-simulation needs.
+- **The fast path writes neither `mux_kept` nor `mux_age`.** At the first sprite that doesn't
+  fit, `mux_fill_kept` fills `mux_kept` for the slots so far (they're consecutive in
+  `mux_order`), and the rest of the frame runs the slow loop, which writes only `mux_s_y`,
+  `mux_kept`, `mux_s_free`, `mux_s_done`. `mux_build` then rebuilds X, pointer, colour and
+  `$D010` from `mux_slow_from` (the first sprite that failed, or an earlier evicted slot). A pure
+  drop doesn't need a rebuild of the slots before it, so the rebuild starts at the first change,
+  not at slot 0.
+- **Ages.** Kept sprites' ages are zeroed only in slow frames (a pass over `mux_kept`), and a
+  frame with a drop sets `mux_dirty`. The next frame with no drop zeroes all 24 ages once (an
+  unrolled store) and clears the flag; fast frames with the flag clear touch no age at all.
+  Consequence: a sprite that went off-screen while waiting its turn loses its seniority at the
+  next frame with no drop. It wasn't missing while off-screen, so that's intended.
+- **Constant `$D01C`.** `mux_select` ORs and ANDs bit 0 of all 24 `mux_flags` (unrolled, ~100
+  cycles; hidden sprites count, which can only make it take the mixed path). If they're all the
+  same, `mux_irq_top` writes `$00` or `$FF` once, and the buffer's zone-block table points at a
+  set of blocks that don't write `$D01C`. Mixed frames build the cumulative `mux_s_d01c`
+  (`mux_mixed_d01c`) and use the other block set. The table (`mux_t_blk_lo/hi`) is rewritten
+  for the back buffer only when its mode changes (`mux_set_blocks`), so the IRQ pays nothing.
+- **End of the slot list.** `mux_s_free[end]` = `$FF` (a sentinel), so the zone block's
+  "next slot free already?" test fails after the last slot and the end test is off the fast
+  path. `mux_b_end` moved to `mux_s_col + 24` to make room.
+- **`mux_update_fast`**: a label only fast frames reach, at its own address just before the
+  common `mux_update_end`. `budget.json` profiles `mux_update → mux_update_fast` to check the fast
+  path on its own in a spike that overloads rows (a slow frame's pass is restarted by the next
+  `mux_update`). It costs 8 cycles a frame.
+- **Fair flicker** (pinning off): see [Overflow: fair flicker](#overflow-fair-flicker). As built,
+  `mux_slow_fail` drops at once a sprite with age 0 (it can't beat anyone). Otherwise it scans the
+  last 8 kept for the youngest that is *strictly* younger than v (later wins ties). A dry run then
+  computes slot k−2's done line with w removed. Each shifted slot's partner 8 places earlier is
+  before w, so free lines don't move and only v needs checking. If v fits, the commit shifts
+  `mux_kept`/`mux_s_y` down, puts v in slot k−1, re-simulates from max(w, base + 8), and counts
+  w as dropped (age + 1).
+
 ### Overflow: fair flicker
 
 When a sprite doesn't fit, something must be dropped for this frame. Simon's decision is that
@@ -640,6 +702,65 @@ them:
 | All IRQ time in one frame | 1,982–3,452 | 2,067–3,562 (600 frames) | **3,750** | 3,300 |
 | Free per frame (`spike_idle_min` × 16) | 5,888 | (none) | **≥ 5,300** (the game promise, see [Frame budget](#frame-budget)) | ≥ 5,000 |
 
+**Measured in stage 3** (VICE 3.10 x64sc PAL, DEBUG, 2026-09-29/30). Raster cycles in the spike,
+DMA included, min / avg / max, all through the budget runner (`profile_excl_irq`, the same method
+as `make test`) with a scratch `budget.json` that sets 600 samples on every routine. The zone
+figures come from `tests/engine/multiplexer/measure.py 300`.
+
+*Phase A, the fast path*, measured on the stage 2 spike motion (≤ 8 per window, so every frame
+is a fast frame). Before = stage 2 code, re-measured the same way (it reproduced the stage 2
+record exactly):
+
+| Routine | Stage 2 | Stage 3 fast path | Change |
+|---|---|---|---|
+| `mux_sort` | 479 / 705 / 3,315 | 455 / 703 / 3,315 | unchanged (not touched) |
+| `mux_select` | 2,364 / 2,832 / 3,295 | 2,771 / 3,455 / 3,933 | now includes the build |
+| `mux_build` | 2,349 / 2,767 / 3,272 | 142 / 186 / 283 | now only the per-buffer tail |
+| select + build (avg) | 5,599 | 3,641 | −1,958 |
+| **`mux_update`** | 5,263 / **6,240** / 8,595 | 3,526 / **4,264** / 6,896 | **−1,976 avg (−32%)**; target ≤ 5,000 met |
+| `mux_irq_top` → `irq_exit_rti` | 378 | 378 | unchanged |
+| `mux_irq_zone` → `irq_exit_rti` (1,000 IRQs) | 744 / 968 / 1,482 | 631 / 897 / 1,484 | −71 avg |
+| One zone slot, block to block, DEBUG (min over 4,800 slots) | 78 | **62** | −16 (release 67 → 53, counted) |
+| All IRQ time per frame (600 frames) | 2,067–3,555 | 1,831–3,549 | the max is waits and DMA |
+| Free per frame (`spike_idle_min` × 16) | 5,888 | **8,352** | +2,464 |
+
+**Zone IRQ per-slot review.** The stage 2 "~190 per slot" was block to block *including waits and
+DMA*. The code's own cost is the minimum: 78 cycles in stage 2, 62 now (DEBUG, uniform
+multicolour). The 16 cycles come from three changes:
+- no `$D01C` write when the multicolour bit is uniform: −8;
+- the end-of-list test moved off the fast path by the `$FF` sentinel in `mux_s_free[end]`: −6;
+- the DEBUG late check compares the Y just written with the raster: −2. It reads the raster
+  4 cycles after the Y store, which makes it slightly stricter.
+
+The rest of the spread (62 to 250 in the histogram) is the zone IRQ waiting for the hardware
+sprite to free, plus badlines and sprite DMA. Those are scheduling, not code. The worst
+slot-to-Y margin is 8 lines (stage 2: 7).
+
+*Phase B, fair flicker*, measured on the stage 3 spike, which overloads rows: D breathes down to
+9 lines, so windows hold up to 24 sprites.
+
+| Routine | Stage 3, overloaded spike | Budget now (raster) | Proposed for the Technical Director |
+|---|---|---|---|
+| `mux_update`, **fast frames only** (`mux_update` → `mux_update_fast`, 600) | 3,522 / **4,300** / 6,950 | avg **≤ 5,000**, max 9,050 (new check, stage 3) | (as is) |
+| `mux_update`, all frames incl. flicker (1,500) | 3,526 / 5,090 / 10,774 | 9,050 max, 6,550 avg (stage 2); and the rule 3 check, avg 5,000, measures all frames | max ≈ 11,350+ (see the 3,000-pass max); the rule 3 check to fast frames only (the new check does that) |
+| Slow part of a flicker frame (`mux_slow` → `mux_sel_done`, 300) | 1,136 / 3,552 / 7,191 | (none) | (none) |
+| `mux_select` (600) | 2,339 / 3,662 / 7,518 (8,145 seen in `make test`) | 3,450 (stage 2: select only) | from the 3,000-pass max + 5% |
+| `mux_build` (600: tail + rebuild in slow frames) | 142 / 768 / 1,956 | 3,450 | ≈ 2,050 (tighter: it's now only the tail + rebuild) |
+| `mux_sort` (600) | 479 / 693 / 2,894 | 3,500 | (as is) |
+| `mux_irq_top` → `irq_exit_rti` | 378 (> 8 slots) / 387 (≤ 8 slots, ends in `IrqDone`) | 378 | 387: both paths are exact; the ≤ 8-slot one only occurs in the overloaded spike |
+| `mux_irq_zone` → `irq_exit_rti` (1,000) | 159 / 804 / 1,520 | 1,600 | (as is) |
+| All IRQ time per frame (600) | 736–3,577 | 3,750 | (as is) |
+| `mux_max_age` (pinning off) | **2** (P = 0 target: 2) | ≤ 4 (stage 4's target) | (as is) |
+| `irq_late_count`, `mux_late_count`, `spike_overrun_count` | 0, 0, 0 | 0 | (as is) |
+| Free per frame (`spike_idle_min` × 16) | **5,808–5,824** | ≥ 5,300 | (as is) |
+
+Flicker frames were 2,955 of the ~6,000 frames in that run, with 24,253 sprites dropped or evicted,
+about 8 per flicker frame. The slow part averages 3,552, so a drop or eviction costs about 430
+raster cycles, the dry run and re-simulation included (derived, not profiled one by one: estimate
+#12). The fast path in non-overflow frames didn't regress: the same engine on the phase A spike
+measured 4,269 avg (4,264 before flicker; +7 is the fast-frame exit test), and 4,300 in the
+overloaded spike's fast frames, whose motion and DMA differ.
+
 ### Budget units
 
 Decided after stage 2 (Technical Director): **every multiplexer budget is raster time in the
@@ -693,7 +814,7 @@ stage 2:
 **Target:** `mux_update` **average ≤ 5,000 raster cycles** over 600 passes of the spike (from 6,240,
 about −20%; ≈ 4,000 CPU), max unchanged (≤ 9,050: the sort stress), and `spike_idle_min` × 16 ≥
 5,300 throughout. Checked by `mux_update fast path (rule 3 target)` in `budget.json` from stage 3
-on, and it stays met through stage 4 (frames without overflow must not pay for flicker or pinning,
+on (all frames), and by `mux_update fast path, frames with no overflow` (to `mux_update_fast`, added in stage 3), and it stays met through stage 4 (frames without overflow must not pay for flicker or pinning,
 beyond the pinned pre-pass).
 
 The estimates the stage 2 budgets replace (design, before stage 2), kept for the record:
@@ -714,10 +835,10 @@ The estimates the stage 2 budgets replace (design, before stage 2), kept for the
 | Label | Meaning | Spike requires |
 |---|---|---|
 | `mux_late_count` | Slots the zone IRQ reached on or after their Y line | 0 |
-| `mux_max_age` | Highest `mux_age` ever reached by an **unpinned** sprite (stage 2: by any sprite) | ≤ 4 (the target for 4 pinned + 20 unpinned; see the flicker table) |
+| `mux_max_age` | Highest `mux_age` ever reached by an **unpinned** sprite (stages 2–3: by any sprite; no pinning yet) | ≤ 4 (the target for 4 pinned + 20 unpinned; see the flicker table). Stage 3 measured 2 with pinning off, meeting the P = 0 target |
+| `mux_drop_count` | Sprites dropped **or evicted** in the last `mux_update` | (reported only) |
 | `mux_pin_drop_count` | Times a pinned sprite in the shown range was dropped (saturating). **Stage 4**: not in the stage 2 build | 0 |
 | `mux_pin_excess_count` | Frames with more than `MUX_MAX_PINNED` sprites flagged pinned (saturating). **Stage 4**: not in the stage 2 build | 0 in the budget run; the soak test forces it on purpose |
-| `mux_drop_count` | Sprites dropped in the last `mux_update` | (reported only) |
 
 ---
 
@@ -831,8 +952,8 @@ happen to land. The old table counted them twice.
 |---|---|---|
 | Whole frame | 19,656 | **Measured** ([vic-ii-timing.md](../docs/reference/vic-ii-timing.md#frame-geometry)) |
 | All IRQs: framework, `mux_irq_top`, zone IRQs, one fixed game entry | ≤ 3,750 | **Measured** 2,067–3,562 over 600 frames (stage 2 spike) + ~5% |
-| `mux_update`, common case (no overflow) | 6,240 avg (≤ 6,550); **target ≤ 5,000** from stage 3 ([Fast path](#fast-path)) | **Measured**, 600 passes |
-| `mux_update`, worst frame in the spike (the sort of three reversed groups) | 8,595 (≤ 9,050) | **Measured**. Overflow frames (stage 3) and pinned evictions (stage 4) are measured when built |
+| `mux_update`, common case (no overflow) | **4,264** avg (stage 3 fast path; target ≤ 5,000; stage 2 was 6,240) | **Measured**, 600 passes |
+| `mux_update`, worst frame in the spike | 10,774 (a crowded flicker frame; over the stage 2 budget of 9,050, re-baseline proposed to the Technical Director). The sort stress is 6,950 | **Measured**, 1,500 passes (stage 3). Pinned evictions (stage 4) are measured when built |
 | **Left for game logic, music and everything else** | **≥ 7,200 promised** | Checked in every frame by `spike_idle_min` × 16 ≥ 5,300 (see below). Stage 2 measured ≥ 7,795 in the worst frame |
 
 **How the promise is checked.** In the spike, game logic is `spike_move`, **measured** at
@@ -847,8 +968,11 @@ In a common-case frame the game gets far more than 7,200:
 |---|---|
 | Whole frame | 19,656 |
 | All IRQs (up to) | − 3,562 |
-| `mux_update` (average) | − 6,240 |
-| **Left for the game** | ≈ 9,850 (≈ 11,100 once the fast path hits 5,000) |
+| `mux_update` (average, stage 3 fast path; stage 2 was 6,240) | − 4,264 |
+| **Left for the game** | ≈ 11,830 (stage 2: ≈ 9,850) |
+
+In the stage 3 spike's worst flicker frame the idle loop still had 5,824 (≥ 5,300), so the
+≥ 7,200 promise holds with overload too.
 
 Music (a typical player's cost is *unmeasured*) comes out of the game's share. Stages 3 and 4
 must keep `spike_idle_min` × 16 ≥ 5,300. If flicker or pinning can't, the Technical Director
@@ -1027,6 +1151,16 @@ Stage 2 results: 8,000 frames with `mux_late_count`, `irq_late_count`, `spike_dr
 Screenshots: `screenshots/multiplexer-24-sprites.png`, `screenshots/multiplexer-full-rows-dmin.png`
 (three nearly full rows at D = 39), `screenshots/multiplexer-stage2-5000-frames.png`.
 
+**As built in stage 3.** The same motion, but D breathes from `SPIKE_DLO` = DMIN − 30 (9 lines)
+up to DMIN + 20. While D ≥ DMIN nothing overflows (fast frames); below it the three rows crowd
+into one another, down to the whole 24 inside ~25 lines, where only 8 can be shown and three
+sets rotate. `spike_drop_total` (drops and evictions, summed) and `spike_flicker_frames` (frames
+with at least one) are reported, not required. Results: see [Multiplexer costs](#multiplexer-costs),
+phase B. Screenshots: `screenshots/multiplexer-stage3-fastpath.png` (phase A, 24 shown),
+`screenshots/multiplexer-overload-rotation-a.png` and `screenshots/multiplexer-overload-rotation-b.png`
+(two consecutive frames of a crowded layout: different sprites shown, so they take turns rather
+than vanish).
+
 The design for stages 3–4:
 
 - Memory: VIC bank 0, screen `$0400` (`MUX_SCREEN`), sprite data from `$2000` (pointers
@@ -1080,10 +1214,10 @@ records them in the reference docs as measured, and updates this page and the bu
 | 9 | Zone IRQ trigger-to-first-write, and per-slot write time, under worst DMA | **Measured** (stage 2): first write 0–1 lines after the free line (2 once in 2,000); a slot 78 cycles with no DMA, up to ~2 lines with it. `MUX_WRITE_LINES` raised to 2 (1 gave 139 late slots in 3,000 frames) | `MUX_IRQ_LINES`, `MUX_WRITE_LINES` | `multiplexer` spike, `measure.py`, `mux_late_count` = 0 |
 | 10 | Sort, select, build and IRQ costs | **Measured** (stage 2, no flicker/pinning): see [Multiplexer costs](#multiplexer-costs). Over the estimates; budgets re-baselined to the 600-pass raster figures (Technical Director) | Budgets | `multiplexer` spike |
 | 11 | Badline steal when the badline starts during IRQ entry (3 consecutive writes) | 40 | Only for cycle-exact code across a badline | Listed as unmeasured in vic-ii-timing.md |
-| 12 | Cost of one eviction (remove, shift, re-simulate) | ~350 | Select budget, `MUX_PIN_EVICT_MAX` | `multiplexer` spike: profile an eviction path |
+| 12 | Cost of one eviction (remove, shift, re-simulate) | ~350 design; **~430 raster per drop or eviction on average, derived** (stage 3: slow part 3,552 avg / ~8 per flicker frame); not profiled one by one | Select budget, `MUX_PIN_EVICT_MAX` | `multiplexer` spike: profile an eviction path |
 | 13 | Pinned pre-pass (effective pinned set, excess count) | ~150 | Select budget | `multiplexer` spike |
 | 14 | Whether `MUX_PIN_EVICT_MAX` = 8 is ever reached in the spike and soak | Not reached | The pinned guarantee | Soak: `mux_pin_drop_count` = 0; if not, raise the cap and re-cost it |
-| 15 | Flicker targets in the table in [Overflow](#overflow-fair-flicker) | ⌈n / (8 − P)⌉ − 1 | `mux_max_age` checks | Spike and soak |
+| 15 | Flicker targets in the table in [Overflow](#overflow-fair-flicker) | ⌈n / (8 − P)⌉ − 1; **P = 0 measured**: `mux_max_age` 2 in the stage 3 spike with up to 24 in a window | `mux_max_age` checks | Spike and soak |
 
 ---
 

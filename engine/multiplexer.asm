@@ -1,9 +1,9 @@
-// engine/multiplexer.asm: sprite multiplexer v1 (M3 stage 2). Design contract:
+// engine/multiplexer.asm: sprite multiplexer v1 (M3 stage 3). Design contract:
 // engine/README.md#sprite-multiplexer-v1-enginemultiplexerasm
 //
-// STAGE 2 SCOPE: sort, select (scheduling simulation, keep or drop), build, zone IRQs, double
-// buffer. NOT YET: fair flicker (stage 3) and pinned sprites (stage 4). A sprite that doesn't fit
-// is dropped for the frame (mux_drop_count), with no rotation; mux_flags bit 7 is ignored.
+// STAGE 3 SCOPE: sort, fast-path select (the build merged into the keep path), slow path with
+// rebuild, zone IRQs, double buffer, constant $D01C when every sprite has the same multicolour
+// bit. NOT YET: pinned sprites (stage 4): mux_flags bit 7 is ignored.
 //
 // API (engine/README.md#api)
 //   mux_init      Hide all virtual sprites, reset. Call once, before irq_init. Uses A, X.
@@ -28,17 +28,23 @@
 // hardware sprite k & 7), carries on with k+1 if its sprite is free (waiting up to 2 lines),
 // re-arms if it's further away, and ends the chain entry (IrqDone) after the last slot.
 //
-// Measured cost (VICE 3.10 x64sc PAL, DEBUG, tests/engine/multiplexer, 300 passes, 2026-09-29;
-// engine/README.md#multiplexer-costs). CPU = no DMA (sprites and DEN off); raster = in the spike,
-// 24 sprites, main loop running through the display:
-//                          CPU min/avg/max          raster min/avg/max
-//   mux_sort               436 / 598 / 2,237        479 / 695 / 2,894   (max: the spike reverses 3 x 8)
-//   mux_select             2,165 / 2,183 / 2,193    2,374 / 2,774 / 3,286
-//   mux_build              2,175 / 2,183 / 2,189    2,352 / 2,743 / 3,127
-//   mux_update             4,826 / 4,984 / 6,639    5,647 / 6,342 / 8,603
-//   mux_irq_top -> rti     378 (every pass, border)
-//   mux_irq_zone -> rti    702 / 909 / 1,448        745 / 967 / 1,489   (8 slots, incl. waits)
-//   zone slot, back to back 78 (DEBUG; 67 release)  78-~190 with DMA and waits
+// Fast path (engine/README.md#fast-path): while every sprite fits, the selection writes each
+// kept sprite's slot (Y, X, pointer, colour, cumulative $D010, free line, done line) as it goes,
+// and never writes mux_kept or mux_age. The first sprite that doesn't fit switches the rest of
+// the frame to the slow path (mux_sel_fail): mux_kept is filled in, and at the end the slots from
+// the first change onwards are rebuilt from mux_kept.
+//
+// Measured cost (VICE 3.10 x64sc PAL, DEBUG, raster cycles in tests/engine/multiplexer, DMA
+// included, profile_excl_irq via the budget runner, 600 passes; engine/README.md#multiplexer-costs):
+//                          stage 2 min/avg/max      stage 3 fast path (spike <= 8 per window)
+//   mux_sort               479 / 705 / 3,315        455 / 703 / 3,315
+//   mux_select             2,364 / 2,832 / 3,295    2,771 / 3,455 / 3,933   (now includes the build)
+//   mux_build              2,349 / 2,767 / 3,272    142 / 186 / 283         (now the per-buffer tail)
+//   mux_update             5,263 / 6,240 / 8,595    3,526 / 4,264 / 6,896   (target avg <= 5,000)
+//   mux_irq_top -> rti     378                      378 (387 when <= 8 slots: IrqDone, not IrqRearm)
+//   mux_irq_zone -> rti    744 / 968 / 1,482        631 / 897 / 1,484 (1,000 IRQs)
+//   zone slot, back to back 78 (DEBUG)              62 (DEBUG, uniform multicolour; 53 release, counted)
+// Overflow frames (fair flicker) and the overloaded spike: engine/README.md#multiplexer-costs.
 //
 // Constraints:
 //   - Slot k >= 8 is kept only if the scheduling simulation (MUX_FREE_AFTER, MUX_IRQ_LINES,
@@ -46,6 +52,7 @@
 //     counts slots the IRQ reached on or after their Y line: must stay 0.
 //   - No fixed chain entry between MUX_TOP_LINE and MUX_Y_MAX + 2.
 //   - A zone IRQ's raster span includes DMA (badlines, sprites); see engine/README.md#dma-inside-an-irq.
+//   - Self-modifying: the selection loops' mux_order operands (code must be in RAM, as it is).
 
 .errorif zp_mux_front > $ff, "zp_mux_front must be in zero page"
 .errorif zp_mux_ready > $ff, "zp_mux_ready must be in zero page"
@@ -64,6 +71,7 @@
 .const MUX_WRITE_LINES = 2              // measured: 1 gave mux_late_count 139 in 3,000 frames (a slot takes
                                         // 78 cycles with no DMA, up to ~2 lines with it); 2 gives 0, with
                                         // >= 7 lines of margin on full rows (README #9)
+.const MUX_GAP_MIN     = MUX_FREE_AFTER + MUX_IRQ_LINES + MUX_WRITE_LINES   // 25: y[k] - y[k-8] at least
 .const MUX_BUF         = 32             // buffer 1's base index in the slot arrays
 
 // Spare indices 24-31 of each buffer hold per-buffer values (written by mux_update, read by mux_irq_top).
@@ -81,25 +89,38 @@
 // Data
 // ------------------------------------------------------------------------------------------
 
-// Slot arrays: 8 x 64 bytes in two aligned pages, so no indexed read crosses a page.
-// mux_s_y sits at page offset $40 so the selection's mux_s_y - 8 + x (x >= 8) stays in the page.
+// Slot arrays: 64 bytes each, in aligned pages, so no indexed read crosses a page.
+// mux_s_y sits at page offset $40 so the selection's mux_s_y - 8 + x (x >= 8) stays in the page;
+// mux_s_d010 and mux_s_d01c sit at $40 / $80 so their "previous slot" reads (- 1 + x, x >= 0)
+// stay in the page too (they read mux_s_free + 63 / mux_s_d010 + 63 at x = 0: never written).
 .align $100
 mux_s_xlo:      .fill 64, 0             // X bits 0-7
 mux_s_y:        .fill 64, 0             // Y
 mux_s_ptr:      .fill 64, 0             // sprite pointer
 mux_s_col:      .fill 64, 0             // colour
+mux_s_free:     .fill 64, 0             // line on which slot k's hardware sprite is free (k >= 8); $FF after the last
 mux_s_d010:     .fill 64, 0             // cumulative $D010 after this slot is written
-mux_s_free:     .fill 64, 0             // line on which slot k's hardware sprite is free (k >= 8)
-mux_s_d01c:     .fill 64, 0             // cumulative $D01C after this slot is written
-mux_kept:       .fill 64, 0             // virtual sprite in this slot (mux_update only)
+mux_s_d01c:     .fill 64, 0             // cumulative $D01C after this slot is written (mixed multicolour only)
+mux_kept:       .fill 64, 0             // virtual sprite in this slot (slow path and mixed multicolour only)
+mux_s_done:     .fill 64, 0             // simulated line on which the zone IRQ has written slot k (main loop only)
 
-// Per-buffer values at index base + 24 (never a slot)
-.label mux_b_end  = mux_s_free + MUX_SPARE   // end index (base + count)
+// Per-buffer values at index base + 24 (never a slot; mux_s_free + 24 is the $FF sentinel of a full buffer)
+.label mux_b_end  = mux_s_col  + MUX_SPARE   // end index (base + count)
 .label mux_b_d015 = mux_s_ptr  + MUX_SPARE   // $D015 for the frame
 .label mux_b_d010 = mux_s_d010 + MUX_SPARE   // $D010 after slots 0-7
 .label mux_b_d01c = mux_s_d01c + MUX_SPARE   // $D01C after slots 0-7
 
-.function mux_zone_blk(j) {
+.function mux_zone_blk(j, mixed) {
+        .if (mixed) {
+            .if (j == 0) .return mux_zone_m0
+            .if (j == 1) .return mux_zone_m1
+            .if (j == 2) .return mux_zone_m2
+            .if (j == 3) .return mux_zone_m3
+            .if (j == 4) .return mux_zone_m4
+            .if (j == 5) .return mux_zone_m5
+            .if (j == 6) .return mux_zone_m6
+            .return mux_zone_m7
+        }
         .if (j == 0) .return mux_zone_0
         .if (j == 1) .return mux_zone_1
         .if (j == 2) .return mux_zone_2
@@ -110,10 +131,12 @@ mux_kept:       .fill 64, 0             // virtual sprite in this slot (mux_upda
         .return mux_zone_7
 }
 
-// Constant tables, 64 entries indexed by slot index (either buffer): hardware sprite k & 7.
+// Zone block per slot index (either buffer): hardware sprite k & 7, from the uniform set (no
+// $D01C write) or the mixed set. mux_update rewrites a buffer's 24 entries when its multicolour
+// mode changes (mux_blk_mode); the IRQ only reads the front buffer's, so there's no race.
 .align $100
-mux_t_blk_lo:   .for (var i = 0; i < 64; i++) .byte <mux_zone_blk(i & 7)
-mux_t_blk_hi:   .for (var i = 0; i < 64; i++) .byte >mux_zone_blk(i & 7)
+mux_t_blk_lo:   .for (var i = 0; i < 64; i++) .byte <mux_zone_blk(i & 7, false)
+mux_t_blk_hi:   .for (var i = 0; i < 64; i++) .byte >mux_zone_blk(i & 7, false)
 mux_t_bit:      .fill 64, 1 << (i & 7)
 mux_t_nbit:     .fill 64, ($ff ^ (1 << (i & 7)))
 
@@ -127,14 +150,29 @@ mux_ptr:        .fill MUX_COUNT, 0
 mux_col:        .fill MUX_COUNT, 0
 mux_flags:      .fill MUX_COUNT, 0
 mux_order:      .fill MUX_COUNT + 1, i
-mux_age:        .fill MUX_COUNT, 0      // frames since last shown (saturating)
+mux_age:        .fill MUX_COUNT, 0      // frames since last shown (saturating); see mux_dirty
 mux_t_d015:     .byte $00, $01, $03, $07, $0f, $1f, $3f, $7f, $ff
+mux_tpl_lo:     .for (var i = 0; i < 16; i++) .byte <mux_zone_blk(i & 7, i >= 8)
+mux_tpl_hi:     .for (var i = 0; i < 16; i++) .byte >mux_zone_blk(i & 7, i >= 8)
 mux_back:       .byte 0                 // back buffer base during mux_update
+mux_mc_mode:    .byte 0                 // this frame: 0 all hires, 1 all multicolour, 2 mixed
+mux_blk_mode:   .byte 0, 0              // per buffer: 0 uniform zone blocks in mux_t_blk, 1 mixed
+mux_slow_from:  .byte 0                 // $FF: fast frame; else the first slot to rebuild
+mux_dirty:      .byte 0                 // 1: some mux_age may be non-zero (a sprite was dropped)
 mux_vars_end:
         .errorif (mux_x_lo >> 8) != ((mux_vars_end - 1) >> 8), "multiplexer variables cross a page"
+        // The selection indexes mux_order with the slot index (base 0 or 32) from a self-modified
+        // low byte: mux_order + skipped - base + x must stay in this page for any base.
+        .errorif (mux_order & $ff) < MUX_BUF, "mux_order must be at page offset >= MUX_BUF"
+
+// Slow-path scratch (eviction)
+mux_ev_b8:      .byte 0                 // base + 8
+mux_ev_lo:      .byte 0                 // k - 8
+mux_ev_k1:      .byte 0                 // k - 1
+mux_ev_j0:      .byte 0                 // max(w, base + 8)
 
 #if DEBUG
-mux_late_count: .byte 0                 // slots the zone IRQ reached on or after their Y line (saturating)
+mux_late_count: .byte 0                // slots the zone IRQ reached on or after their Y line (saturating)
 mux_max_age:    .byte 0                 // highest mux_age ever reached
 mux_drop_count: .byte 0                 // sprites dropped in the last mux_update
 #endif
@@ -166,6 +204,7 @@ mux_init:
         sta mux_b_d015
         sta mux_b_d010
         sta mux_b_d01c
+        sta mux_dirty
         sta MUX_VIC_ENABLE
 #if DEBUG
         sta mux_late_count
@@ -230,103 +269,106 @@ mux_sort:
         jmp !next-
 mux_sort_end:
 
-// Walk the sorted list and keep each shown sprite the zone IRQs can write in time.
-// Slots 0-7 (written by mux_irq_top on line 16) always fit. Slot k >= 8 simulates the IRQs:
-//   free  = y[k-8] + MUX_FREE_AFTER
-//   start = max(free + MUX_IRQ_LINES, done[k-1]);  done = start + MUX_WRITE_LINES;  fits: done <= y
-// Writes mux_s_y, mux_s_free, mux_kept, mux_b_end; ages (0 kept, +1 dropped).
-// X = slot index (base + k), zp_tmp0 = order index, zp_tmp1 = y, zp_tmp2 = done[k-1], zp_tmp3 = base + 8
-// Cost: ~55 per kept sprite in slots 0-7, ~100 in slots 8+ (counted); measured CPU 2,165-2,193
-// for 24 shown sprites
+// Fast-path selection: walk the sorted list and give each shown sprite its slot, writing the
+// slot arrays directly (the build is merged into the keep path).
+//   Setup: multicolour mode (unrolled over the 24 flags), skip the sprites above MUX_Y_MIN
+//   (sorted first), point both loops' mux_order operand at order index = skipped + (x - base).
+//   Loop 1, slots 0-7 (written by mux_irq_top on line 16): always fit.
+//   Loop 2, slots 8+: simulate the zone IRQs. With free = y[k-8] + MUX_FREE_AFTER,
+//     start = max(free + MUX_IRQ_LINES, done[k-1]); done = start + MUX_WRITE_LINES; fits: done <= y.
+//     A new IRQ fits exactly when y - y[k-8] >= MUX_GAP_MIN, which is checked first (and bounds
+//     every sum below 256); carrying on in slot k-1's IRQ also needs done[k-1] + WRITE <= y.
+//   The first sprite that doesn't fit leaves for the slow path (mux_sel_fail), for the rest of
+//   the frame.
+// X = slot index (base + k), Y = virtual sprite, zp_tmp3 = base + 8
+// Cost (counted): setup ~150; loop 1 68-70 per slot; loop 2 108 (new IRQ) / 124 (carry on) per slot
 mux_select:
+        lda mux_flags + 0               // multicolour mode: OR of bit 0 over all 24 = 0 -> all hires
+        .for (var i = 1; i < MUX_COUNT; i++) ora mux_flags + i
+        and #1
+        beq !mode+                      // mode 0
+        lda mux_flags + 0               // AND of bit 0 = 1 -> all multicolour
+        .for (var i = 1; i < MUX_COUNT; i++) and mux_flags + i
+        and #1
+        bne !mode+                      // mode 1
+        lda #2                          // mixed
+!mode:  sta mux_mc_mode
+
+        ldy #0                          // skip sprites above MUX_Y_MIN: they sort first
+!:      ldx mux_order,y                 // 4
+        lda mux_y,x                     // 4
+        cmp #MUX_Y_MIN                  // 2
+        bcs !+                          // 2  (the sentinel's $FF stops it)
+        iny                             // 2
+        bne !-                          // 3  always
+!:      tya                             // order operand = mux_order + skipped - base
+        clc
+        adc #<mux_order
+        sec
+        sbc mux_back
+        sta mux_sel_ord1 + 1
+        sta mux_sel_ord2 + 1
         ldx mux_back
         txa
         clc
         adc #8
         sta zp_tmp3
+        lda #$ff
+        sta mux_slow_from               // fast frame so far
         lda #0
-        sta zp_tmp0
-        sta zp_tmp2
+        sta mux_s_done + 7,x            // done[base + 7] = 0: slot 8's IRQ is always new
 #if DEBUG
         sta mux_drop_count
 #endif
-        beq !walk+                      // always
 
-!skip:  inc zp_tmp0                     // above MUX_Y_MIN: not shown
-!walk:  ldy zp_tmp0                     // 3
-        lda mux_order,y                 // 4
-        tay                             // 2  Y = virtual sprite
+mux_sel_l1:                             // slots 0-7
+mux_sel_ord1:
+        lda mux_order,x                 // 4  self-modified low byte
+        tay                             // 2
         lda mux_y,y                     // 4
-        cmp #MUX_Y_MIN                  // 2
-        bcc !skip-                      // 2
         cmp #MUX_Y_MAX + 1              // 2
-        bcs !end+                       // 2  sorted: everything after is below the range, hidden, or the sentinel
-        cpx zp_tmp3                     // 3
-        bcs !sim+                       // 2
-!keep:  sta mux_s_y,x                   // 5
-        tya                             // 2
-        sta mux_kept,x                  // 5
-        lda #0                          // 2
-        sta mux_age,y                   // 5
+        bcs !end1+                      // 2  sorted: the rest are below the range, hidden, or the sentinel
+        sta mux_s_y,x                   // 5
+        lda mux_x_lo,y                  // 4
+        sta mux_s_xlo,x                 // 5
+        lda mux_ptr,y                   // 4
+        sta mux_s_ptr,x                 // 5
+        lda mux_col,y                   // 4
+        sta mux_s_col,x                 // 5
+        lda mux_x_hi,y                  // 4  cumulative $D010: this slot's bit from X bit 8
+        beq !clr+                       // 2/3
+        lda mux_s_d010 - 1,x            // 4
+        ora mux_t_bit,x                 // 4
+        bne !st+                        // 3  always
+!clr:   lda mux_s_d010 - 1,x            // 4
+        and mux_t_nbit,x                // 4
+!st:    sta mux_s_d010,x                // 5
         inx                             // 2
-        inc zp_tmp0                     // 5
-        jmp !walk-                      // 3
+        cpx zp_tmp3                     // 3
+        bne mux_sel_l1                  // 3  = 68-70 per slot
+        beq mux_sel_l2                  // 3  always (Z = 1): once per frame
+!end1:  jmp mux_sel_done                // (branch range)
 
-!sim:   sta zp_tmp1                     // C = 1 here
-        lda mux_s_y - 8,x               // y[k-8]
-        adc #MUX_FREE_AFTER - 1         // + MUX_FREE_AFTER (C was 1)
-        bcs !drop+                      // past line 255: can't fit
-        sta mux_s_free,x
-        adc #MUX_IRQ_LINES              // C = 0
-        bcs !drop+
-        cmp zp_tmp2
-        bcs !+
-        lda zp_tmp2                     // carry on in the IRQ that wrote slot k-1
-!:      clc
-        adc #MUX_WRITE_LINES
-        bcs !drop+
-        cmp zp_tmp1
-        beq !fit+                       // done == y: fits
-        bcs !drop+                      // done > y
-!fit:   sta zp_tmp2
-        lda zp_tmp1
-        jmp !keep-
-
-!drop:  lda mux_age,y                   // Y = virtual sprite
-        clc
-        adc #1
-        bcs !+                          // saturate at 255
-        sta mux_age,y
-#if DEBUG
-        cmp mux_max_age
-        bcc !+
-        sta mux_max_age
-#endif
-!:
-#if DEBUG
-        inc mux_drop_count
-#endif
-        inc zp_tmp0
-        jmp !walk-
-
-!end:   txa                             // end index = base + count
-        ldx mux_back
-        sta mux_b_end,x
-mux_select_end:
-
-// Copy the kept sprites into the back buffer's slot arrays, with the cumulative $D010 / $D01C
-// per slot, and the per-buffer $D015 / $D010 / $D01C for mux_irq_top.
-// X = slot index, Y = virtual sprite, zp_tmp0 = cumulative $D010, zp_tmp1 = $D01C, zp_tmp2 = end
-// Cost: ~88 per slot (counted); measured CPU 2,175-2,189 for 24 slots
-mux_build:
-        lda mux_b_end,x                 // X = base (from mux_select)
-        sta zp_tmp2
-        lda #0
-        sta zp_tmp0
-        sta zp_tmp1
-        cpx zp_tmp2
-        beq !top+                       // nothing shown
-!loop:  ldy mux_kept,x                  // 4
+mux_sel_l2:                            // slots 8+
+mux_sel_ord2:
+        lda mux_order,x                 // 4  self-modified low byte
+        tay                             // 2
+        lda mux_y,y                     // 4
+        cmp #MUX_Y_MAX + 1              // 2
+        bcs mux_sel_done                // 2
+        sta mux_s_y,x                   // 5  speculative: a sprite that doesn't fit leaves the frame's fast path
+        sec                             // 2
+        sbc mux_s_y - 8,x               // 4  y - y[k-8] (sorted: 0-219)
+        cmp #MUX_GAP_MIN                // 2
+        bcc mux_sel_fail                // 2  too close to the sprite 8 places earlier
+        lda mux_s_y - 8,x               // 4
+        adc #MUX_FREE_AFTER - 1         // 2  C = 1: free = y[k-8] + FREE_AFTER (<= 227: no overflow)
+        sta mux_s_free,x                // 5
+        adc #MUX_IRQ_LINES              // 2  C = 0: start, if a new IRQ
+        cmp mux_s_done - 1,x            // 4
+        bcc !carry+                     // 2  slot k-1's IRQ is still writing: carry on in it
+        adc #MUX_WRITE_LINES - 1        // 2  C = 1: done = start + WRITE (fits: the gap check)
+!ok:    sta mux_s_done,x                // 5  = 55 to here (new IRQ)
         lda mux_x_lo,y                  // 4
         sta mux_s_xlo,x                 // 5
         lda mux_ptr,y                   // 4
@@ -334,37 +376,68 @@ mux_build:
         lda mux_col,y                   // 4
         sta mux_s_col,x                 // 5
         lda mux_x_hi,y                  // 4
-        lsr                             // 2  C = X bit 8
-        lda zp_tmp0                     // 3
-        bcc !clr+                       // 2/3
+        beq !clr+                       // 2/3
+        lda mux_s_d010 - 1,x            // 4
         ora mux_t_bit,x                 // 4
-        bcs !st+                        // 3  always
-!clr:   and mux_t_nbit,x                // 4
-!st:    sta zp_tmp0                     // 3
-        sta mux_s_d010,x                // 5
-        lda mux_flags,y                 // 4
-        lsr                             // 2  C = multicolour
-        lda zp_tmp1                     // 3
-        bcc !clr+                       // 2/3
-        ora mux_t_bit,x                 // 4
-        bcs !st+                        // 3
-!clr:   and mux_t_nbit,x                // 4
-!st:    sta zp_tmp1                     // 3
-        sta mux_s_d01c,x                // 5
+        bne !st+                        // 3  always
+!clr:   lda mux_s_d010 - 1,x            // 4
+        and mux_t_nbit,x                // 4
+!st:    sta mux_s_d010,x                // 5
         inx                             // 2
-        cpx zp_tmp2                     // 3
-        bne !loop-                      // 3  = ~80 per slot
-// Per-buffer values: slots 0-7 are what mux_irq_top writes.
-!top:   txa
+        jmp mux_sel_l2                  // 3  = 108 per slot (new IRQ)
+!carry: lda mux_s_done - 1,x            // 4  C = 0
+        adc #MUX_WRITE_LINES            // 2  done = done[k-1] + WRITE
+        cmp mux_s_y,x                   // 4  done - y
+        beq !ok-                        // 3/2
+        bcc !ok-                        // 3  = 124 per slot (carry on)
+mux_sel_fail:
+        jmp mux_slow                    // X = slot, Y = virtual sprite, mux_s_y,x = its Y
+
+mux_sel_done:                           // X = end index
+mux_select_end:
+
+// Per-buffer values and anything the slow path, the mixed multicolour mode or the ages need.
+// In: X = end index (base + count)
+// Cost (counted): fast frame, uniform multicolour, ~110; the slow path adds the rebuild
+// (~70 per slot from the first change) and the age pass (~17 per slot); mixed multicolour adds
+// ~40 per slot
+mux_build:
+        lda #$ff                        // sentinel: the zone IRQ's "next slot free?" check fails after the last
+        sta mux_s_free,x
+        stx zp_tmp2                     // zp_tmp2 = end
+        txa
+        ldx mux_back
+        sta mux_b_end,x
+        lda mux_slow_from
+        bmi !fast+
+        jsr mux_rebuild                 // slow frame: slots from mux_slow_from, and the ages
+        jmp !mc+
+!fast:  lda mux_dirty                   // fast frame: every shown sprite was shown, so clear the ages
+        beq !mc+                        // once after a frame that dropped some (engine/README.md#fast-path)
+        lda #0
+        sta mux_dirty
+        .for (var i = 0; i < MUX_COUNT; i++) sta mux_age + i
+!mc:    lda mux_mc_mode
+        cmp #2
+        bne !+
+        jsr mux_mixed_d01c              // mixed multicolour: cumulative $D01C per slot
+!:
+// Slots 0-7 are what mux_irq_top writes: $D015 for min(count, 8), and the cumulative values after
+// the last of them.
+        ldx mux_back
+        lda zp_tmp2
         sec
         sbc mux_back                    // count
         cmp #9
         bcc !+
         lda #8
 !:      tay                             // min(count, 8)
-        ldx mux_back
         lda mux_t_d015,y
         sta mux_b_d015,x
+        lda mux_mc_mode                 // uniform: $D01C is 0 or $FF for the whole frame
+        beq !+
+        lda #$ff
+!:      sta mux_b_d01c,x
         dey                             // slot min(count, 8) - 1: its cumulative values
         bmi !none+
         tya
@@ -373,24 +446,48 @@ mux_build:
         tay
         lda mux_s_d010,y
         sta mux_b_d010,x
+        lda mux_mc_mode
+        cmp #2
+        bne !blk+
         lda mux_s_d01c,y
         sta mux_b_d01c,x
-        jmp !done+
+        jmp !blk+
 !none:  lda #0
         sta mux_b_d010,x
-        sta mux_b_d01c,x
-!done:
+// Zone blocks for this buffer: the uniform set (no $D01C write) or the mixed set.
+!blk:   lda mux_mc_mode
+        cmp #2
+        lda #0
+        rol                             // C from cmp: 1 = mixed
+        ldy #0
+        cpx #0
+        beq !+
+        iny                             // Y = buffer number
+!:      cmp mux_blk_mode,y
+        beq !+
+        jsr mux_set_blocks              // rare: only when the mode changes
+!:
 mux_build_end:
-        lda #1
-        sta zp_mux_ready
-        clc
+        lda #1                          // 2
+        sta zp_mux_ready                // 3
+        bit mux_slow_from               // 4  N = 0: a slow frame
+        bpl mux_update_end              // 2
+// Reached only in fast frames (no drop, no eviction), at its own address: budget.json profiles
+// mux_update -> mux_update_fast to get the fast path on its own in a spike that overloads rows.
+mux_update_fast:
+        nop                             // 2  (gives the label an address of its own)
 mux_update_end:
+        clc                             // 2
         rts
+
+// ------------------------------------------------------------------------------------------
+// Slow path, fair flicker, rebuild and the rarely used helpers: engine/multiplexer_flicker.asm
+#import "engine/multiplexer_flicker.asm"
 
 // ------------------------------------------------------------------------------------------
 // TIMING: chain entry 0, line MUX_TOP_LINE (16, top border: no badlines, no sprites yet).
 // Swap in the back buffer if one is ready, write $D015/$D010/$D01C and slots 0-7, re-arm at
-// slot 8's free line (or end the entry if there are <= 8 slots). Budget 600 (estimate).
+// slot 8's free line (or end the entry if there are <= 8 slots). Budget 378 (a lock, measured).
 // Cost: measured 378 from mux_irq_top to irq_exit_rti, every pass (constant path; + 32 framework before it)
 mux_irq_top:
         lda zp_mux_ready                // 3
@@ -433,8 +530,8 @@ mux_irq_top:
 !done:  IrqDone()
 
 // ------------------------------------------------------------------------------------------
-// TIMING: zone IRQ, re-armed at slot zp_mux_slot's free line. Budget 550 per IRQ (estimate,
-// raster span, DMA included). Dispatches to the block for hardware sprite (slot & 7): 22 cycles.
+// TIMING: zone IRQ, re-armed at slot zp_mux_slot's free line. Budget: see budget.json (raster
+// span, DMA included). Dispatches to the block for hardware sprite (slot & 7): 22 cycles.
 mux_irq_zone:
         ldx zp_mux_slot                 // 3
         lda mux_t_blk_lo,x              // 4
@@ -458,21 +555,22 @@ mux_zone_rearm:
 
 // Block j writes slot X on hardware sprite j, then moves on to slot X+1 (block j+1 & 7):
 // straight in if its sprite is already free, after a wait if it frees within 2 lines, or
-// through a re-arm. In: X = slot index (base included).
-// Cost per slot: 48 (writes) + 19 (next slot free already) + 11 (DEBUG late check) = 78, measured
-// block to block with no DMA (67 in release).
-.macro MuxZoneBlock(j) {
+// through a re-arm. After the last slot, mux_s_free is $FF, so the "free already" test fails
+// and the end test runs only off the fast path. In: X = slot index (base included).
+// Cost per slot, block to block, next slot free already (counted): uniform 53 (release) /
+// 62 (DEBUG: + 9 late check); mixed + 8 for $D01C. Stage 2 was 67 / 78.
+.macro MuxZoneBlock(j, mixed) {
+        lda mux_s_y,x                   // 4
+        sta MUX_VIC_SPR + 1 + j * 2     // 4
 #if DEBUG
-        lda MUX_VIC_RASTER              // 4  late: the raster has reached the slot's Y line
-        cmp mux_s_y,x                   // 4
-        bcc !ok+                        // 3
-        inc mux_late_count
+        cmp MUX_VIC_RASTER              // 4  Y - raster: late if the raster is already on or past Y
+        beq !late+                      // 2
+        bcs !ok+                        // 3
+!late:  inc mux_late_count
         bne !ok+
         dec mux_late_count
 !ok:
 #endif
-        lda mux_s_y,x                   // 4
-        sta MUX_VIC_SPR + 1 + j * 2     // 4
         lda mux_s_xlo,x                 // 4
         sta MUX_VIC_SPR + j * 2         // 4
         lda mux_s_ptr,x                 // 4
@@ -480,17 +578,19 @@ mux_zone_rearm:
         lda mux_s_col,x                 // 4
         sta MUX_VIC_COLOR + j           // 4
         lda mux_s_d010,x                // 4
-        sta MUX_VIC_XMSB                // 4
-        lda mux_s_d01c,x                // 4
-        sta MUX_VIC_MCOLOR              // 4  = 48
+        sta MUX_VIC_XMSB                // 4  = 40 writes (uniform)
+        .if (mixed) {
+            lda mux_s_d01c,x            // 4
+            sta MUX_VIC_MCOLOR          // 4
+        }
         inx                             // 2
-        cpx zp_mux_end                  // 3
-        bne !more+                      // 3
-        jmp mux_zone_done
-!more:  lda mux_s_free,x                // 4
+        lda mux_s_free,x                // 4  next slot's free line ($FF after the last slot)
         cmp MUX_VIC_RASTER              // 4
-        bcc !next+                      // 3  free < raster: go   (= 19 from inx)
-        sbc #3                          // 2  C = 1: A = free - 3
+        bcc !next+                      // 3  free < raster: go   (= 13 from inx)
+        cpx zp_mux_end                  // 3
+        bne !+                          // 3
+        jmp mux_zone_done
+!:      sbc #2                          // 2  C = 0 (X < end): A = free - 3
         cmp MUX_VIC_RASTER              // 4
         bcc !wait+                      // 2  free - 3 < raster: frees within 2 lines
         jmp mux_zone_rearm
@@ -501,14 +601,23 @@ mux_zone_rearm:
 !next:
 }
 
-mux_zone_blocks:
-mux_zone_0:     MuxZoneBlock(0)
-mux_zone_1:     MuxZoneBlock(1)
-mux_zone_2:     MuxZoneBlock(2)
-mux_zone_3:     MuxZoneBlock(3)
-mux_zone_4:     MuxZoneBlock(4)
-mux_zone_5:     MuxZoneBlock(5)
-mux_zone_6:     MuxZoneBlock(6)
-mux_zone_7:     MuxZoneBlock(7)
+mux_zone_blocks:                        // uniform multicolour: $D01C is written once, by mux_irq_top
+mux_zone_0:     MuxZoneBlock(0, false)
+mux_zone_1:     MuxZoneBlock(1, false)
+mux_zone_2:     MuxZoneBlock(2, false)
+mux_zone_3:     MuxZoneBlock(3, false)
+mux_zone_4:     MuxZoneBlock(4, false)
+mux_zone_5:     MuxZoneBlock(5, false)
+mux_zone_6:     MuxZoneBlock(6, false)
+mux_zone_7:     MuxZoneBlock(7, false)
         jmp mux_zone_0
+mux_zone_m0:    MuxZoneBlock(0, true)   // mixed multicolour: cumulative $D01C per slot
+mux_zone_m1:    MuxZoneBlock(1, true)
+mux_zone_m2:    MuxZoneBlock(2, true)
+mux_zone_m3:    MuxZoneBlock(3, true)
+mux_zone_m4:    MuxZoneBlock(4, true)
+mux_zone_m5:    MuxZoneBlock(5, true)
+mux_zone_m6:    MuxZoneBlock(6, true)
+mux_zone_m7:    MuxZoneBlock(7, true)
+        jmp mux_zone_m0
 mux_zone_blocks_end:

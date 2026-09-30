@@ -1,6 +1,7 @@
-// multiplexer spike (M3 stage 2): 24 virtual sprites through engine/multiplexer.asm, sorted,
-// scheduled and written by zone IRQs, double buffered. No flicker or pinning yet (stages 3-4),
-// so the motion is designed to keep <= 8 sprites in every scheduling window, always:
+// multiplexer spike (M3 stage 3): 24 virtual sprites through engine/multiplexer.asm, sorted,
+// scheduled and written by zone IRQs, double buffered, with fair flicker. No pinning yet
+// (stage 4). The motion alternates between frames that keep <= 8 sprites in every scheduling
+// window (the fast path) and frames that overload them (flicker):
 //
 //   - Three groups of 8 (group g = v mod 3, member j = v / 3, so the virtual order interleaves
 //     the groups and the sort has real work to do).
@@ -9,7 +10,9 @@
 //     order within each group flips through a tie every 48 frames.
 //   - Group g's Y = b + g * D + off[j]. Because the offsets are identical, the sprite 8 places
 //     earlier in Y order is always exactly D lines higher, so the scheduling window holds 8.
-//   - D breathes between SPIKE_DMIN and SPIKE_DMIN + 20. SPIKE_DMIN is the scheduler's exact
+//   - D breathes between SPIKE_DLO = SPIKE_DMIN - SPIKE_OVERLOAD and SPIKE_DMIN + 20. While
+//     D >= SPIKE_DMIN every window holds <= 8 (no drops: the fast path); below it the rows
+//     crowd each other and the multiplexer has to flicker (stage 3). SPIKE_DMIN is the scheduler's exact
 //     limit for a full row of 8 under another full row (FREE_AFTER + IRQ_LINES + 8 * WRITE_LINES),
 //     so at amp = 0 and D = DMIN every zone slot is kept with no slack: mux_late_count = 0
 //     there is what validates the constants. b bounces between MUX_Y_MIN and the lowest base
@@ -24,8 +27,8 @@
 // converted by make to build/multiplexer/sprites.hires.bin.
 //
 // DEBUG counters read by budget.json and the report: irq_late_count, mux_late_count,
-// mux_max_age, spike_overrun_count, spike_idle_min, spike_drop_total (must stay 0 in stage 2:
-// it proves the motion kept <= 8 per window).
+// mux_max_age, spike_overrun_count, spike_idle_min; reported: spike_drop_total (sprites dropped
+// or evicted, summed) and spike_flicker_frames (frames with at least one).
 //
 // Build: make GAME=multiplexer SRC_DIR=tests/engine/multiplexer
 // Test:  make test ARGS=multiplexer
@@ -55,6 +58,8 @@ BasicUpstart2(start)
 .const SPIKE_OFF_MAX = (SPIKE_AMP_MAX * 7) >> 3
 .const SPIKE_DMIN    = MUX_FREE_AFTER + MUX_IRQ_LINES + 8 * MUX_WRITE_LINES
 .const SPIKE_DMAX    = SPIKE_DMIN + 20
+.const SPIKE_OVERLOAD = 30                      // how far D goes below the no-overflow limit (stage 3)
+.const SPIKE_DLO     = SPIKE_DMIN - SPIKE_OVERLOAD
 .const SPIKE_XMIN    = 24
 .const SPIKE_XMAX    = 320
 .const SPIKE_WARMUP  = 50                       // frames before spike_idle_min starts counting
@@ -104,9 +109,12 @@ spike_main:
         jsr spike_move
         jsr mux_update
 #if DEBUG
-        lda mux_drop_count              // stage 2: must stay 0 (<= 8 per window by construction)
+        lda mux_drop_count              // dropped or evicted this frame
         beq !+
-        clc
+        inc spike_flicker_frames
+        bne !nc+
+        inc spike_flicker_frames + 1
+!nc:    clc
         adc spike_drop_total
         sta spike_drop_total
         bcc !+
@@ -171,7 +179,7 @@ spike_move:
         clc
         adc spike_dd
         sta spike_d
-        cmp #SPIKE_DMIN
+        cmp #SPIKE_DLO
         beq !flip+
         cmp #SPIKE_DMAX
         bne !noD+
@@ -314,7 +322,8 @@ spike_warm:     .byte SPIKE_WARMUP
 
 spike_idle_min:         .word $ffff     // fewest idle iterations in a frame, after the warm-up
 spike_overrun_count:    .byte 0         // frames whose work didn't finish before the next tick
-spike_drop_total:       .word 0         // DEBUG: sprites dropped, summed (stage 2: must stay 0)
+spike_drop_total:       .word 0         // DEBUG: sprites dropped or evicted, summed
+spike_flicker_frames:   .word 0         // DEBUG: frames with at least one sprite dropped
 
 .errorif * > SPRITE_DATA, "spike code runs into the sprite data"
 

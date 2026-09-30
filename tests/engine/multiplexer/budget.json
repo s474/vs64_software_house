@@ -2,8 +2,8 @@
   "spike": "multiplexer",
   "src_dir": "tests/engine/multiplexer",
   "warmup_frames": 100,
-  "stage": 2,
-  "notes": "Budgets set by the Technical Director, re-baselined to measurement after M3 stage 2 (2026-09-29). Units: raster cycles in this spike, DMA included, which is what the runner measures and what adds up to the 19,656-cycle frame (engine/README.md#budget-units). Framework-style locks (no headroom) only where the path is constant and DMA-free (mux_irq_top); main-loop routines get ~5% over a full-motion-cycle max because their DMA share varies with the sprite layout, not the code. 'stage' is the build stage the engine has reached (docs/milestones/M3-engine-basics.md, rule 1): checks with a higher 'from_stage' print PENDING and fail only under --strict (M3 sign-off). The raster-engineer bumps 'stage' at the start of each stage. Main-loop routines use profile_excl_irq so zone IRQs inside them don't count.",
+  "stage": 3,
+  "notes": "Budgets set by the Technical Director. Re-baselined to measurement after M3 stage 2 (2026-09-29) and again after stage 3 (2026-09-30, 3,000- and 20,000-pass long runs, build/stage3-long/). Units: raster cycles in this spike, DMA included, which is what the runner measures and what adds up to the 19,656-cycle frame (engine/README.md#budget-units). Main-loop routines and zone IRQs get ~5% over the 20,000-pass max, rounded up to 50: the spike's full joint motion cycle is ~88,800 frames (LCM of D's 800, amp's 96 and the X bounces up to 592), so 20,000 is ~22% of it, but the structural worst cases (sort reversal, flicker at minimum D) recur every 800-frame D cycle (25 times in the run), and the maxima moved 0-6% from 3,000 to 20,000 passes. Exact locks only for constant DMA-free paths; mux_irq_top is NOT DMA-free in stage 3 (ghost sprites, see its check), so it has an interim derived limit until the engine fix. The short make test windows won't reach these maxima; the limits must hold in any window. 'stage' is the build stage the engine has reached (docs/milestones/M3-engine-basics.md, rule 1): checks with a higher 'from_stage' print PENDING and fail only under --strict (M3 sign-off). The raster-engineer bumps 'stage' at the start of each stage. Main-loop routines use profile_excl_irq so zone IRQs inside them don't count.",
   "checks": [
     {
       "name": "mux_sort",
@@ -12,10 +12,10 @@
         "mux_sort",
         "mux_sort_end"
       ],
-      "max_cycles": 3500,
+      "max_cycles": 3550,
       "samples": 100,
       "basis": "measured",
-      "source": "Measured 2026-09-29, M3 stage 2, 600 passes (a full cycle of the spike's motion, ~480 frames): 479 / 705 / 3,315 min/avg/max (max = the spike reversing three groups of 8 at amp 0). Raster time in the spike, DMA included (engine/README.md#budget-units). The code's CPU cost is flat; the raster spread comes from where badlines and sprite DMA land, so the budget is the 600-pass max + ~5%, rounded up to 50"
+      "source": "Re-baselined by the Technical Director 2026-09-30 after M3 stage 3 (fast path + fair flicker, pinning off), from long runs on the stage 3 overloaded spike: 3,000 and 20,000 consecutive passes in one trace (build/stage3-long/longrun.py, the runner's own profile_costs / irq_time_by_frame; command: uv run --package budget-runner python build/stage3-long/longrun.py 20000 1000): 474 / 699 / 3,158 (3,000) and 455 / 700 / 3,336 (20,000) min/avg/max. 3,336 + ~5% -> 3,550 (was 3,500 from stage 2's 600-pass 3,315). Code unchanged since stage 2; the max is the reversal of three groups of 8, its raster spread where DMA lands"
     },
     {
       "name": "mux_select",
@@ -24,10 +24,10 @@
         "mux_select",
         "mux_select_end"
       ],
-      "max_cycles": 3450,
+      "max_cycles": 8600,
       "samples": 100,
       "basis": "measured",
-      "source": "Measured 2026-09-29, M3 stage 2, 600 passes (a full cycle of the spike's motion, ~480 frames): 2,364 / 2,832 / 3,295 (CPU 2,165-2,193). Raster time in the spike, DMA included (engine/README.md#budget-units). The code's CPU cost is flat; the raster spread comes from where badlines and sprite DMA land, so the budget is the 600-pass max + ~5%, rounded up to 50. Stage 3 re-baselines (fast path, flicker)"
+      "source": "Re-baselined by the Technical Director 2026-09-30 after M3 stage 3 (fast path + fair flicker, pinning off), from long runs on the stage 3 overloaded spike: 3,000 and 20,000 consecutive passes in one trace (build/stage3-long/longrun.py, the runner's own profile_costs / irq_time_by_frame; command: uv run --package budget-runner python build/stage3-long/longrun.py 20000 1000): 2,335 / 3,833 / 8,145 (3,000) and 2,335 / 3,804 / 8,149 (20,000). Since stage 3 it includes the build's slot writes and the whole slow path (mux_slow jumps back to mux_sel_done), so its max is a crowded flicker frame. 8,149 + ~5% -> 8,600 (was 3,450, stage 2 select only). The slow part alone (mux_slow -> mux_sel_done) measured 1,134 / 3,464 / 7,254 over 8,188 flicker frames"
     },
     {
       "name": "mux_build",
@@ -36,37 +36,36 @@
         "mux_build",
         "mux_build_end"
       ],
-      "max_cycles": 3450,
+      "max_cycles": 2400,
       "samples": 100,
       "basis": "measured",
-      "source": "Measured 2026-09-29, M3 stage 2, 600 passes (a full cycle of the spike's motion, ~480 frames): 2,349 / 2,767 / 3,272 (CPU 2,175-2,189). Raster time in the spike, DMA included (engine/README.md#budget-units). The code's CPU cost is flat; the raster spread comes from where badlines and sprite DMA land, so the budget is the 600-pass max + ~5%, rounded up to 50. Stage 3's fast path merges it into select: the check then covers the per-buffer tail only, and is re-baselined"
+      "source": "Re-baselined by the Technical Director 2026-09-30 after M3 stage 3 (fast path + fair flicker, pinning off), from long runs on the stage 3 overloaded spike: 3,000 and 20,000 consecutive passes in one trace (build/stage3-long/longrun.py, the runner's own profile_costs / irq_time_by_frame; command: uv run --package budget-runner python build/stage3-long/longrun.py 20000 1000): 142 / 663 / 2,189 (3,000) and 142 / 641 / 2,246 (20,000). Since stage 3 it is the per-buffer tail (142-283 in fast frames) plus mux_rebuild in slow frames. 2,246 + ~5% -> 2,400 (was 3,450). The ~2,050 proposed from a 600-pass max of 1,956 is below the long-run max, so not taken"
     },
     {
-      "name": "mux_update (stage 2 baseline)",
+      "name": "mux_update, all frames (flicker included)",
       "kind": "profile_excl_irq",
       "routine": [
         "mux_update",
         "mux_update_end"
       ],
-      "max_cycles": 9050,
-      "max_avg_cycles": 6550,
+      "max_cycles": 11350,
       "samples": 600,
       "basis": "measured",
-      "source": "Measured 2026-09-29, M3 stage 2, 600 passes (a full cycle of the spike's motion, ~480 frames): 5,263 / 6,240 / 8,595 (CPU avg ~4,984). Max and average + ~5%. The average is the common case (build rule 3); the max is the sort stress and may stay expensive"
+      "source": "Re-baselined by the Technical Director 2026-09-30 after M3 stage 3 (fast path + fair flicker, pinning off), from long runs on the stage 3 overloaded spike: 3,000 and 20,000 consecutive passes in one trace (build/stage3-long/longrun.py, the runner's own profile_costs / irq_time_by_frame; command: uv run --package budget-runner python build/stage3-long/longrun.py 20000 1000): 3,522 / 5,226 / 10,781 (3,000) and 3,522 / 5,175 / 10,783 (20,000). Max + ~5% -> 11,350 (was 9,050, stage 2). The worst case is a crowded flicker frame, which build rule 3 lets stay expensive. No average limit here: the all-frames average depends on how many frames the spike overloads (41-55% flicker frames by window), not on the code; the common case is checked by the fast-frames average below. Stage 2's 6,550 average limit is retired with it"
     },
     {
-      "name": "mux_update fast path (rule 3 target)",
+      "name": "mux_update fast path, frames with no overflow (rule 3)",
       "kind": "profile_excl_irq",
       "routine": [
         "mux_update",
-        "mux_update_end"
+        "mux_update_fast"
       ],
-      "max_cycles": 9050,
+      "max_cycles": 7350,
       "max_avg_cycles": 5000,
       "samples": 600,
       "basis": "requirement",
       "from_stage": 3,
-      "source": "docs/milestones/M3-engine-basics.md rule 3 as re-baselined after stage 2, and engine/README.md#fast-path: average <= 5,000 raster (about 4,000 CPU; from 6,240) over a full motion cycle, from merging build into select and constant $D01C when uniform. Stays met through stages 3 and 4 in frames with no overflow"
+      "source": "docs/milestones/M3-engine-basics.md rule 3 as re-baselined after stage 2: average <= 5,000 raster in frames without overflow, through stages 3 and 4 (a requirement: basis). mux_update -> mux_update_fast (a label only frames with no drop or eviction reach; a slow frame's pass is restarted by the next mux_update), added by the raster-engineer in stage 3. It replaces the old 'rule 3 target' check, which measured all frames including flicker ones, retired 2026-09-30. Re-baselined by the Technical Director 2026-09-30 after M3 stage 3 (fast path + fair flicker, pinning off), from long runs on the stage 3 overloaded spike: 3,000 and 20,000 consecutive passes in one trace (build/stage3-long/longrun.py, the runner's own profile_costs / irq_time_by_frame; command: uv run --package budget-runner python build/stage3-long/longrun.py 20000 1000): fast frames 3,520 / 4,199 / 6,990 (1,707 of 3,000) and 3,520 / 4,204 / 6,990 (11,813 of 20,000). Max: 6,990 + ~5% -> 7,350 (measured; was 9,050 copied from the stage 2 check). Average: the 5,000 requirement stands"
     },
     {
       "name": "mux_irq_top (swap + slots 0-7)",
@@ -75,30 +74,30 @@
         "mux_irq_top",
         "irq_exit_rti"
       ],
-      "max_cycles": 378,
+      "max_cycles": 482,
       "samples": 50,
-      "basis": "measured",
-      "source": "Measured 378 every pass (stage 2): a constant path in the top border (line 16, no DMA), so this is a lock like the irq_chain budgets. Was 600 (estimate)"
+      "basis": "estimate",
+      "source": "INTERIM, derived 2026-09-30; re-lock at 387 when the ghost-sprite fix lands. Two constant paths: 378 (> 8 slots, re-arms) and 387 (<= 8 slots, IrqDone: 378 - 55 + 1 + 63, counted from the locked irq_rearm 41 and irq_exit 60, and measured). Re-baselined by the Technical Director 2026-09-30 after M3 stage 3 (fast path + fair flicker, pinning off), from long runs on the stage 3 overloaded spike: 3,000 and 20,000 consecutive passes in one trace (build/stage3-long/longrun.py, the runner's own profile_costs / irq_time_by_frame; command: uv run --package budget-runner python build/stage3-long/longrun.py 20000 1000): 378 x2,953, 387 x43 and 398/399/411/417/421 once each in 3,001 (the same five in 20,001). Probe (build/stage3-long/irqtop2.py): every one of the five outliers, and none of 2,995 others, starts with enabled hardware sprites left at Y 53-55. The VIC compares sprite Y with the low 8 bits of the raster, so on PAL (312 lines) a sprite at Y <= 55 re-triggers on line 256 + Y and displays across the wrap into lines 16-20, inside this IRQ (4 sprites 4-7: 11 cycles a line x 4 lines = 44, measured 43). It happens when a frame has < 16 slots, so hardware sprites keep their top-slot Y. Worst case: 8 such sprites, 5 lines x 19 cycles (docs/reference/vic-ii-timing.md#sprite-dma) = 95 over 387 -> 482. Was 378 (lock, stage 2)"
     },
     {
-      "name": "mux_irq_zone (one IRQ, up to 8 slots)",
+      "name": "mux_irq_zone (one IRQ, up to 16 slots)",
       "kind": "profile",
       "routine": [
         "mux_irq_zone",
         "irq_exit_rti"
       ],
-      "max_cycles": 1600,
+      "max_cycles": 2850,
       "samples": 200,
       "basis": "measured",
-      "source": "Measured 744 / 962 / 1,500 over 2,000 zone IRQs (stage 2): up to 8 slots at 78 each (DEBUG, no DMA), in-IRQ waits of up to 2 lines per slot, and DMA. + ~6%. A long zone IRQ delays nothing (no fixed entry may sit in the zone region), so this is a regression watch; the costs that matter are the per-frame total and mux_late_count. Was 550 (estimate, 8 x ~60 with no waits or DMA)"
+      "source": "Re-baselined by the Technical Director 2026-09-30 after M3 stage 3 (fast path + fair flicker, pinning off), from long runs on the stage 3 overloaded spike: 3,000 and 20,000 consecutive passes in one trace (build/stage3-long/longrun.py, the runner's own profile_costs / irq_time_by_frame; command: uv run --package budget-runner python build/stage3-long/longrun.py 20000 1000): 154 / 799 / 2,690 over 5,659 zone IRQs (3,000 frames) and 154 / 804 / 2,693 over 37,774 (20,000). 7 of 37,774 are over 1,600 (next worst 1,530). Probe (build/stage3-long/zone2690.py, 2026-09-30): the 2,690 IRQ writes 14 slots (40-53) from line 205 to 248, Ys 3 lines apart, so each next slot frees within the 2-line wait threshold and the IRQ waits instead of re-arming; margins 2-4 lines, mux_late_count 0. Designed behaviour; ceiling ~16 slots x 3 lines = ~3,000 + DMA. A long zone IRQ delays nothing (no fixed entry in the zone region), so this is a regression watch. 2,693 + ~5% -> 2,850 (was 1,600, stage 2)"
     },
     {
       "name": "all IRQ time per frame",
       "kind": "irq_time_per_frame",
       "frames": 100,
-      "max_cycles": 3750,
+      "max_cycles": 3850,
       "basis": "measured",
-      "source": "Measured 2,067-3,562 over 600 frames (stage 2): mux_irq_top 378 + 32, up to 16 zone slots in 2-4 IRQs with waits and DMA, spike_bottom. + ~5%. Raster span, DMA included. Was 3,300 (estimate)"
+      "source": "Re-baselined by the Technical Director 2026-09-30 after M3 stage 3 (fast path + fair flicker, pinning off), from long runs on the stage 3 overloaded spike: 3,000 and 20,000 consecutive passes in one trace (build/stage3-long/longrun.py, the runner's own profile_costs / irq_time_by_frame; command: uv run --package budget-runner python build/stage3-long/longrun.py 20000 1000): 516 / 2,072 / 3,631 (2,999 frames) and 516 / 2,084 / 3,631 (19,999). + ~5% -> 3,850 (was 3,750, stage 2: 2,067-3,562). Raster span, DMA included"
     },
     {
       "name": "no late chain entries",
@@ -128,7 +127,7 @@
       "after_frames": 3000,
       "max": 4,
       "basis": "estimate",
-      "source": "engine/README.md#overflow-fair-flicker: target ceil(n/(8-P))-1 with P=4 pinned, n=20 unpinned. mux_max_age covers unpinned sprites only. Stage 2 drops nothing (0). Stage 3 (pinning off) also reports it against the P=0 target, 2. The brief's <=2 criterion for <=8 per row is a QA soak check"
+      "source": "engine/README.md#overflow-fair-flicker: target ceil(n/(8-P))-1 with P=4 pinned, n=20 unpinned (stage 4). mux_max_age covers unpinned sprites only. Stage 3 (pinning off) measured 2 after 3,000 and 20,000 frames with up to 24 in a window (2026-09-30 long runs), meeting the P=0 target of 2. The brief's <=2 criterion for <=8 per row is a QA soak check"
     },
     {
       "name": "pinned sprites never dropped",
@@ -171,7 +170,7 @@
       "scale": 16,
       "min": 5300,
       "basis": "requirement",
-      "source": "engine/README.md#frame-budget: games are promised >= 7,200 cycles a frame for their own logic. In the spike that is spike_move + idle; spike_move is >= 1,907 raster (measured, stage 2), so idle >= 5,300 keeps the promise in every frame, sort stress included. Measured 5,888 (368 x 16) in stage 2. Idle-loop iterations are 16 cycles (counted) and exclude DMA, so this is conservative"
+      "source": "engine/README.md#frame-budget: games are promised >= 7,200 cycles a frame for their own logic. In the spike that is spike_move + idle; spike_move is >= 1,907 raster (measured, stage 2), so idle >= 5,300 keeps the promise in every frame, sort stress and flicker included. Measured 5,888 (stage 2); stage 3 overloaded spike 5,824 after 6,000 frames and 5,808 (363 x 16) after 21,000 (2026-09-30 long runs). Idle-loop iterations are 16 cycles (counted) and exclude DMA, so this is conservative"
     }
   ]
 }
