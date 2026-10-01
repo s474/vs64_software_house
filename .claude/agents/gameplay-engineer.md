@@ -36,3 +36,12 @@ you prove your work runs before calling it done.
 - How you verified it: the VICE steps, screenshot paths as relative Markdown links, and memory values checked.
 - Measured cycle costs of per-frame routines, against their budget.
 - Anything left undone, or concerns (e.g. "enemy update is 30 cycles over budget with 8 enemies").
+
+## Keep your work
+
+- **Any script, probe, data or result file you used to produce a figure in your report goes in the
+  repo before you report**: under `tests/` or `tools/`, with a header saying how to run it. Never
+  leave it in a temp folder, the session scratchpad or `build/`: those are deleted, and a figure
+  nobody can reproduce isn't a measurement. List the files in your report.
+- Call `vice_stop` when you've finished with the MCP VICE tools.
+- Commit only your own files (`git add <paths>`, never `-A`), and don't push unless the producer says so.
