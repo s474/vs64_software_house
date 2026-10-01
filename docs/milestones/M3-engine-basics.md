@@ -146,6 +146,14 @@ The design in [engine/README.md](../../engine/README.md) is approved. These rule
    real title (M5) depends on the multiplexer. M4 may use v1. Performance targets like this are changed
    only by Simon and the producer: agents report the gap.
 
+   **Stage 4 decision (Simon, 2026-10-01).** With pinning, v1 misses the free-CPU promise below in one
+   pathological case: a mass sort reversal with pinned sprites in a crowd (4,496 cycles free against
+   5,300, in 8 of 20,000 frames; a miss shows as one repeated frame). **Accepted for v1**: the promise
+   is scoped to exclude that case, and from stage 4 it's checked as `spike_idle_min_normal` × 16 ≥ 5,300
+   (non-stress frames) and `spike_idle_min_stress` × 16 ≥ 4,250 (a floor, so a regression still shows).
+   **v2 must keep 5,300 in every frame**, including that one, over a 20,000-frame run. The measurements, the worst-frame breakdown and the options considered are in
+   [M3-stage4-pinning-diagnosis.md](M3-stage4-pinning-diagnosis.md).
+
    **Re-baselined after stage 2** (Technical Director). Stage 2 measured 6,240 raster cycles on
    average (≈ 5,000 CPU). The 3,000 figure isn't reachable in this architecture: the design's own
    estimates for a no-overflow frame added up to ~4,500 CPU. What the rule protects is still met:
