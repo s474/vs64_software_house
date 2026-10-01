@@ -1,0 +1,62 @@
+== Formation ==
+sprite X of the formation over the drift: 34 .. 310 (fully visible is 24 .. 320)
+rows Y [56, 96, 136]: displayed lines 57-77, 97-117, 137-157
+drift 1 px every 2 frame(s): one sweep 192 frames, there and back 384 frames
+drift 1 px every 1 frame(s): one sweep 96 frames, there and back 192 frames
+
+== Player ==
+crossing 24 -> 318 at 3 px/frame: 98 frames = 1.96 s
+player shot lifetime with no hit: 21 frames; to the bottom row (Y 136): 8 frames
+
+== Minimum row spacing, three parked rows of 6 (selection model) ==
+smallest spacing with every sprite kept: 31 lines (the brief says 24; the README's guarantee needs 39; the design uses 40)
+
+== Dive paths (authored heading right, offsets from the launch position) ==
+hook: row 2, 58 fixed steps, ends 'return', offset after the fixed steps (12, 200), lowest Y 216, highest Y 137
+   lethal steps (Y >= 210): 19 (steps 35-53)
+   fire steps and the diver's Y there: 8: Y 144, 16: Y 160
+   return climb from the end: 32 frames
+sweep: row 1, 38 fixed steps, ends 'wrap', offset after the fixed steps (36, 164), lowest Y 164, highest Y 97
+   lethal steps (Y >= 210): 0
+   fire steps and the diver's Y there: 24: Y 136, 38: Y 164, 62: Y 164, 86: Y 164
+   longest dive before it leaves the screen, any start and direction: 175 steps
+plunge: row 0, 95 fixed steps, ends 'wrap', offset after the fixed steps (124, 192), lowest Y 216, highest Y 50
+   lethal steps (Y >= 210): 10 (steps 68-77)
+   fire steps and the diver's Y there: 26: Y 90, 36: Y 120, 46: Y 150
+   longest dive before it leaves the screen, any start and direction: 188 steps
+enemy shot fired at Y 164, 2 px/frame: 22 frames to the player's hit box
+enemy shot fired at Y 164, 3 px/frame: 15 frames to the player's hit box
+wrap re-entry from Y 30 at 2 px/frame: row 0: 13 frames, row 1: 33 frames
+
+== Worst-case play, 6000 frames each, player + 3 enemy shots pinned (the design) ==
+wave loop | max in window | frames with a drop | missing sprite-frames % (longest run) per kind: player, enemy shot, player shot, parked enemy, diver | max divers, enemy shots, sprites in range, sprites moving > 8 lines in a frame
+  1    0   | 14 |  0.00% | 0.00% (0), 0.00% (0), 0.00% (0), 0.00% (0), 0.00% (0) | 1, 1, 22, 2
+  2    0   | 14 |  2.23% | 0.00% (0), 0.00% (0), 0.43% (1), 0.02% (1), 1.06% (1) | 2, 2, 23, 3
+  3    0   | 16 |  7.07% | 0.00% (0), 0.00% (0), 0.82% (1), 0.25% (1), 2.04% (1) | 2, 2, 23, 3
+  1    1   | 14 |  0.23% | 0.00% (0), 0.00% (0), 0.00% (0), 0.00% (0), 0.37% (1) | 1, 2, 23, 2
+  2    1   | 14 |  2.43% | 0.00% (0), 0.00% (0), 0.45% (1), 0.02% (1), 1.11% (1) | 2, 3, 24, 2
+  3    1   | 17 |  7.13% | 0.00% (0), 0.00% (0), 1.13% (1), 0.21% (1), 1.60% (1) | 3, 3, 24, 2
+  1    2   | 14 |  0.27% | 0.00% (0), 0.00% (0), 0.00% (0), 0.00% (0), 0.37% (1) | 1, 2, 23, 3
+  2    2   | 14 |  2.35% | 0.00% (0), 0.00% (0), 0.44% (1), 0.01% (1), 1.12% (1) | 2, 3, 24, 3
+  3    2   | 17 |  7.98% | 0.00% (0), 0.00% (0), 0.95% (1), 0.35% (1), 2.02% (1) | 3, 3, 24, 3
+  1    3   | 14 |  0.37% | 0.00% (0), 0.00% (0), 0.00% (0), 0.00% (0), 0.41% (1) | 2, 2, 23, 3
+  2    3   | 14 |  3.00% | 0.00% (0), 0.00% (0), 0.56% (1), 0.02% (1), 1.06% (1) | 3, 3, 24, 3
+  3    3   | 17 | 10.48% | 0.00% (0), 0.00% (0), 1.23% (1), 0.47% (1), 2.13% (1) | 3, 3, 24, 3
+
+== Worst-case play, 6000 frames each, player only pinned (the alternative) ==
+wave loop | max in window | frames with a drop | missing sprite-frames % (longest run) per kind: player, enemy shot, player shot, parked enemy, diver | max divers, enemy shots, sprites in range, sprites moving > 8 lines in a frame
+  1    0   | 14 |  0.00% | 0.00% (0), 0.00% (0), 0.00% (0), 0.00% (0), 0.00% (0) | 1, 1, 22, 2
+  2    0   | 14 |  2.23% | 0.00% (0), 2.04% (1), 0.24% (1), 0.00% (0), 0.57% (1) | 2, 2, 23, 3
+  3    0   | 16 |  7.07% | 0.00% (0), 3.18% (1), 0.53% (1), 0.17% (1), 1.56% (1) | 2, 2, 23, 3
+  1    1   | 14 |  0.23% | 0.00% (0), 0.41% (1), 0.00% (0), 0.00% (0), 0.00% (0) | 1, 2, 23, 2
+  2    1   | 14 |  2.43% | 0.00% (0), 1.34% (1), 0.25% (1), 0.00% (0), 0.83% (1) | 2, 3, 24, 2
+  3    1   | 17 |  7.13% | 0.00% (0), 2.22% (1), 0.83% (1), 0.12% (1), 1.09% (1) | 3, 3, 24, 2
+  1    2   | 14 |  0.27% | 0.00% (0), 0.58% (1), 0.00% (0), 0.00% (0), 0.00% (0) | 1, 2, 23, 3
+  2    2   | 14 |  2.35% | 0.00% (0), 1.64% (1), 0.26% (1), 0.00% (0), 0.53% (1) | 2, 3, 24, 3
+  3    2   | 17 |  7.98% | 0.00% (0), 3.78% (1), 0.66% (1), 0.18% (1), 1.43% (1) | 3, 3, 24, 3
+  1    3   | 14 |  0.37% | 0.00% (0), 0.63% (1), 0.00% (0), 0.00% (0), 0.00% (0) | 2, 2, 23, 3
+  2    3   | 14 |  3.00% | 0.00% (0), 1.53% (1), 0.34% (1), 0.00% (1), 0.56% (1) | 3, 3, 24, 3
+  3    3   | 17 | 10.48% | 0.00% (0), 3.71% (1), 0.87% (1), 0.25% (1), 1.62% (1) | 3, 3, 24, 3
+
+== Full formation, player and player shots, before the first launch ==
+frames with a drop before the first launch: 0 of 100
