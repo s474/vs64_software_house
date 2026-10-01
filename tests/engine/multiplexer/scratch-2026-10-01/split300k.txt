@@ -1,0 +1,16 @@
+20000 non-stress: n 19168 min 5728 below5300 0 | stress: n 832 min 4496 below5300 8 | overruns 0 max_age 4 53s
+40000 non-stress: n 38334 min 5728 below5300 0 | stress: n 1666 min 4496 below5300 20 | overruns 0 max_age 4 107s
+60000 non-stress: n 57500 min 5728 below5300 0 | stress: n 2500 min 4496 below5300 33 | overruns 0 max_age 4 163s
+80000 non-stress: n 76668 min 5728 below5300 0 | stress: n 3332 min 4496 below5300 38 | overruns 0 max_age 4 218s
+100000 non-stress: n 95834 min 5728 below5300 0 | stress: n 4166 min 4496 below5300 51 | overruns 0 max_age 4 274s
+120000 non-stress: n 115000 min 5632 below5300 0 | stress: n 5000 min 4496 below5300 64 | overruns 0 max_age 4 321s
+140000 non-stress: n 134168 min 5248 below5300 1 | stress: n 5832 min 4496 below5300 70 | overruns 0 max_age 4 361s
+160000 non-stress: n 153334 min 5248 below5300 1 | stress: n 6666 min 4496 below5300 79 | overruns 0 max_age 4 400s
+180000 non-stress: n 172500 min 5248 below5300 1 | stress: n 7500 min 4496 below5300 92 | overruns 0 max_age 4 440s
+200000 non-stress: n 191668 min 5248 below5300 1 | stress: n 8332 min 4496 below5300 99 | overruns 0 max_age 4 479s
+220000 non-stress: n 210834 min 5248 below5300 1 | stress: n 9166 min 4496 below5300 108 | overruns 0 max_age 4 519s
+240000 non-stress: n 230000 min 5248 below5300 1 | stress: n 10000 min 4496 below5300 122 | overruns 0 max_age 4 558s
+260000 non-stress: n 249168 min 5248 below5300 1 | stress: n 10832 min 4496 below5300 129 | overruns 0 max_age 4 598s
+280000 non-stress: n 268334 min 5248 below5300 1 | stress: n 11666 min 4496 below5300 139 | overruns 0 max_age 4 637s
+300000 non-stress: n 287500 min 5248 below5300 1 | stress: n 12500 min 4496 below5300 145 | overruns 0 max_age 4 677s
+sorted lows: [4496, 4496, 4576, 4656, 4672, 4736, 4736, 4752, 4768, 4784, 4800, 4816, 4848, 4880, 4912, 4928, 4928, 4944, 4944, 4960, 4976, 4976, 4976, 4976, 4976, 4992, 4992, 4992, 5008, 5024, 5024, 5040, 5040, 5056, 5056, 5056, 5056, 5056, 5072, 5072]

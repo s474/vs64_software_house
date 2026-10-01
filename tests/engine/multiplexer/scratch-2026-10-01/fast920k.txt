@@ -1,0 +1,27 @@
+~87,600 frames 172s {'amp 2-3': (5728, 4496, [0, 42]), 'amp 2-5': (5728, 4496, [0, 42]), 'amp 2-8': (5776, 4496, [0, 42])} {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_late_count': 0, 'irq_late_count': 0}
+  low non-(2,3): 136656 5248 {'b': 163, 'db': 255, 'd': 10, 'dd': 255, 'amp': 5, 'damp': 1, 'dir': 1, 'py': 91, 'pdy': 255}
+~175,200 frames 343s {'amp 2-3': (5248, 4496, [1, 90]), 'amp 2-5': (5632, 4496, [0, 91]), 'amp 2-8': (5632, 4496, [0, 91])} {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_late_count': 0, 'irq_late_count': 0}
+  low non-(2,3): 205422 5344 {'b': 150, 'db': 1, 'd': 13, 'dd': 255, 'amp': 6, 'damp': 255, 'dir': 1, 'py': 30, 'pdy': 1}
+  low non-(2,3): 220752 5584 {'b': 163, 'db': 255, 'd': 10, 'dd': 255, 'amp': 5, 'damp': 1, 'dir': 1, 'py': 187, 'pdy': 255}
+~262,800 frames 516s {'amp 2-3': (5248, 4496, [1, 132]), 'amp 2-5': (5344, 4496, [0, 133]), 'amp 2-8': (5344, 4496, [0, 133])} {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_late_count': 0, 'irq_late_count': 0}
+  low non-(2,3): 293460 5360 {'b': 146, 'db': 1, 'd': 14, 'dd': 1, 'amp': 0, 'damp': 1, 'dir': 0, 'py': 30, 'pdy': 1}
+~350,400 frames 698s {'amp 2-3': (5248, 4496, [1, 171]), 'amp 2-5': (5344, 4496, [0, 172]), 'amp 2-8': (5344, 4496, [0, 172])} {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_late_count': 0, 'irq_late_count': 0}
+  low non-(2,3): 353028 5408 {'b': 157, 'db': 255, 'd': 9, 'dd': 1, 'amp': 11, 'damp': 1, 'dir': 1, 'py': 41, 'pdy': 1}
+~438,000 frames 872s {'amp 2-3': (5248, 4496, [1, 212]), 'amp 2-5': (5344, 4496, [0, 213]), 'amp 2-8': (5344, 4496, [0, 213])} {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_late_count': 0, 'irq_late_count': 0}
+~525,600 frames 1043s {'amp 2-3': (5248, 4496, [1, 257]), 'amp 2-5': (5344, 4496, [0, 258]), 'amp 2-8': (5344, 4496, [0, 258])} {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_late_count': 0, 'irq_late_count': 0}
+~613,200 frames 1214s {'amp 2-3': (5248, 4496, [1, 297]), 'amp 2-5': (5344, 4496, [0, 298]), 'amp 2-8': (5344, 4496, [0, 298])} {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_late_count': 0, 'irq_late_count': 0}
+  low non-(2,3): 626340 5520 {'b': 151, 'db': 255, 'd': 10, 'dd': 255, 'amp': 5, 'damp': 1, 'dir': 1, 'py': 175, 'pdy': 255}
+  low non-(2,3): 643860 5584 {'b': 112, 'db': 255, 'd': 14, 'dd': 1, 'amp': 0, 'damp': 1, 'dir': 0, 'py': 30, 'pdy': 1}
+~700,800 frames 1387s {'amp 2-3': (5248, 4496, [1, 341]), 'amp 2-5': (5344, 4496, [0, 342]), 'amp 2-8': (5344, 4496, [0, 342])} {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_late_count': 0, 'irq_late_count': 0}
+  low non-(2,3): 731022 5344 {'b': 174, 'db': 255, 'd': 13, 'dd': 255, 'amp': 6, 'damp': 255, 'dir': 1, 'py': 30, 'pdy': 1}
+  low non-(2,3): 782268 5264 {'b': 151, 'db': 255, 'd': 10, 'dd': 255, 'amp': 5, 'damp': 1, 'dir': 1, 'py': 103, 'pdy': 255}
+~788,400 frames 1560s {'amp 2-3': (5248, 4496, [2, 379]), 'amp 2-5': (5344, 4496, [0, 381]), 'amp 2-8': (5344, 4496, [0, 381])} {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_late_count': 0, 'irq_late_count': 0}
+  low non-(2,3): 819060 5584 {'b': 172, 'db': 1, 'd': 14, 'dd': 1, 'amp': 0, 'damp': 1, 'dir': 0, 'py': 30, 'pdy': 1}
+  low non-(2,3): 842274 5584 {'b': 148, 'db': 255, 'd': 10, 'dd': 255, 'amp': 8, 'damp': 1, 'dir': 1, 'py': 106, 'pdy': 255}
+  low non-(2,3): 856290 5536 {'b': 152, 'db': 1, 'd': 11, 'dd': 1, 'amp': 4, 'damp': 1, 'dir': 1, 'py': 110, 'pdy': 255}
+~876,000 frames 1733s {'amp 2-3': (5248, 4480, [2, 427]), 'amp 2-5': (5344, 4480, [0, 429]), 'amp 2-8': (5344, 4480, [0, 429])} {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_late_count': 0, 'irq_late_count': 0}
+below 5,300 by (amp, damp): [((2, 1), 368), ((3, 1), 81), ((5, 1), 2)]
+definition: [non-stress min, stress min] x16, [non-stress below 5300, stress below 5300] (non-stress min only among logged frames < 5,888)
+amp 2-3 [5248, 4480] [2, 449]
+amp 2-5 [5344, 4480] [0, 451]
+amp 2-8 [5344, 4480] [0, 451]

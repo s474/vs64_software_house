@@ -9,6 +9,43 @@ cycle-budget checks in VICE and passes, with no human in the loop. Sign-off runs
 `uv run budget-runner --strict`, so a spike whose budget exists but whose `main.asm` doesn't fails
 rather than skips.
 
+## Signed off: 2026-10-01
+
+Simon signed M3 off after watching both demos (`irq_chain`: four clean bands; `multiplexer`: pinned
+sprites always solid, nothing torn or corrupted, flicker only where sprites bunch up).
+
+| Gate | Result |
+|---|---|
+| `budget-runner --strict` | 34/34, 4 spikes |
+| `make test-long` (×34) | 34/34. Free CPU 5,328 in non-stress frames (≥ 5,300), 4,448 in stress frames (≥ 4,250) |
+| QA soak, 10,000 frames (`tests/engine/multiplexer/soak.py`) | Pass |
+| QA positions and attributes (`tests/engine/multiplexer/positions.py`) | Pass: 21,714 sprite-frames, 0 mismatches |
+| Technical Director's final review | Ready for sign-off; no must-fix findings. Details in [engine/README.md](../../engine/README.md) |
+
+**Accepted with sign-off:** v1's free-CPU promise excludes one pathological case
+([M3-stage4-pinning-diagnosis.md](M3-stage4-pinning-diagnosis.md)), and the write-timing margin on
+badlines is unproven (no failure seen in 60,000 slots; the effect would be one wrong raster line on
+one sprite for one frame).
+
+### M3 follow-up (before M4 relies on the multiplexer)
+
+| # | Task | Owner |
+|---|---|---|
+| 1 | Two probes for the write-timing margin, as specified in `engine/README.md`: `tests/timing/sprite_latch` and `tests/engine/multiplexer_edge` | raster-engineer |
+| 2 | Correct the page-crossing comments and counted costs in `mux_select`; add stage 4 measured costs to routine headers; add `// TIMING:` marks to `irq_stable_begin` and `mux_zone_park`; measure the release build's zone IRQ and per-frame IRQ time | raster-engineer |
+| 3 | Fold `tests/engine/multiplexer/scratch-2026-10-01/slack.py` into `positions.py` as a supported mode, then delete the scratch folder | qa-tester |
+| 4 | Make the soak's excess-pin phase long enough by default to exercise flicker on sprite 4 (it needed 1,000 frames, the default is 100) | qa-tester |
+| 5 | Optional: a spike with a stable split and a normal split side by side in the top border, so the difference is visible by eye | raster-engineer |
+| 6 | Mark v2 requirements 4–9 in `engine/README.md` as confirmed | technical-director |
+
+### Multiplexer v2 requirements (all confirmed by Simon, 2026-10-01)
+
+The full list with measured starting points is in `engine/README.md`. In short: `mux_update` average
+≤ 3,000 raster cycles in normal frames; free CPU ≥ 5,300 in every frame, with at least 5% headroom
+(≥ 5,565); the zone IRQ's per-slot cost reviewed; every slot write provably before its deadline; a
+measured worst case for a full sort reversal; files under about 500 lines; a size budget measured
+in both builds; the release build measured. v2 is due before M5.
+
 ## Decisions (agreed with Simon, 2026-09-29)
 
 | Question | Options | Decision |

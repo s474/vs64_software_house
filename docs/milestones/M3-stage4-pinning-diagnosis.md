@@ -121,9 +121,9 @@ Long traces on the stage 4 engine, up to 919,800 frames. They correct two statem
 - **Limits re-baselined** from a 20,000-pass trace (max + ~5%): `mux_update` 13,000 (was 11,400),
   `mux_select` 9,400, `mux_build` 3,100, `mux_irq_zone` 2,950, all IRQ time per frame 4,000.
 
-The long-run scripts behind these figures were not kept in the repo, so the 300,000- and
-919,800-frame figures can't be reproduced as they stand. `make test-long` at ×34 covers about
-800,000 frames for the free-CPU checks.
+The scratch scripts and result files behind these figures are saved, unreviewed, in
+`tests/engine/multiplexer/scratch-2026-10-01/`. The supported way to repeat a long run is
+`make test-long`, which at ×34 covers about 800,000 frames for the free-CPU checks.
 
 ## Sign-off long run (2026-10-01): `make test-long`, ×34
 

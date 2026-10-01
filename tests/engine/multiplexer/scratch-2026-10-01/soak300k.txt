@@ -1,0 +1,15 @@
+20000 idle_min x16 = 4496 {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_late_count': 0, 'irq_late_count': 0} 54s
+40000 idle_min x16 = 4496 {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_late_count': 0, 'irq_late_count': 0} 109s
+60000 idle_min x16 = 4496 {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_late_count': 0, 'irq_late_count': 0} 163s
+80000 idle_min x16 = 4496 {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_late_count': 0, 'irq_late_count': 0} 214s
+100000 idle_min x16 = 4496 {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_late_count': 0, 'irq_late_count': 0} 273s
+120000 idle_min x16 = 4496 {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_late_count': 0, 'irq_late_count': 0} 344s
+140000 idle_min x16 = 4496 {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_late_count': 0, 'irq_late_count': 0} 416s
+160000 idle_min x16 = 4496 {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_late_count': 0, 'irq_late_count': 0} 488s
+180000 idle_min x16 = 4496 {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_late_count': 0, 'irq_late_count': 0} 556s
+200000 idle_min x16 = 4496 {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_late_count': 0, 'irq_late_count': 0} 608s
+220000 idle_min x16 = 4496 {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_late_count': 0, 'irq_late_count': 0} 660s
+240000 idle_min x16 = 4496 {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_late_count': 0, 'irq_late_count': 0} 712s
+260000 idle_min x16 = 4496 {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_late_count': 0, 'irq_late_count': 0} 763s
+280000 idle_min x16 = 4496 {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_late_count': 0, 'irq_late_count': 0} 815s
+300000 idle_min x16 = 4496 {'spike_overrun_count': 0, 'mux_max_age': 4, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_late_count': 0, 'irq_late_count': 0} 867s
