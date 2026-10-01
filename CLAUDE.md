@@ -79,6 +79,7 @@ Specialist subagents are in `.claude/agents/`:
 | Agent | Use for |
 |---|---|
 | `technical-director` | Memory maps, raster timelines, frame budgets, architecture and feasibility calls, reviewing designs |
+| `game-designer` | Game design docs: rules, entities, attack patterns and waves as data, difficulty, feel targets. No code |
 | `raster-engineer` | Engine modules and cycle-exact display code: IRQ framework, stable rasters, multiplexers, effects |
 | `gameplay-engineer` | Implementing game features in 6502: player, enemies, collisions, game loop |
 | `tools-engineer` | Python converters, build tooling, test harnesses |

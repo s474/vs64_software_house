@@ -252,7 +252,7 @@ Each game then picks one or two headline techniques from this shelf. That's how 
 | M1 | VICE MCP server with screenshot, memory, joystick, frame-step | Claude can boot a PRG, press fire, and describe the screenshot | ✅ Done ([mcp/vice](mcp/vice/README.md)) |
 | M2 | `CLAUDE.md`, the first five reference docs, the first four agents | An agent answers "how many cycles on a badline?" from the repo docs | ✅ Done. The Technical Director answered from the docs, then extended them with new measured probes |
 | M3 | Engine basics: stable raster IRQ framework, sprite multiplexer v1, PNG → sprite converter | Spike demos pass automated cycle-budget tests | ✅ Done, signed off 2026-10-01 ([brief](docs/milestones/M3-engine-basics.md)). Follow-ups due before M4 uses the multiplexer; multiplexer v2 due before M5 |
-| M4 | **Training game:** a small single-screen game (Robotron- or Galaga-like) | Playable, tested, and you find it fun for five minutes | |
+| M4 | **Training game:** a small single-screen game (Robotron- or Galaga-like) | Playable, tested, and you find it fun for five minutes | Planned: [brief](docs/milestones/M4-training-game.md). Galaga-style, all-sprite formation |
 | M5 | First real title: pitch → feasibility spike → vertical slice | Vertical slice you'd be proud to show on CSDb or Lemon64 | |
 
 M4 is deliberately modest. It shakes out the tools, process and agent prompts on something small before you bet on an ambitious title.
@@ -265,8 +265,8 @@ Progress is tracked in the [milestone table](#10-suggested-first-milestones). Ea
 M3 on has its own brief in [docs/milestones/](docs/milestones/).
 
 **Now: the M3 follow-up list**, in the [M3 brief](docs/milestones/M3-engine-basics.md#m3-follow-up-before-m4-relies-on-the-multiplexer)
-(M3 itself was signed off on 2026-10-01). **Next: M4, the training game**: it needs a brief in
-`docs/milestones/`, starting with Simon's choice of game.
+(M3 itself was signed off on 2026-10-01). **Next: M4, the training game**: see the [M4 brief](docs/milestones/M4-training-game.md). It starts
+with stage 0, the design, once Simon has settled the brief's open questions.
 
 Always: after each milestone, update agent prompts and docs with whatever went wrong. The studio's
 "culture" lives in those files.
