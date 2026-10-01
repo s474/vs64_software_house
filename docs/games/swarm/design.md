@@ -1,8 +1,10 @@
 # Swarm: game design
 
-M4's training game ([brief](../../milestones/M4-training-game.md)). Status: **draft for Simon's
-approval** (stage 0). This document is the source of truth for behaviour: if play shows something
-should change, it changes here first.
+**Status: approved by Simon, 2026-10-01** (stage 0 gate). Changes after playtests go through this
+document first, then the code.
+
+M4's training game ([brief](../../milestones/M4-training-game.md)). This document is the source of
+truth for behaviour; what Simon decided at approval is in [Decisions](#decisions).
 
 Every number that can be checked without the game is checked by
 [tests/games/swarm/check_design.py](../../../tests/games/swarm/check_design.py)
@@ -25,8 +27,8 @@ shooting the thing that's trying to kill you.
   top-left corner. X 24 is the left edge of the display window and X 320 is the last fully visible
   position; a sprite at X ≤ 0 or X ≥ 344 is off screen. A sprite at Y is displayed on raster lines
   Y + 1 to Y + 21.
-- All sprites are 24 × 21, unexpanded, and **all in the same mode (hires recommended)**: bullets
-  need the resolution, and uniform zone blocks have the larger timing margin
+- All sprites are 24 × 21, unexpanded, and **all hires, one colour each: every sprite in the same
+  mode**. Bullets need the resolution, and uniform zone blocks have the larger timing margin
   ([engine v1 limits](../../../engine/README.md#v1-limits)).
 
 ## Screen layout
@@ -43,7 +45,8 @@ shooting the thing that's trying to kill you.
 - **Star field:** 48 stars at fixed cells in rows 0–23, from a table (built once from a fixed seed;
   none in row 12, columns 14–25, where messages go). Two star characters (dot high, dot low). Twinkle:
   each frame one star, in turn, steps its colour through white, light grey, grey, dark grey. That's
-  **one colour RAM write a frame**; each star changes every 48 frames. The stars don't move.
+  **one colour RAM write a frame**; each star changes every 48 frames. The stars twinkle only: they
+  don't move.
 
 ### Title and game-over screens
 
@@ -67,7 +70,8 @@ Joystick in port 2.
 - **What kills the player:** an enemy shot's box or an enemy's box overlapping the player's box
   (boxes below). An enemy that rams the player dies too and scores its diving value.
 - **What scores:** a player shot hitting an enemy; clearing a wave.
-- The player has **3 lives**. No extra lives.
+- The player has **3 lives**. No extra lives. (Tuning note: if five minutes feels short, add one at
+  10,000 points.)
 
 ## Entities
 
@@ -86,7 +90,7 @@ shots because they are the small things that kill: a bullet missing for a frame 
 while a 24-pixel diver missing for one frame is still readable. The cost is that the flicker moves
 onto divers and player shots: with the shots pinned the model gives enemy shots 0% missing, divers
 up to 2.1% and player shots up to 1.2% of their frames; with only the player pinned, enemy shots are
-missing in up to 3.8% of theirs (`check_design_results.txt`, both tables). See open question 1.
+missing in up to 3.8% of theirs (`check_design_results.txt`, both tables).
 
 ### Hit boxes
 
@@ -125,6 +129,9 @@ guarantee needs 39. At 40, each row's guarantee window (Y − 38 … Y + 25) hol
 **two more sprites can cross any row with no flicker at all**: both player shots, or a shot and a
 diver. Flicker starts with the third visitor. The price is height: 64 lines between the bottom
 row and the player.
+
+Tuning note: if the dives feel cramped, try **32** in stage 3. It adds 16 lines of dive height and
+makes every crossing flicker; it's one table.
 
 ## Enemy behaviour
 
@@ -245,7 +252,7 @@ time. Loops past 3 play as loop 3.
 
 Return speed, player speed and player shots never change.
 
-**Wave start:** `WAVE nn` shows for 75 frames. Enemies appear one every 2 frames, row 0 first, left
+**Wave start:** `WAVE nn` shows for 75 frames. Enemies appear in place (no fly-in), one every 2 frames, row 0 first, left
 to right (36 frames). Play begins at frame 100 with the launch timer at 50. **Wave clear** (all 18 dead and exploded):
 + 1,000, 75 frames' pause, next wave.
 
@@ -331,8 +338,8 @@ modules M4 already plans: box collisions with a different box per kind (`engine/
 SID voices with priorities (`engine/sfx.asm`).
 
 One thing it would use if it existed, with what it buys: **sprites passing behind the bottom panel**
-would let divers leave through the bottom, as in Galaga, instead of sideways. The design above is
-the version without it.
+would let divers leave through the bottom, as in Galaga, instead of sideways. Multiplexer v1 can't do it, so it is a **candidate for multiplexer v2, not
+part of M4**. The design above is the version without it.
 
 ## Sound effects
 
@@ -370,14 +377,19 @@ A playtester can check each of these.
 10. Shooting a diver feels better than clearing parked enemies: the scores above make a game spent
     on divers worth about 1.6 times one spent on the formation.
 
-## Open questions for Simon
+## Decisions
 
-| # | Question | Recommendation |
-|---|---|---|
-| 1 | Which sprites are pinned besides the player? | **The 3 enemy shots.** A lethal bullet that flickers is unfair; the flicker goes to divers and the player's own shots instead (about 2% and 1% of their frames in the worst wave, one frame at a time). The alternative, pinning only the player, spreads it thinner but lets enemy shots miss up to 3.8% of their frames |
-| 2 | One-row panel, or two rows with a divider? | **One row.** The second row would cost 8 of the 64 lines between the formation and the player, which is where the game is played |
-| 3 | Row spacing 40 lines, or tighter for a taller dive zone? | **40.** It's what lets both player shots cross a row with no flicker. 32 would add 16 lines of dive height and make every crossing flicker. Worth trying at 32 in stage 3 if the dives feel cramped: it's one table |
-| 4 | Extra lives? | **No** for M4: the brief says 3 lives. If five minutes feel too short, add one at 10,000 |
-| 5 | Should the stars drift downward (rewriting a few star characters a frame, no hardware scroll)? | **Not yet.** Twinkle only. Add a drift in stage 4 if the Technical Director's budget has room: it adds motion for about 12 screen writes every 8 frames |
-| 6 | Enemies appear in place at wave start, with no fly-in. Enough? | **Yes** for M4. A fly-in is a fourth and fifth path and a mass re-sort risk; it's the first thing to add if the game goes further |
-| 7 | Hires or multicolour sprites? | **Hires, one colour each.** Sharper bullets and the larger zone-timing margin. Simon's call as art director once the placeholders exist |
+Simon, 2026-10-01: the stage 0 open questions, each answered as recommended.
+
+| # | Question | Decision | Why |
+|---|---|---|---|
+| 1 | Which sprites are pinned besides the player? | **The 3 enemy shots** | A lethal bullet that flickers is an unfair death; the flicker goes to divers and the player's own shots instead (about 2% and 1% of their frames in the worst wave, one frame at a time) |
+| 2 | One-row panel, or two rows with a divider? | **One row** | A second row would cost 8 of the 64 lines between the formation and the player, which is where the game is played |
+| 3 | Row spacing 40 lines, or tighter for a taller dive zone? | **40.** Try 32 in stage 3 if the dives feel cramped | 40 lets both player shots cross a row with no flicker |
+| 4 | Extra lives? | **None** for M4. Add one at 10,000 if five minutes feels short | The brief says 3 lives |
+| 5 | Should the stars drift downward? | **No: twinkle only**, no drift yet | A drift costs about 12 screen writes every 8 frames; twinkle is one colour write a frame |
+| 6 | Enemies appear in place at wave start, with no fly-in. Enough? | **Yes: no fly-in** | A fly-in is a fourth and fifth path and a mass re-sort risk |
+| 7 | Hires or multicolour sprites? | **Hires, all sprites the same mode** | Sharper bullets and the larger zone-timing margin |
+
+Noted, not required: divers leaving through the bottom (see
+[Requests of the engine](#requests-of-the-engine)), a multiplexer v2 candidate.
