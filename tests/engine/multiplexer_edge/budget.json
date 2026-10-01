@@ -1,0 +1,58 @@
+{
+  "spike": "multiplexer_edge",
+  "src_dir": "tests/engine/multiplexer_edge",
+  "warmup_frames": 100,
+  "notes": "Added by the raster-engineer in the M3 follow-up (2026-10-01), for the Technical Director to confirm. Requirement checks only: counters that must be 0 and proof that the phases ran. No cost limits: this probe's timing check is made from outside by tests/engine/multiplexer_edge/edge.py (every zone slot's register writes against the deadlines measured by tests/timing/sprite_latch, and the displayed picture), which is too slow for make test (about half an hour) and is run by hand. 18 static layouts at the selection's limit (done = Y) with slot Y lines on and around a badline, 16 frames each: 288 frames a pass.",
+  "checks": [
+    {
+      "name": "every layout fits: nothing dropped",
+      "kind": "memory",
+      "address": "edge_drop_total",
+      "size": 2,
+      "after_frames": 600,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "tests/engine/multiplexer_edge/main.asm: each layout sits exactly at the selection's limit (done = Y) and must still be kept whole; a drop means the layouts no longer test the limit (or the selection changed)"
+    },
+    {
+      "name": "all 18 layouts ran, at least twice",
+      "kind": "memory",
+      "address": "edge_cycles",
+      "size": 1,
+      "after_frames": 0,
+      "min": 2,
+      "basis": "requirement",
+      "source": "tests/engine/multiplexer_edge/main.asm: edge_cycles counts full passes through the 18 phases (288 frames each); 700 frames have run by this check"
+    },
+    {
+      "name": "no late sprite writes",
+      "kind": "memory",
+      "address": "mux_late_count",
+      "size": 1,
+      "after_frames": 0,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/README.md#slot-write-deadline: the engine's own check on the Y write, at the scheduler's limit on badlines"
+    },
+    {
+      "name": "no late chain entries",
+      "kind": "memory",
+      "address": "irq_late_count",
+      "size": 1,
+      "after_frames": 0,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/README.md#handler-conventions"
+    },
+    {
+      "name": "main loop finishes inside every frame",
+      "kind": "memory",
+      "address": "edge_overrun_count",
+      "size": 1,
+      "after_frames": 0,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "tests/engine/multiplexer_edge/main.asm: a static layout must never overrun"
+    }
+  ]
+}

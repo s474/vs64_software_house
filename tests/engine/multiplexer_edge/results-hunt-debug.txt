@@ -1,0 +1,34 @@
+hunt: 1500 random staircases, 20 frames each. Closest ten (slack of a badline-Y slot's last write to Y:53; 63 + 53 - slack = its cycle on line Y - 1):
+   slack   66  slot 12 Y  83 last write 82:50  base 49 steps [3, 2, 2, 2, 4, 3, 3, 3, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2]
+   slack   66  slot 12 Y  91 last write 90:50  base 57 steps [3, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 3, 3, 3, 2, 3, 3, 2, 3, 3, 2]
+   slack   66  slot 13 Y 107 last write 106:50  base 68 steps [4, 4, 2, 2, 2, 4, 3, 2, 2, 2, 2, 2, 3, 3, 3, 4, 2, 3, 4, 2, 2]
+   slack   66  slot 22 Y 107 last write 106:50  base 43 steps [2, 2, 4, 2, 2, 2, 3, 2, 4, 2, 2, 2, 2, 3, 3, 2, 2, 2, 2, 2, 2]
+   slack   66  slot 22 Y 123 last write 122:50  base 59 steps [3, 2, 2, 2, 3, 2, 2, 2, 2, 2, 3, 2, 2, 3, 2, 3, 2, 2, 2, 2, 2]
+   slack   69  slot 12 Y  75 last write 74:47  base 40 steps [4, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 4, 3, 4, 2, 4, 2, 4, 4, 3, 3]
+   slack   69  slot 13 Y  83 last write 82:47  base 46 steps [2, 4, 2, 2, 2, 2, 4, 2, 3, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 4, 3]
+   slack   69  slot 14 Y 115 last write 114:47  base 75 steps [3, 2, 4, 2, 2, 2, 4, 2, 3, 2, 2, 2, 2, 3, 2, 4, 2, 3, 2, 2, 2]
+   slack   69  slot 21 Y 107 last write 106:47  base 44 steps [2, 2, 2, 3, 2, 4, 3, 3, 4, 2, 2, 2, 2, 3, 2, 4, 2, 2, 2, 2, 4]
+   slack   70  slot 13 Y  99 last write 98:46  base 63 steps [2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 2, 3]
+   climbed from 66 to 66: slot 12 Y 83 last write 82:50  base 49 steps [3, 2, 2, 2, 4, 3, 2, 2, 2, 2, 2, 2, 4, 4, 3, 2, 4, 3, 2, 3, 3]
+   climbed from 66 to 66: slot 12 Y 91 last write 90:50  base 57 steps [3, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 4, 3, 3, 2]
+   climbed from 66 to 66: slot 13 Y 107 last write 106:50  base 68 steps [4, 4, 2, 2, 2, 4, 2, 2, 3, 2, 2, 2, 2, 3, 4, 2, 3, 3, 2, 2, 2]
+   climbed from 66 to 66: slot 22 Y 107 last write 106:50  base 43 steps [2, 2, 2, 4, 2, 2, 3, 2, 4, 2, 2, 2, 2, 4, 4, 2, 2, 2, 2, 2, 3]
+   climbed from 66 to 66: slot 22 Y 123 last write 122:50  base 59 steps [3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 4, 2, 3, 2, 2, 2, 2, 2]
+   climbed from 69 to 69: slot 12 Y 75 last write 74:47  base 40 steps [4, 2, 2, 2, 4, 3, 3, 2, 2, 2, 2, 4, 3, 3, 3, 4, 3, 3, 4, 3, 2]
+   climbed from 69 to 66: slot 13 Y 83 last write 82:50  base 46 steps [2, 4, 2, 2, 2, 3, 4, 3, 3, 2, 2, 2, 3, 2, 3, 4, 2, 2, 2, 2, 2]
+   climbed from 69 to 69: slot 14 Y 115 last write 114:47  base 75 steps [3, 2, 4, 2, 2, 2, 4, 3, 3, 3, 2, 2, 2, 3, 4, 3, 4, 4, 2, 3, 3]
+   climbed from 69 to 68: slot 21 Y 107 last write 106:48  base 44 steps [2, 2, 4, 3, 2, 2, 3, 3, 4, 2, 2, 2, 4, 3, 2, 2, 2, 2, 2, 3, 4]
+   climbed from 70 to 69: slot 21 Y 123 last write 122:47  base 62 steps [2, 2, 3, 2, 2, 2, 3, 2, 2, 3, 2, 2, 3, 2, 2, 2, 2, 2, 2, 4, 2]
+hunt: closest found: slack 66 (slot 12, Y 83, last write 82:50); 1855 layouts tried.
+   Y = [49, 52, 54, 56, 58, 62, 65, 68, 74, 77, 79, 81, 83, 87, 90, 93, 99, 102, 104, 106, 108, 112, 115, 118]
+   Again, 1,000 frames, with every register write:
+hunt best                           1000 fr  15856 zone slots | least slack    12 ( 0.19 lines; slot 20, Y 108, last write 108:41) | Y on a badline:   2973, least    66 ( 1.05 lines; slot 12, Y 83, last write 82:50) | last write on line Y: 991 | past Y:53: 0 | pictures 10/10
+hunt best (detail)                  200 fr  19104 writes | least slack to its own deadline: Y 134, XLO 120, PTR 43, COL 50, D010 42, D01C 34
+      Y on a badline  Y     slack to its own deadline  134  (slot 12, hardware sprite 4, Y 83, written at 81:45)
+      Y on a badline  XLO   slack to its own deadline  120  (slot 12, hardware sprite 4, Y 83, written at 82:18)
+      Y on a badline  PTR   slack to its own deadline   97  (slot 12, hardware sprite 4, Y 83, written at 82:26)
+      Y on a badline  COL   slack to its own deadline  104  (slot 12, hardware sprite 4, Y 83, written at 82:34)
+      Y on a badline  D010  slack to its own deadline   96  (slot 12, hardware sprite 4, Y 83, written at 82:42)
+      Y on a badline  D01C  slack to its own deadline   88  (slot 12, hardware sprite 4, Y 83, written at 82:50)
+   counters: mux_late_count = 0, irq_late_count = 0, edge_overrun_count = 0, edge_drop_total = 0
+hunt RESULT: no write past a deadline, pictures right

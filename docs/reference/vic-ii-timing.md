@@ -264,6 +264,15 @@ pointer written at the first possible cycle afterwards is already too late. With
 displayed the CPU stops earlier (from cycle 54 with sprites 0–2), which moves the last *possible*
 write earlier, not the deadline.
 
+*Derived* from the two tables above (not a separate measurement; the engine's writes at these
+positions are measured by `tests/engine/multiplexer_edge/edge.py`, whose latest store with sprites
+all round it was on cycle 50):
+in these terms a `sta abs` (three reads, then the store) can't *read* on cycles 54–58 with sprite 0
+displayed, or on 5–9 with sprite 7; a store whose reads were done by cycle 53 still lands on 54.
+With sprites 0–7 the CPU therefore reads on cycles **10–53** (44 cycles). That is the same 19
+stolen cycles as the trace above reports as "halted from cycle 55 to cycle 10": the trace gives
+the position at which an instruction starts, one cycle later than the cycle it last used.
+
 ```mermaid
 flowchart LR
     A["Line Y, to cycle 53<br/>Y and the enable bit<br/>must be written"] --> B["Line Y, cycles 54-62<br/>sprites 0-2: pointer read,<br/>then data (CPU stopped)"]

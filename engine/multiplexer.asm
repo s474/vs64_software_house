@@ -76,6 +76,13 @@
 //   - Slot k >= 8 is kept only if the scheduling simulation (MUX_FREE_AFTER, MUX_IRQ_LINES,
 //     MUX_WRITE_LINES) says the zone IRQ can write it before its Y line. mux_late_count (DEBUG)
 //     counts slots the IRQ reached on or after their Y line: must stay 0.
+//   - THE ZONE BLOCKS AND THEIR NEXT-SLOT TEST CAN'T GROW (M3 follow-up, 2026-10-01,
+//     engine/README.md#slot-write-deadline): in a run of slots 2 lines apart with 7 other sprites
+//     displayed and a slot's Y on a badline, the last store of a DEBUG mixed-multicolour block
+//     lands as late as cycle 50 of line Y - 1 (counted for that path, and the latest measured:
+//     tests/engine/multiplexer_edge/edge.py --hunt; not proven the worst of every layout), and
+//     cycle 54 is the last on which a store can be made before line Y + 1: 4 cycles of margin
+//     (counted: 12 uniform; 13 / 21 in a release build). Rerun edge.py after any change here.
 //   - No fixed chain entry between MUX_TOP_LINE and MUX_Y_MAX + 2.
 //   - A zone IRQ's raster span includes DMA (badlines, sprites); see engine/README.md#dma-inside-an-irq.
 //   - Self-modifying: the selection loops' mux_order operands (code must be in RAM, as it is).
@@ -92,8 +99,8 @@
 .const MUX_TOP_LINE    = $10
 .const MUX_Y_MIN       = $1e
 .const MUX_FREE_AFTER  = 22             // display on Y+1 .. Y+21 measured (README #6: tests/timing/sprite_wrap,
-                                        // docs/reference/vic-ii-timing.md); that a rewrite on Y_old + 22 never
-                                        // marks the old occupant's last line is still estimate #8
+                                        // docs/reference/vic-ii-timing.md); a rewrite on Y_old + 22 or later never
+                                        // marks the old occupant: measured (#8: tests/timing/sprite_latch)
 .const MUX_IRQ_LINES   = 1              // measured: first write 0-1 lines after the free line in 1,999 of
                                         // 2,000 zone IRQs, 2 once (README #9); the slack in WRITE_LINES covers it
 .const MUX_WRITE_LINES = 2              // measured: 1 gave mux_late_count 139 in 3,000 frames (a slot takes
