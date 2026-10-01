@@ -14,6 +14,7 @@ it gave:
 | [tests/timing/sprites](../../tests/timing/sprites/main.asm) | Sprite DMA per line; sprites and a badline on the same line |
 | [tests/timing/sprites/trace_badline.py](../../tests/timing/sprites/trace_badline.py) | Instruction trace: which cycles of the badline the CPU actually gets |
 | [tests/timing/sprite_wrap](../../tests/timing/sprite_wrap/main.asm) + [sweep.py](../../tests/timing/sprite_wrap/sweep.py) | Sprite DMA and display line by line: first/last line, Y expansion, the Y wrap across line 311 → 0 (2026-09-30) |
+| [tests/timing/sprite_latch](../../tests/timing/sprite_latch/main.asm) + [sweep.py](../../tests/timing/sprite_latch/sweep.py) | The last cycle at which a write to each sprite register still shows on the sprite's first line, and the first at which a hardware sprite can be rewritten (2026-10-01) |
 
 If you rely on a figure marked *unmeasured*, measure it before you build on it.
 
@@ -39,7 +40,8 @@ If you rely on a figure marked *unmeasured*, measure it before you build on it.
   `WaitFrameStart` relies on reading it and they all synchronise correctly.
 - The 320×200 display window with 25 rows (`RSEL`=1, `$D011` bit 3) and the default
   `YSCROLL`=3 covers raster lines 51–250 ($33–$FA). With 24 rows (`RSEL`=0) it's 55–246. *Unmeasured.*
-- Sprite Y coordinates are raster lines: a sprite at Y is displayed on lines Y+1 to Y+21.
+- Sprite Y coordinates are raster lines: a sprite at Y is displayed on lines Y+1 to Y+21,
+  provided Y was written by cycle 53 of line Y ([write deadlines](#sprite-register-write-deadlines)).
   **Measured (tests/timing/sprite_wrap):** its first DMA is at the end of line Y, and it shows on
   Y+1 onward (Y=56: DMA 56–76, shown 57–77). So Y=50 starts on line 51, the first text row
   (badline $33, measured).
@@ -206,6 +208,100 @@ multiplexer's top row, a title screen) gets them displayed again, with DMA, on l
 onward. It must disable them, or move them to Y ≥ 56, once they've been displayed, which means
 after line Y + 21. With the border closed the ghost is invisible, but its DMA still lands: in
 the lower border from line 257 + Y, and for Y ≥ 35 on lines 0 to Y − 35 of the next frame.
+
+### Sprite register write deadlines
+
+**Measured (tests/timing/sprite_latch, VICE 3.10 x64sc PAL, 2026-10-01):** when the VIC-II uses
+each sprite register, found by writing the register at every raster cycle in turn and reading
+from VICE's frame buffer which display lines show the old value and which the new one. 13,590
+samples; the write is made from a stable raster handler (`engine/irq.asm`, on line 102 cycle 6
+in every sample), and its cycle is measured in every sample by stepping over the `sta`.
+
+**How to read it.** `Y:53` means cycle 53 (VICE's `CYC`, 0–62) of the sprite's Y line, and
+`Y+1:15` cycle 15 of the line after, which is the sprite's first display line. A "write cycle"
+is the cycle in which a `sta abs` does its store, which is its fourth and last. If the monitor
+stops at the instruction after the store, the write was one cycle before the position it shows.
+
+**Last write cycle at which the first display line (Y + 1) shows the new value:**
+
+| Register | Sprite 0 | Sprite 2 | Sprite 3 | Sprite 7 | A later write |
+|---|---|---|---|---|---|
+| Y (`$D001 + 2n`) | **Y:53** | **Y:54** | **Y:54** | **Y:54** | From Y:55 the sprite isn't displayed at all in that frame. Sprite 0 written on Y:54 is displayed, but its first line is wrong (16 pixels drawn where the data has 12) |
+| Enable bit (`$D015`) | **Y:53** | **Y:54** | **Y:54** | **Y:54** | The same as Y, cycle for cycle |
+| Pointer (screen + `$3F8 + n`) | **Y:54** | **Y:58** | **Y:60** | **Y+1:05** | The first line shows the old pointer's data and the new data starts on the second. The next cycle a write is possible at all is Y:60, Y+1:01, Y+1:03 and Y+1:11 (below) |
+| X low (`$D000 + 2n`) | **Y+1:15** at X = 24 | the same | the same | the same | See the rule below |
+| X bit 8 (`$D010`) | **Y+1:15** at X = 24 | the same | the same | the same | |
+| Colour (`$D027 + n`) | **Y+1:15** at X = 24 | the same | the same | the same | Written while the sprite is being drawn: part of the line in each colour |
+| Multicolour bit (`$D01C`) | **Y+1:15** at X = 24 | the same | the same | the same | The same: part of the line in each mode |
+
+- **Y and the enable bit are used once, late on line Y**, at the same cycles. Sprites 1 and 4–6
+  weren't probed. Treat **Y:53** as the deadline for all of them.
+- **The pointer is read just before the sprite's data**, on every line the sprite is displayed. For
+  sprites 0–2 that's at the end of line Y, for 3–7 at the start of line Y + 1.
+- **X, colour and the multicolour bit are live**: the VIC-II uses whatever they hold when the raster
+  reaches the sprite. The last good write cycle on any line is **12 + X ÷ 8** (rounded down), where
+  X is the leftmost pixel the write has to beat. All four measured points fit: X = 24 → 15,
+  X = 64 → 20, X = 288 → 48, X = 320 → 52. The sprite is 24 pixels (3 cycles) wide, so a colour
+  written on cycles 16–18 at X = 24 splits the line.
+- A write to X low or `$D010` after the raster has passed the new position but before the old one
+  hides the sprite on that line (it matches neither). After the old position, the line shows the
+  sprite at the old X.
+- Everything in the table repeats a line later: a write that misses line Y + 1 takes effect from
+  line Y + 2.
+
+**Cycles at which no write is possible** because the probed sprite's own DMA holds the CPU (each
+is the 5 stolen cycles measured in [Sprite DMA](#sprite-dma), now placed):
+
+| Sprite alone | CPU can't write on | Repeats on each of its DMA lines |
+|---|---|---|
+| 0 | Y:55–59 | yes |
+| 2 | Y:59–62 and Y+1:00 | yes |
+| 3 | Y:61–62 and Y+1:00–02 | yes |
+| 7 | Y+1:06–10 | yes |
+
+So for each sprite the pointer's deadline is the last cycle before its own DMA takes the bus: a
+pointer written at the first possible cycle afterwards is already too late. With more sprites
+displayed the CPU stops earlier (from cycle 54 with sprites 0–2), which moves the last *possible*
+write earlier, not the deadline.
+
+```mermaid
+flowchart LR
+    A["Line Y, to cycle 53<br/>Y and the enable bit<br/>must be written"] --> B["Line Y, cycles 54-62<br/>sprites 0-2: pointer read,<br/>then data (CPU stopped)"]
+    B --> C["Line Y + 1, cycles 0-10<br/>sprites 3-7: pointer read,<br/>then data (CPU stopped)"]
+    C --> D["Line Y + 1, from cycle 12 + X / 8<br/>sprite drawn: X, colour and<br/>multicolour bit used now"]
+```
+
+**Rewriting a hardware sprite after its last line** (the old occupant at Y_old is displayed on
+Y_old + 1 to Y_old + 21; writes swept from line Y_old + 19 to Y_old + 23):
+
+| Register | Last write that still marks the old sprite | Effect |
+|---|---|---|
+| X low | Y_old + 21, cycle 19 (old X 56, new X 24); cycle 48 (old X 288, new X 320) | The last line moves, or disappears |
+| Colour | Y_old + 21, cycle 18 at X = 24, cycle 55 at X = 320 | The last line changes colour, wholly or partly |
+| Pointer, sprite 0 | Y_old + 20, before its data fetch at the end of the line (cycle 54 by the table above; in this sweep line Y_old + 20 was a badline, so the last write that could be made was on cycle 11) | The last line shows the new pointer's data |
+| Pointer, sprites 2 and 3 | Y_old + 20, cycles 58 and 60 | The same |
+| Pointer, sprite 7 | Y_old + 21, cycle 5 | The same |
+
+**No write on line Y_old + 22 or later marks the old sprite**, at any cycle, for X, pointer or
+colour, on sprites 0, 2, 3 and 7 at X = 24 and X = 320. Line Y_old + 21 is not safe: the sprite is
+still being drawn on it.
+
+Rerun (about a minute; the probe's header and `sweep.py`'s have the details, and
+[results.txt](../../tests/timing/sprite_latch/results.txt) is the run these figures come from):
+
+```
+make GAME=sprite_latch SRC_DIR=tests/timing/sprite_latch
+uv run python tests/timing/sprite_latch/sweep.py | tee tests/timing/sprite_latch/results.txt
+```
+
+Screenshot: [screenshots/sprite-latch-pointer-sprite0-written-y-cycle60-first-line-old.png](../../screenshots/sprite-latch-pointer-sprite0-written-y-cycle60-first-line-old.png)
+(sprite 0's pointer written on Y:60: the first line is still the solid block, the rest is the
+striped one).
+
+**What isn't measured:** sprites 1, 4, 5 and 6; X below 24 (the 12 + X ÷ 8 rule is fitted to
+X = 24–320); writes made by read-modify-write instructions, whose two write cycles can land where
+a `sta` can't; and real hardware. The figures match the usual published VIC-II timing if VICE's
+`CYC` is the published (1-based) cycle number minus one, which is *unmeasured* here.
 
 ## Badline and sprites on the same line
 

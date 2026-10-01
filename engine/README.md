@@ -531,16 +531,24 @@ slots whose writes finish **on** the sprite's own Y line.
 **What a zone slot writes, in order:** Y, X low, pointer, colour, `$D010`, and `$D01C` in the mixed
 blocks. Each has its own deadline, set by when the VIC-II uses it:
 
-| Write | Used by the VIC-II | Deadline | Basis |
+| Write | Used by the VIC-II | Deadline: the last write cycle that still works | Basis |
 |---|---|---|---|
-| Y (`$D001 + 2j`) | The Y comparison on line Y that starts the sprite's DMA | Before that comparison, late on line Y | First DMA "at the end of line Y": **measured** ([vic-ii-timing.md](../docs/reference/vic-ii-timing.md#frame-geometry), `tests/timing/sprite_wrap`). The comparison's cycle is *unmeasured*: the standard figure is cycle 55 (estimate #7) |
-| Pointer (`MUX_SCREEN + $3F8 + j`) | The sprite's pointer fetch, once per DMA line. The first one decides the data shown on line Y + 1 | Before the first fetch: the end of line Y for hardware sprites 0–2, the first cycles of line Y + 1 for 3–7 | Fetch order and position **measured** as CPU halts: sprites 0–2 from cycle 55/56 of the line, 3–7 until cycle 10 of the next ([vic-ii-timing.md](../docs/reference/vic-ii-timing.md#sprite-dma)). The exact fetch cycle per sprite is *unmeasured* |
-| X low, `$D010` bit, colour, `$D01C` bit | Drawing the sprite, first on line Y + 1 | Before the sprite's first pixel on line Y + 1 | *Unmeasured*. These are live registers, so the end of line Y is early enough whatever X is |
+| Y (`$D001 + 2j`) | The Y comparison on line Y that starts the sprite's DMA | **Cycle 53 of line Y** on hardware sprite 0, **cycle 54** on sprites 2, 3 and 7. One cycle later the sprite isn't displayed at all in that frame (sprite 0 at cycle 54: displayed with a corrupt first line) | **Measured** (`tests/timing/sprite_latch`, 2026-10-01, [vic-ii-timing.md](../docs/reference/vic-ii-timing.md#sprite-register-write-deadlines)). Sprites 1 and 4–6 weren't probed: use 53 |
+| Pointer (`MUX_SCREEN + $3F8 + j`) | The sprite's pointer fetch, once per DMA line. The first one decides the data shown on line Y + 1 | Hardware sprite 0: **Y:54**. Sprite 2: **Y:58**. Sprite 3: **Y:60**. Sprite 7: **cycle 5 of line Y + 1**. A later write leaves the old pointer's data on line Y + 1 | **Measured**, the same probe. Each is the last cycle before the sprite's own DMA stops the CPU (5 cycles: sprite 0 on Y:55–59, sprite 7 on Y+1:06–10), so the next write that can be made at all is already late |
+| X low, `$D010` bit, colour, `$D01C` bit | Drawing the sprite, first on line Y + 1 | **Cycle 12 + X ÷ 8 of line Y + 1**: cycle 15 for a sprite at X = 24, 52 at X = 320. Live registers: the same on every hardware sprite | **Measured**, the same probe, at X = 24, 64, 288 and 320. Below X = 24 the rule is extrapolated (cycle 12 at X = 0) |
 
-**The requirement, stated conservatively:** every write of a slot lands **before cycle 55 of line
-Y** (VICE's cycle numbering). That is the earliest cycle at which sprite DMA has been measured to
-take the bus, so nothing the VIC-II fetches or draws for the sprite can come before it. The true
-deadlines are at or after it; how far after is *unmeasured*.
+**The requirement, stated conservatively:** every write of a slot is made **on or before cycle 53
+of line Y** (VICE's cycle numbering; "before cycle 55" in the first version of this section, counted
+at the instruction after the write, as `positions.py` does: the same line). **Measured:** that is
+the earliest deadline of all, the Y register on hardware sprite 0, so a slot that meets it meets
+every one. The other deadlines are later by 1 cycle (pointer, sprite 0) up to 22 or more (the live
+registers).
+
+**`MUX_FREE_AFTER` = 22 is confirmed** (estimate #8, **measured**, the same probe): rewriting X,
+the pointer or the colour of a hardware sprite on line Y_old + 22 or later, at any cycle, leaves
+every line of the old occupant untouched (sprites 0, 2, 3 and 7, X = 24 and 320, swept through line
+Y_old + 23). Line Y_old + 21 is not safe: the sprite is still drawn on it (X and colour mark it up
+to cycle 55 at X = 320, the pointer up to cycle 5 on sprite 7).
 
 **What the engine enforces is narrower.** The DEBUG check (`mux_late_count`) reads the raster 4
 cycles after the **Y** store and counts a slot as late if the line is already Y or later. So:
@@ -1095,8 +1103,8 @@ budget runner's own IRQ labels. Raster cycles, min / avg / max:
   (*counted*: the test takes 38 cycles through its `more` and `wait` exits, not 13): 78 release,
   87 DEBUG, 86 / 95 mixed. That's the case behind the closest calls in
   [Slot write deadline](#slot-write-deadline).
-- The DEBUG column reproduces the stage 4 table's first 3,000 frames (zone IRQ 155 / 567 / 1,526,
-  per frame 535 / 2,230 / 3,691), so the script and the budget runner agree.
+- The DEBUG column reproduces the stage 4 table's first 3,000 frames to within 2 cycles (there:
+  zone IRQ 155 / 567 / 1,526, per frame 535 / 2,230 / 3,691), so the script and the budget runner agree.
 
 Reproduce (the DEBUG build must be put back afterwards: `make test` uses it):
 

@@ -1,0 +1,680 @@
+sprite_latch sweep: VICE 3.10.0.0, sprite Y = 103 (first display line 104); write positions are line:cycle (VICE CYC)
+pattern: one character per display line; N = new value shown, O = old (for Y and D015: no sprite), X = neither
+
+LATCH Y     sprite 0, X = 24: lines 104-124
+   write 103:30 to 103:53: NNNNNNNNNNNNNNNNNNNNN
+   write 103:54 to 103:54: XNNNNNNNNNNNNNNNNNNNN   [line 104: 16 pixels at X 24-46, colour [1]; old: nothing drawn; new: 12 pixels at X 24-46, colour [1]]
+   write 103:55 to 105:18: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: none
+
+LATCH D015  sprite 0, X = 24: lines 104-124
+   write 103:30 to 103:53: NNNNNNNNNNNNNNNNNNNNN
+   write 103:54 to 103:54: XNNNNNNNNNNNNNNNNNNNN   [line 104: 16 pixels at X 24-46, colour [1]; old: nothing drawn; new: 12 pixels at X 24-46, colour [1]]
+   write 103:55 to 105:18: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: none
+
+LATCH PTR   sprite 0, X = 24: lines 104-124
+   write 103:30 to 103:54: NNNNNNNNNNNNNNNNNNNNN
+   write 103:60 to 104:54: ONNNNNNNNNNNNNNNNNNNN
+   write 104:60 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:55-103:59, 104:55-104:59
+
+LATCH XLO   sprite 0, X = 24: lines 104-124
+   write 103:30 to 104:15: NNNNNNNNNNNNNNNNNNNNN
+   write 104:16 to 104:19: XNNNNNNNNNNNNNNNNNNNN   [line 104: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 104:20 to 105:15: ONNNNNNNNNNNNNNNNNNNN
+   write 105:16 to 105:19: OXNNNNNNNNNNNNNNNNNNN   [line 105: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 105:20 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:55-103:59, 104:55-104:59
+
+LATCH D010  sprite 0, X = 24: lines 104-124
+   write 103:30 to 104:15: NNNNNNNNNNNNNNNNNNNNN
+   write 104:16 to 104:47: XNNNNNNNNNNNNNNNNNNNN   [line 104: nothing drawn; old: 12 pixels at X 280-302, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 104:48 to 105:15: ONNNNNNNNNNNNNNNNNNNN
+   write 105:16 to 105:28: OXNNNNNNNNNNNNNNNNNNN   [line 105: nothing drawn; old: 12 pixels at X 280-302, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   no write possible at: 103:55-103:59, 104:55-104:59
+
+LATCH COL   sprite 0, X = 24: lines 104-124
+   write 103:30 to 104:15: NNNNNNNNNNNNNNNNNNNNN
+   write 104:16 to 104:16: XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 104:17 to 104:18: XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 104:19 to 105:15: ONNNNNNNNNNNNNNNNNNNN
+   write 105:16 to 105:16: OXNNNNNNNNNNNNNNNNNNN   [line 105: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 105:17 to 105:18: OXNNNNNNNNNNNNNNNNNNN   [line 105: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 105:19 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:55-103:59, 104:55-104:59
+
+LATCH D01C  sprite 0, X = 24: lines 104-124
+   write 103:30 to 104:15: NNNNNNNNNNNNNNNNNNNNN
+   write 104:16 to 104:16: XNNNNNNNNNNNNNNNNNNNN   [line 104: 21 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 104:17 to 104:17: XNNNNNNNNNNNNNNNNNNNN   [line 104: 17 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 104:18 to 104:18: XNNNNNNNNNNNNNNNNNNNN   [line 104: 13 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 104:19 to 105:15: ONNNNNNNNNNNNNNNNNNNN
+   write 105:16 to 105:16: OXNNNNNNNNNNNNNNNNNNN   [line 105: 21 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 105:17 to 105:17: OXNNNNNNNNNNNNNNNNNNN   [line 105: 17 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 105:18 to 105:18: OXNNNNNNNNNNNNNNNNNNN   [line 105: 13 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 105:19 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:55-103:59, 104:55-104:59
+
+FREE  XLO   sprite 0, X = 24: old occupant's lines 104-124 (coarse delay 204)
+   write 122:03 to 122:15: OOOOOOOOOOOOOOOOOONNN
+   write 122:16 to 122:19: OOOOOOOOOOOOOOOOOOXNN   [line 122: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 122:20 to 123:11: OOOOOOOOOOOOOOOOOOONN
+   write 123:60 to 124:15: OOOOOOOOOOOOOOOOOOOON
+   write 124:16 to 124:19: OOOOOOOOOOOOOOOOOOOOX   [line 124: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 124:20 to 126:59: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:55-122:59, 123:12-123:59
+
+FREE  PTR   sprite 0, X = 24: old occupant's lines 104-124 (coarse delay 204)
+   write 122:03 to 122:54: OOOOOOOOOOOOOOOOOOONN
+   write 122:60 to 123:11: OOOOOOOOOOOOOOOOOOOON
+   write 123:60 to 126:59: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:55-122:59, 123:12-123:59
+
+FREE  COL   sprite 0, X = 24: old occupant's lines 104-124 (coarse delay 204)
+   write 122:03 to 122:15: OOOOOOOOOOOOOOOOOONNN
+   write 122:16 to 122:16: OOOOOOOOOOOOOOOOOOXNN   [line 122: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 122:17 to 122:18: OOOOOOOOOOOOOOOOOOXNN   [line 122: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 122:19 to 123:11: OOOOOOOOOOOOOOOOOOONN
+   write 123:60 to 124:15: OOOOOOOOOOOOOOOOOOOON
+   write 124:16 to 124:16: OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 124:17 to 124:18: OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 124:19 to 126:59: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:55-122:59, 123:12-123:59
+
+LATCH Y     sprite 0, X = 320: lines 104-124
+   write 103:30 to 103:53: NNNNNNNNNNNNNNNNNNNNN
+   write 103:54 to 103:54: XNNNNNNNNNNNNNNNNNNNN   [line 104: 16 pixels at X 320-342, colour [1]; old: nothing drawn; new: 12 pixels at X 320-342, colour [1]]
+   write 103:55 to 105:18: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: none
+
+LATCH D015  sprite 0, X = 320: lines 104-124
+   write 103:30 to 103:53: NNNNNNNNNNNNNNNNNNNNN
+   write 103:54 to 103:54: XNNNNNNNNNNNNNNNNNNNN   [line 104: 16 pixels at X 320-342, colour [1]; old: nothing drawn; new: 12 pixels at X 320-342, colour [1]]
+   write 103:55 to 105:18: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: none
+
+LATCH PTR   sprite 0, X = 320: lines 104-124
+   write 103:30 to 103:54: NNNNNNNNNNNNNNNNNNNNN
+   write 103:60 to 104:54: ONNNNNNNNNNNNNNNNNNNN
+   write 104:60 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:55-103:59, 104:55-104:59
+
+LATCH XLO   sprite 0, X = 320: lines 104-124
+   write 103:30 to 104:48: NNNNNNNNNNNNNNNNNNNNN
+   write 104:49 to 105:28: ONNNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:55-103:59, 104:55-104:59
+
+LATCH D010  sprite 0, X = 320: lines 104-124
+   write 103:30 to 104:20: NNNNNNNNNNNNNNNNNNNNN
+   write 104:21 to 105:20: ONNNNNNNNNNNNNNNNNNNN
+   write 105:21 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:55-103:59, 104:55-104:59
+
+LATCH COL   sprite 0, X = 320: lines 104-124
+   write 103:30 to 104:52: NNNNNNNNNNNNNNNNNNNNN
+   write 104:53 to 104:53: XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 320-342, colours [7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 104:54 to 104:54: XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 104:60 to 105:28: ONNNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:55-103:59, 104:55-104:59
+
+LATCH D01C  sprite 0, X = 320: lines 104-124
+   write 103:30 to 104:52: NNNNNNNNNNNNNNNNNNNNN
+   write 104:53 to 104:53: XNNNNNNNNNNNNNNNNNNNN   [line 104: 21 pixels at X 320-343, colour [1]; old: 12 pixels at X 320-342, colour [1]; new: 24 pixels at X 320-343, colour [1]]
+   write 104:54 to 104:54: XNNNNNNNNNNNNNNNNNNNN   [line 104: 17 pixels at X 320-343, colour [1]; old: 12 pixels at X 320-342, colour [1]; new: 24 pixels at X 320-343, colour [1]]
+   write 104:60 to 105:28: ONNNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:55-103:59, 104:55-104:59
+
+FREE  XLO   sprite 0, X = 320: old occupant's lines 104-124 (coarse delay 204)
+   write 122:03 to 122:48: OOOOOOOOOOOOOOOOOONNN
+   write 122:49 to 123:11: OOOOOOOOOOOOOOOOOOONN
+   write 123:60 to 124:48: OOOOOOOOOOOOOOOOOOOON
+   write 124:49 to 126:59: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:55-122:59, 123:12-123:59
+
+FREE  PTR   sprite 0, X = 320: old occupant's lines 104-124 (coarse delay 204)
+   write 122:03 to 122:54: OOOOOOOOOOOOOOOOOOONN
+   write 122:60 to 123:11: OOOOOOOOOOOOOOOOOOOON
+   write 123:60 to 126:59: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:55-122:59, 123:12-123:59
+
+FREE  COL   sprite 0, X = 320: old occupant's lines 104-124 (coarse delay 204)
+   write 122:03 to 122:52: OOOOOOOOOOOOOOOOOONNN
+   write 122:53 to 122:53: OOOOOOOOOOOOOOOOOOXNN   [line 122: 12 pixels at X 320-342, colours [7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 122:54 to 122:54: OOOOOOOOOOOOOOOOOOXNN   [line 122: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 122:60 to 123:11: OOOOOOOOOOOOOOOOOOONN
+   write 123:60 to 124:52: OOOOOOOOOOOOOOOOOOOON
+   write 124:53 to 124:53: OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 320-342, colours [7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 124:54 to 124:55: OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 124:56 to 126:59: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:55-122:59, 123:12-123:59
+
+LATCH Y     sprite 2, X = 24: lines 104-124
+   write 103:30 to 103:54: NNNNNNNNNNNNNNNNNNNNN
+   write 103:55 to 105:18: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: none
+
+LATCH D015  sprite 2, X = 24: lines 104-124
+   write 103:30 to 103:54: NNNNNNNNNNNNNNNNNNNNN
+   write 103:55 to 105:18: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: none
+
+LATCH PTR   sprite 2, X = 24: lines 104-124
+   write 103:30 to 103:58: NNNNNNNNNNNNNNNNNNNNN
+   write 104:01 to 104:58: ONNNNNNNNNNNNNNNNNNNN
+   write 105:01 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:59-104:00, 104:59-105:00
+
+LATCH XLO   sprite 2, X = 24: lines 104-124
+   write 103:30 to 104:15: NNNNNNNNNNNNNNNNNNNNN
+   write 104:16 to 104:19: XNNNNNNNNNNNNNNNNNNNN   [line 104: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 104:20 to 105:15: ONNNNNNNNNNNNNNNNNNNN
+   write 105:16 to 105:19: OXNNNNNNNNNNNNNNNNNNN   [line 105: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 105:20 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:59-104:00, 104:59-105:00
+
+LATCH D010  sprite 2, X = 24: lines 104-124
+   write 103:30 to 104:15: NNNNNNNNNNNNNNNNNNNNN
+   write 104:16 to 104:47: XNNNNNNNNNNNNNNNNNNNN   [line 104: nothing drawn; old: 12 pixels at X 280-302, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 104:48 to 105:15: ONNNNNNNNNNNNNNNNNNNN
+   write 105:16 to 105:28: OXNNNNNNNNNNNNNNNNNNN   [line 105: nothing drawn; old: 12 pixels at X 280-302, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   no write possible at: 103:59-104:00, 104:59-105:00
+
+LATCH COL   sprite 2, X = 24: lines 104-124
+   write 103:30 to 104:15: NNNNNNNNNNNNNNNNNNNNN
+   write 104:16 to 104:16: XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 104:17 to 104:18: XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 104:19 to 105:15: ONNNNNNNNNNNNNNNNNNNN
+   write 105:16 to 105:16: OXNNNNNNNNNNNNNNNNNNN   [line 105: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 105:17 to 105:18: OXNNNNNNNNNNNNNNNNNNN   [line 105: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 105:19 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:59-104:00, 104:59-105:00
+
+LATCH D01C  sprite 2, X = 24: lines 104-124
+   write 103:30 to 104:15: NNNNNNNNNNNNNNNNNNNNN
+   write 104:16 to 104:16: XNNNNNNNNNNNNNNNNNNNN   [line 104: 21 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 104:17 to 104:17: XNNNNNNNNNNNNNNNNNNNN   [line 104: 17 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 104:18 to 104:18: XNNNNNNNNNNNNNNNNNNNN   [line 104: 13 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 104:19 to 105:15: ONNNNNNNNNNNNNNNNNNNN
+   write 105:16 to 105:16: OXNNNNNNNNNNNNNNNNNNN   [line 105: 21 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 105:17 to 105:17: OXNNNNNNNNNNNNNNNNNNN   [line 105: 17 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 105:18 to 105:18: OXNNNNNNNNNNNNNNNNNNN   [line 105: 13 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 105:19 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:59-104:00, 104:59-105:00
+
+FREE  XLO   sprite 2, X = 24: old occupant's lines 104-124 (coarse delay 204)
+   write 122:03 to 122:15: OOOOOOOOOOOOOOOOOONNN
+   write 122:16 to 122:19: OOOOOOOOOOOOOOOOOOXNN   [line 122: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 122:20 to 123:11: OOOOOOOOOOOOOOOOOOONN
+   write 123:55 to 124:15: OOOOOOOOOOOOOOOOOOOON
+   write 124:16 to 124:19: OOOOOOOOOOOOOOOOOOOOX   [line 124: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 124:20 to 126:59: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:59-123:00, 123:12-123:54, 123:59-124:00
+
+FREE  PTR   sprite 2, X = 24: old occupant's lines 104-124 (coarse delay 204)
+   write 122:03 to 122:58: OOOOOOOOOOOOOOOOOOONN
+   write 123:01 to 123:58: OOOOOOOOOOOOOOOOOOOON
+   write 124:01 to 126:59: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:59-123:00, 123:12-123:54, 123:59-124:00
+
+FREE  COL   sprite 2, X = 24: old occupant's lines 104-124 (coarse delay 204)
+   write 122:03 to 122:15: OOOOOOOOOOOOOOOOOONNN
+   write 122:16 to 122:16: OOOOOOOOOOOOOOOOOOXNN   [line 122: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 122:17 to 122:18: OOOOOOOOOOOOOOOOOOXNN   [line 122: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 122:19 to 123:11: OOOOOOOOOOOOOOOOOOONN
+   write 123:55 to 124:15: OOOOOOOOOOOOOOOOOOOON
+   write 124:16 to 124:16: OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 124:17 to 124:18: OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 124:19 to 126:59: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:59-123:00, 123:12-123:54, 123:59-124:00
+
+LATCH Y     sprite 2, X = 320: lines 104-124
+   write 103:30 to 103:54: NNNNNNNNNNNNNNNNNNNNN
+   write 103:55 to 105:18: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: none
+
+LATCH D015  sprite 2, X = 320: lines 104-124
+   write 103:30 to 103:54: NNNNNNNNNNNNNNNNNNNNN
+   write 103:55 to 105:18: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: none
+
+LATCH PTR   sprite 2, X = 320: lines 104-124
+   write 103:30 to 103:58: NNNNNNNNNNNNNNNNNNNNN
+   write 104:01 to 104:58: ONNNNNNNNNNNNNNNNNNNN
+   write 105:01 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:59-104:00, 104:59-105:00
+
+LATCH XLO   sprite 2, X = 320: lines 104-124
+   write 103:30 to 104:48: NNNNNNNNNNNNNNNNNNNNN
+   write 104:49 to 105:28: ONNNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:59-104:00, 104:59-105:00
+
+LATCH D010  sprite 2, X = 320: lines 104-124
+   write 103:30 to 104:20: NNNNNNNNNNNNNNNNNNNNN
+   write 104:21 to 105:20: ONNNNNNNNNNNNNNNNNNNN
+   write 105:21 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:59-104:00, 104:59-105:00
+
+LATCH COL   sprite 2, X = 320: lines 104-124
+   write 103:30 to 104:52: NNNNNNNNNNNNNNNNNNNNN
+   write 104:53 to 104:53: XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 320-342, colours [7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 104:54 to 104:55: XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 104:56 to 105:28: ONNNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:59-104:00, 104:59-105:00
+
+LATCH D01C  sprite 2, X = 320: lines 104-124
+   write 103:30 to 104:52: NNNNNNNNNNNNNNNNNNNNN
+   write 104:53 to 104:53: XNNNNNNNNNNNNNNNNNNNN   [line 104: 21 pixels at X 320-343, colour [1]; old: 12 pixels at X 320-342, colour [1]; new: 24 pixels at X 320-343, colour [1]]
+   write 104:54 to 104:54: XNNNNNNNNNNNNNNNNNNNN   [line 104: 17 pixels at X 320-343, colour [1]; old: 12 pixels at X 320-342, colour [1]; new: 24 pixels at X 320-343, colour [1]]
+   write 104:55 to 104:55: XNNNNNNNNNNNNNNNNNNNN   [line 104: 13 pixels at X 320-343, colour [1]; old: 12 pixels at X 320-342, colour [1]; new: 24 pixels at X 320-343, colour [1]]
+   write 104:56 to 105:28: ONNNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:59-104:00, 104:59-105:00
+
+FREE  XLO   sprite 2, X = 320: old occupant's lines 104-124 (coarse delay 204)
+   write 122:03 to 122:48: OOOOOOOOOOOOOOOOOONNN
+   write 122:49 to 123:11: OOOOOOOOOOOOOOOOOOONN
+   write 123:55 to 124:48: OOOOOOOOOOOOOOOOOOOON
+   write 124:49 to 126:59: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:59-123:00, 123:12-123:54, 123:59-124:00
+
+FREE  PTR   sprite 2, X = 320: old occupant's lines 104-124 (coarse delay 204)
+   write 122:03 to 122:58: OOOOOOOOOOOOOOOOOOONN
+   write 123:01 to 123:58: OOOOOOOOOOOOOOOOOOOON
+   write 124:01 to 126:59: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:59-123:00, 123:12-123:54, 123:59-124:00
+
+FREE  COL   sprite 2, X = 320: old occupant's lines 104-124 (coarse delay 204)
+   write 122:03 to 122:52: OOOOOOOOOOOOOOOOOONNN
+   write 122:53 to 122:53: OOOOOOOOOOOOOOOOOOXNN   [line 122: 12 pixels at X 320-342, colours [7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 122:54 to 122:55: OOOOOOOOOOOOOOOOOOXNN   [line 122: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 122:56 to 123:11: OOOOOOOOOOOOOOOOOOONN
+   write 123:55 to 123:55: OOOOOOOOOOOOOOOOOOOXN   [line 123: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 123:56 to 124:52: OOOOOOOOOOOOOOOOOOOON
+   write 124:53 to 124:53: OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 320-342, colours [7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 124:54 to 124:55: OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 124:56 to 126:59: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:59-123:00, 123:12-123:54, 123:59-124:00
+
+LATCH Y     sprite 3, X = 24: lines 104-124
+   write 103:30 to 103:54: NNNNNNNNNNNNNNNNNNNNN
+   write 103:55 to 105:18: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: none
+
+LATCH D015  sprite 3, X = 24: lines 104-124
+   write 103:30 to 103:54: NNNNNNNNNNNNNNNNNNNNN
+   write 103:55 to 105:18: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: none
+
+LATCH PTR   sprite 3, X = 24: lines 104-124
+   write 103:30 to 103:60: NNNNNNNNNNNNNNNNNNNNN
+   write 104:03 to 104:60: ONNNNNNNNNNNNNNNNNNNN
+   write 105:03 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:61-104:02, 104:61-105:02
+
+LATCH XLO   sprite 3, X = 24: lines 104-124
+   write 103:30 to 104:15: NNNNNNNNNNNNNNNNNNNNN
+   write 104:16 to 104:19: XNNNNNNNNNNNNNNNNNNNN   [line 104: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 104:20 to 105:15: ONNNNNNNNNNNNNNNNNNNN
+   write 105:16 to 105:19: OXNNNNNNNNNNNNNNNNNNN   [line 105: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 105:20 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:61-104:02, 104:61-105:02
+
+LATCH D010  sprite 3, X = 24: lines 104-124
+   write 103:30 to 104:15: NNNNNNNNNNNNNNNNNNNNN
+   write 104:16 to 104:47: XNNNNNNNNNNNNNNNNNNNN   [line 104: nothing drawn; old: 12 pixels at X 280-302, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 104:48 to 105:15: ONNNNNNNNNNNNNNNNNNNN
+   write 105:16 to 105:28: OXNNNNNNNNNNNNNNNNNNN   [line 105: nothing drawn; old: 12 pixels at X 280-302, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   no write possible at: 103:61-104:02, 104:61-105:02
+
+LATCH COL   sprite 3, X = 24: lines 104-124
+   write 103:30 to 104:15: NNNNNNNNNNNNNNNNNNNNN
+   write 104:16 to 104:16: XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 104:17 to 104:18: XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 104:19 to 105:15: ONNNNNNNNNNNNNNNNNNNN
+   write 105:16 to 105:16: OXNNNNNNNNNNNNNNNNNNN   [line 105: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 105:17 to 105:18: OXNNNNNNNNNNNNNNNNNNN   [line 105: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 105:19 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:61-104:02, 104:61-105:02
+
+LATCH D01C  sprite 3, X = 24: lines 104-124
+   write 103:30 to 104:15: NNNNNNNNNNNNNNNNNNNNN
+   write 104:16 to 104:16: XNNNNNNNNNNNNNNNNNNNN   [line 104: 21 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 104:17 to 104:17: XNNNNNNNNNNNNNNNNNNNN   [line 104: 17 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 104:18 to 104:18: XNNNNNNNNNNNNNNNNNNNN   [line 104: 13 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 104:19 to 105:15: ONNNNNNNNNNNNNNNNNNNN
+   write 105:16 to 105:16: OXNNNNNNNNNNNNNNNNNNN   [line 105: 21 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 105:17 to 105:17: OXNNNNNNNNNNNNNNNNNNN   [line 105: 17 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 105:18 to 105:18: OXNNNNNNNNNNNNNNNNNNN   [line 105: 13 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 105:19 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:61-104:02, 104:61-105:02
+
+FREE  XLO   sprite 3, X = 24: old occupant's lines 104-124 (coarse delay 204)
+   write 122:03 to 122:15: OOOOOOOOOOOOOOOOOONNN
+   write 122:16 to 122:19: OOOOOOOOOOOOOOOOOOXNN   [line 122: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 122:20 to 123:11: OOOOOOOOOOOOOOOOOOONN
+   write 123:55 to 124:15: OOOOOOOOOOOOOOOOOOOON
+   write 124:16 to 124:19: OOOOOOOOOOOOOOOOOOOOX   [line 124: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 124:20 to 126:59: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:61-123:02, 123:12-123:54, 123:61-124:02
+
+FREE  PTR   sprite 3, X = 24: old occupant's lines 104-124 (coarse delay 204)
+   write 122:03 to 122:60: OOOOOOOOOOOOOOOOOOONN
+   write 123:03 to 123:60: OOOOOOOOOOOOOOOOOOOON
+   write 124:03 to 126:59: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:61-123:02, 123:12-123:54, 123:61-124:02
+
+FREE  COL   sprite 3, X = 24: old occupant's lines 104-124 (coarse delay 204)
+   write 122:03 to 122:15: OOOOOOOOOOOOOOOOOONNN
+   write 122:16 to 122:16: OOOOOOOOOOOOOOOOOOXNN   [line 122: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 122:17 to 122:18: OOOOOOOOOOOOOOOOOOXNN   [line 122: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 122:19 to 123:11: OOOOOOOOOOOOOOOOOOONN
+   write 123:55 to 124:15: OOOOOOOOOOOOOOOOOOOON
+   write 124:16 to 124:16: OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 124:17 to 124:18: OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 124:19 to 126:59: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:61-123:02, 123:12-123:54, 123:61-124:02
+
+LATCH Y     sprite 3, X = 320: lines 104-124
+   write 103:30 to 103:54: NNNNNNNNNNNNNNNNNNNNN
+   write 103:55 to 105:18: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: none
+
+LATCH D015  sprite 3, X = 320: lines 104-124
+   write 103:30 to 103:54: NNNNNNNNNNNNNNNNNNNNN
+   write 103:55 to 105:18: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: none
+
+LATCH PTR   sprite 3, X = 320: lines 104-124
+   write 103:30 to 103:60: NNNNNNNNNNNNNNNNNNNNN
+   write 104:03 to 104:60: ONNNNNNNNNNNNNNNNNNNN
+   write 105:03 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:61-104:02, 104:61-105:02
+
+LATCH XLO   sprite 3, X = 320: lines 104-124
+   write 103:30 to 104:48: NNNNNNNNNNNNNNNNNNNNN
+   write 104:49 to 105:28: ONNNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:61-104:02, 104:61-105:02
+
+LATCH D010  sprite 3, X = 320: lines 104-124
+   write 103:30 to 104:20: NNNNNNNNNNNNNNNNNNNNN
+   write 104:21 to 105:20: ONNNNNNNNNNNNNNNNNNNN
+   write 105:21 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:61-104:02, 104:61-105:02
+
+LATCH COL   sprite 3, X = 320: lines 104-124
+   write 103:30 to 104:52: NNNNNNNNNNNNNNNNNNNNN
+   write 104:53 to 104:53: XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 320-342, colours [7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 104:54 to 104:55: XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 104:56 to 105:28: ONNNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:61-104:02, 104:61-105:02
+
+LATCH D01C  sprite 3, X = 320: lines 104-124
+   write 103:30 to 104:52: NNNNNNNNNNNNNNNNNNNNN
+   write 104:53 to 104:53: XNNNNNNNNNNNNNNNNNNNN   [line 104: 21 pixels at X 320-343, colour [1]; old: 12 pixels at X 320-342, colour [1]; new: 24 pixels at X 320-343, colour [1]]
+   write 104:54 to 104:54: XNNNNNNNNNNNNNNNNNNNN   [line 104: 17 pixels at X 320-343, colour [1]; old: 12 pixels at X 320-342, colour [1]; new: 24 pixels at X 320-343, colour [1]]
+   write 104:55 to 104:55: XNNNNNNNNNNNNNNNNNNNN   [line 104: 13 pixels at X 320-343, colour [1]; old: 12 pixels at X 320-342, colour [1]; new: 24 pixels at X 320-343, colour [1]]
+   write 104:56 to 105:28: ONNNNNNNNNNNNNNNNNNNN
+   no write possible at: 103:61-104:02, 104:61-105:02
+
+FREE  XLO   sprite 3, X = 320: old occupant's lines 104-124 (coarse delay 204)
+   write 122:03 to 122:48: OOOOOOOOOOOOOOOOOONNN
+   write 122:49 to 123:11: OOOOOOOOOOOOOOOOOOONN
+   write 123:55 to 124:48: OOOOOOOOOOOOOOOOOOOON
+   write 124:49 to 126:59: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:61-123:02, 123:12-123:54, 123:61-124:02
+
+FREE  PTR   sprite 3, X = 320: old occupant's lines 104-124 (coarse delay 204)
+   write 122:03 to 122:60: OOOOOOOOOOOOOOOOOOONN
+   write 123:03 to 123:60: OOOOOOOOOOOOOOOOOOOON
+   write 124:03 to 126:59: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:61-123:02, 123:12-123:54, 123:61-124:02
+
+FREE  COL   sprite 3, X = 320: old occupant's lines 104-124 (coarse delay 204)
+   write 122:03 to 122:52: OOOOOOOOOOOOOOOOOONNN
+   write 122:53 to 122:53: OOOOOOOOOOOOOOOOOOXNN   [line 122: 12 pixels at X 320-342, colours [7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 122:54 to 122:55: OOOOOOOOOOOOOOOOOOXNN   [line 122: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 122:56 to 123:11: OOOOOOOOOOOOOOOOOOONN
+   write 123:55 to 123:55: OOOOOOOOOOOOOOOOOOOXN   [line 123: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 123:56 to 124:52: OOOOOOOOOOOOOOOOOOOON
+   write 124:53 to 124:53: OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 320-342, colours [7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 124:54 to 124:55: OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 124:56 to 126:59: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:61-123:02, 123:12-123:54, 123:61-124:02
+
+LATCH Y     sprite 7, X = 24: lines 104-124
+   write 103:30 to 103:54: NNNNNNNNNNNNNNNNNNNNN
+   write 103:55 to 105:18: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: none
+
+LATCH D015  sprite 7, X = 24: lines 104-124
+   write 103:30 to 103:54: NNNNNNNNNNNNNNNNNNNNN
+   write 103:55 to 105:18: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: none
+
+LATCH PTR   sprite 7, X = 24: lines 104-124
+   write 103:30 to 104:05: NNNNNNNNNNNNNNNNNNNNN
+   write 104:11 to 105:05: ONNNNNNNNNNNNNNNNNNNN
+   write 105:11 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 104:06-104:10, 105:06-105:10
+
+LATCH XLO   sprite 7, X = 24: lines 104-124
+   write 103:30 to 104:15: NNNNNNNNNNNNNNNNNNNNN
+   write 104:16 to 104:19: XNNNNNNNNNNNNNNNNNNNN   [line 104: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 104:20 to 105:15: ONNNNNNNNNNNNNNNNNNNN
+   write 105:16 to 105:19: OXNNNNNNNNNNNNNNNNNNN   [line 105: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 105:20 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 104:06-104:10, 105:06-105:10
+
+LATCH D010  sprite 7, X = 24: lines 104-124
+   write 103:30 to 104:15: NNNNNNNNNNNNNNNNNNNNN
+   write 104:16 to 104:47: XNNNNNNNNNNNNNNNNNNNN   [line 104: nothing drawn; old: 12 pixels at X 280-302, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 104:48 to 105:15: ONNNNNNNNNNNNNNNNNNNN
+   write 105:16 to 105:28: OXNNNNNNNNNNNNNNNNNNN   [line 105: nothing drawn; old: 12 pixels at X 280-302, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   no write possible at: 104:06-104:10, 105:06-105:10
+
+LATCH COL   sprite 7, X = 24: lines 104-124
+   write 103:30 to 104:15: NNNNNNNNNNNNNNNNNNNNN
+   write 104:16 to 104:16: XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 104:17 to 104:18: XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 104:19 to 105:15: ONNNNNNNNNNNNNNNNNNNN
+   write 105:16 to 105:16: OXNNNNNNNNNNNNNNNNNNN   [line 105: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 105:17 to 105:18: OXNNNNNNNNNNNNNNNNNNN   [line 105: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 105:19 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 104:06-104:10, 105:06-105:10
+
+LATCH D01C  sprite 7, X = 24: lines 104-124
+   write 103:30 to 104:15: NNNNNNNNNNNNNNNNNNNNN
+   write 104:16 to 104:16: XNNNNNNNNNNNNNNNNNNNN   [line 104: 21 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 104:17 to 104:17: XNNNNNNNNNNNNNNNNNNNN   [line 104: 17 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 104:18 to 104:18: XNNNNNNNNNNNNNNNNNNNN   [line 104: 13 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 104:19 to 105:15: ONNNNNNNNNNNNNNNNNNNN
+   write 105:16 to 105:16: OXNNNNNNNNNNNNNNNNNNN   [line 105: 21 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 105:17 to 105:17: OXNNNNNNNNNNNNNNNNNNN   [line 105: 17 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 105:18 to 105:18: OXNNNNNNNNNNNNNNNNNNN   [line 105: 13 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+   write 105:19 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 104:06-104:10, 105:06-105:10
+
+FREE  XLO   sprite 7, X = 24: old occupant's lines 104-124 (coarse delay 205)
+   write 122:03 to 122:15: OOOOOOOOOOOOOOOOOONNN
+   write 122:16 to 122:19: OOOOOOOOOOOOOOOOOOXNN   [line 122: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 122:20 to 123:11: OOOOOOOOOOOOOOOOOOONN
+   write 123:55 to 124:15: OOOOOOOOOOOOOOOOOOOON
+   write 124:16 to 124:19: OOOOOOOOOOOOOOOOOOOOX   [line 124: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+   write 124:20 to 127:01: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:06-122:10, 123:06-123:10, 123:12-123:54, 124:06-124:10
+
+FREE  PTR   sprite 7, X = 24: old occupant's lines 104-124 (coarse delay 205)
+   write 122:03 to 122:05: OOOOOOOOOOOOOOOOOONNN
+   write 122:11 to 123:05: OOOOOOOOOOOOOOOOOOONN
+   write 123:11 to 124:05: OOOOOOOOOOOOOOOOOOOON
+   write 124:11 to 127:01: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:06-122:10, 123:06-123:10, 123:12-123:54, 124:06-124:10
+
+FREE  COL   sprite 7, X = 24: old occupant's lines 104-124 (coarse delay 205)
+   write 122:03 to 122:15: OOOOOOOOOOOOOOOOOONNN
+   write 122:16 to 122:16: OOOOOOOOOOOOOOOOOOXNN   [line 122: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 122:17 to 122:18: OOOOOOOOOOOOOOOOOOXNN   [line 122: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 122:19 to 123:11: OOOOOOOOOOOOOOOOOOONN
+   write 123:55 to 124:15: OOOOOOOOOOOOOOOOOOOON
+   write 124:16 to 124:16: OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 124:17 to 124:18: OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+   write 124:19 to 127:01: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:06-122:10, 123:06-123:10, 123:12-123:54, 124:06-124:10
+
+LATCH Y     sprite 7, X = 320: lines 104-124
+   write 103:30 to 103:54: NNNNNNNNNNNNNNNNNNNNN
+   write 103:55 to 105:18: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: none
+
+LATCH D015  sprite 7, X = 320: lines 104-124
+   write 103:30 to 103:54: NNNNNNNNNNNNNNNNNNNNN
+   write 103:55 to 105:18: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: none
+
+LATCH PTR   sprite 7, X = 320: lines 104-124
+   write 103:30 to 104:05: NNNNNNNNNNNNNNNNNNNNN
+   write 104:11 to 105:05: ONNNNNNNNNNNNNNNNNNNN
+   write 105:11 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 104:06-104:10, 105:06-105:10
+
+LATCH XLO   sprite 7, X = 320: lines 104-124
+   write 103:30 to 104:48: NNNNNNNNNNNNNNNNNNNNN
+   write 104:49 to 105:28: ONNNNNNNNNNNNNNNNNNNN
+   no write possible at: 104:06-104:10, 105:06-105:10
+
+LATCH D010  sprite 7, X = 320: lines 104-124
+   write 103:30 to 104:20: NNNNNNNNNNNNNNNNNNNNN
+   write 104:21 to 105:20: ONNNNNNNNNNNNNNNNNNNN
+   write 105:21 to 105:28: OONNNNNNNNNNNNNNNNNNN
+   no write possible at: 104:06-104:10, 105:06-105:10
+
+LATCH COL   sprite 7, X = 320: lines 104-124
+   write 103:30 to 104:52: NNNNNNNNNNNNNNNNNNNNN
+   write 104:53 to 104:53: XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 320-342, colours [7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 104:54 to 104:55: XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 104:56 to 105:28: ONNNNNNNNNNNNNNNNNNNN
+   no write possible at: 104:06-104:10, 105:06-105:10
+
+LATCH D01C  sprite 7, X = 320: lines 104-124
+   write 103:30 to 104:52: NNNNNNNNNNNNNNNNNNNNN
+   write 104:53 to 104:53: XNNNNNNNNNNNNNNNNNNNN   [line 104: 21 pixels at X 320-343, colour [1]; old: 12 pixels at X 320-342, colour [1]; new: 24 pixels at X 320-343, colour [1]]
+   write 104:54 to 104:54: XNNNNNNNNNNNNNNNNNNNN   [line 104: 17 pixels at X 320-343, colour [1]; old: 12 pixels at X 320-342, colour [1]; new: 24 pixels at X 320-343, colour [1]]
+   write 104:55 to 104:55: XNNNNNNNNNNNNNNNNNNNN   [line 104: 13 pixels at X 320-343, colour [1]; old: 12 pixels at X 320-342, colour [1]; new: 24 pixels at X 320-343, colour [1]]
+   write 104:56 to 105:28: ONNNNNNNNNNNNNNNNNNNN
+   no write possible at: 104:06-104:10, 105:06-105:10
+
+FREE  XLO   sprite 7, X = 320: old occupant's lines 104-124 (coarse delay 205)
+   write 122:03 to 122:48: OOOOOOOOOOOOOOOOOONNN
+   write 122:49 to 123:11: OOOOOOOOOOOOOOOOOOONN
+   write 123:55 to 124:48: OOOOOOOOOOOOOOOOOOOON
+   write 124:49 to 127:01: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:06-122:10, 123:06-123:10, 123:12-123:54, 124:06-124:10
+
+FREE  PTR   sprite 7, X = 320: old occupant's lines 104-124 (coarse delay 205)
+   write 122:03 to 122:05: OOOOOOOOOOOOOOOOOONNN
+   write 122:11 to 123:05: OOOOOOOOOOOOOOOOOOONN
+   write 123:11 to 124:05: OOOOOOOOOOOOOOOOOOOON
+   write 124:11 to 127:01: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:06-122:10, 123:06-123:10, 123:12-123:54, 124:06-124:10
+
+FREE  COL   sprite 7, X = 320: old occupant's lines 104-124 (coarse delay 205)
+   write 122:03 to 122:52: OOOOOOOOOOOOOOOOOONNN
+   write 122:53 to 122:53: OOOOOOOOOOOOOOOOOOXNN   [line 122: 12 pixels at X 320-342, colours [7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 122:54 to 122:55: OOOOOOOOOOOOOOOOOOXNN   [line 122: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 122:56 to 123:11: OOOOOOOOOOOOOOOOOOONN
+   write 123:55 to 123:55: OOOOOOOOOOOOOOOOOOOXN   [line 123: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 123:56 to 124:52: OOOOOOOOOOOOOOOOOOOON
+   write 124:53 to 124:53: OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 320-342, colours [7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 124:54 to 124:55: OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+   write 124:56 to 127:01: OOOOOOOOOOOOOOOOOOOOO
+   no write possible at: 122:06-122:10, 123:06-123:10, 123:12-123:54, 124:06-124:10
+
+SUMMARY, LATCH: last write at which the first display line (Y + 1) shows the new value
+  (line Y = 103; written as line:cycle and relative to Y)
+  register sprite    X   last good write        first bad write        what line Y + 1.. shows then
+  Y             0   24   103:53 (Y cycle 53)    103:54 (Y cycle 54)    XNNNNNNNNNNNNNNNNNNNN   [line 104: 16 pixels at X 24-46, colour [1]; old: nothing drawn; new: 12 pixels at X 24-46, colour [1]]
+  D015          0   24   103:53 (Y cycle 53)    103:54 (Y cycle 54)    XNNNNNNNNNNNNNNNNNNNN   [line 104: 16 pixels at X 24-46, colour [1]; old: nothing drawn; new: 12 pixels at X 24-46, colour [1]]
+  PTR           0   24   103:54 (Y cycle 54)    103:60 (Y cycle 60)    ONNNNNNNNNNNNNNNNNNNN
+  XLO           0   24   104:15 (Y+1 cycle 15)  104:16 (Y+1 cycle 16)  XNNNNNNNNNNNNNNNNNNNN   [line 104: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+  D010          0   24   104:15 (Y+1 cycle 15)  104:16 (Y+1 cycle 16)  XNNNNNNNNNNNNNNNNNNNN   [line 104: nothing drawn; old: 12 pixels at X 280-302, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+  COL           0   24   104:15 (Y+1 cycle 15)  104:16 (Y+1 cycle 16)  XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+  D01C          0   24   104:15 (Y+1 cycle 15)  104:16 (Y+1 cycle 16)  XNNNNNNNNNNNNNNNNNNNN   [line 104: 21 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+  Y             0  320   103:53 (Y cycle 53)    103:54 (Y cycle 54)    XNNNNNNNNNNNNNNNNNNNN   [line 104: 16 pixels at X 320-342, colour [1]; old: nothing drawn; new: 12 pixels at X 320-342, colour [1]]
+  D015          0  320   103:53 (Y cycle 53)    103:54 (Y cycle 54)    XNNNNNNNNNNNNNNNNNNNN   [line 104: 16 pixels at X 320-342, colour [1]; old: nothing drawn; new: 12 pixels at X 320-342, colour [1]]
+  PTR           0  320   103:54 (Y cycle 54)    103:60 (Y cycle 60)    ONNNNNNNNNNNNNNNNNNNN
+  XLO           0  320   104:48 (Y+1 cycle 48)  104:49 (Y+1 cycle 49)  ONNNNNNNNNNNNNNNNNNNN
+  D010          0  320   104:20 (Y+1 cycle 20)  104:21 (Y+1 cycle 21)  ONNNNNNNNNNNNNNNNNNNN
+  COL           0  320   104:52 (Y+1 cycle 52)  104:53 (Y+1 cycle 53)  XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 320-342, colours [7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+  D01C          0  320   104:52 (Y+1 cycle 52)  104:53 (Y+1 cycle 53)  XNNNNNNNNNNNNNNNNNNNN   [line 104: 21 pixels at X 320-343, colour [1]; old: 12 pixels at X 320-342, colour [1]; new: 24 pixels at X 320-343, colour [1]]
+  Y             2   24   103:54 (Y cycle 54)    103:55 (Y cycle 55)    OOOOOOOOOOOOOOOOOOOOO
+  D015          2   24   103:54 (Y cycle 54)    103:55 (Y cycle 55)    OOOOOOOOOOOOOOOOOOOOO
+  PTR           2   24   103:58 (Y cycle 58)    104:01 (Y+1 cycle 1)   ONNNNNNNNNNNNNNNNNNNN
+  XLO           2   24   104:15 (Y+1 cycle 15)  104:16 (Y+1 cycle 16)  XNNNNNNNNNNNNNNNNNNNN   [line 104: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+  D010          2   24   104:15 (Y+1 cycle 15)  104:16 (Y+1 cycle 16)  XNNNNNNNNNNNNNNNNNNNN   [line 104: nothing drawn; old: 12 pixels at X 280-302, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+  COL           2   24   104:15 (Y+1 cycle 15)  104:16 (Y+1 cycle 16)  XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+  D01C          2   24   104:15 (Y+1 cycle 15)  104:16 (Y+1 cycle 16)  XNNNNNNNNNNNNNNNNNNNN   [line 104: 21 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+  Y             2  320   103:54 (Y cycle 54)    103:55 (Y cycle 55)    OOOOOOOOOOOOOOOOOOOOO
+  D015          2  320   103:54 (Y cycle 54)    103:55 (Y cycle 55)    OOOOOOOOOOOOOOOOOOOOO
+  PTR           2  320   103:58 (Y cycle 58)    104:01 (Y+1 cycle 1)   ONNNNNNNNNNNNNNNNNNNN
+  XLO           2  320   104:48 (Y+1 cycle 48)  104:49 (Y+1 cycle 49)  ONNNNNNNNNNNNNNNNNNNN
+  D010          2  320   104:20 (Y+1 cycle 20)  104:21 (Y+1 cycle 21)  ONNNNNNNNNNNNNNNNNNNN
+  COL           2  320   104:52 (Y+1 cycle 52)  104:53 (Y+1 cycle 53)  XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 320-342, colours [7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+  D01C          2  320   104:52 (Y+1 cycle 52)  104:53 (Y+1 cycle 53)  XNNNNNNNNNNNNNNNNNNNN   [line 104: 21 pixels at X 320-343, colour [1]; old: 12 pixels at X 320-342, colour [1]; new: 24 pixels at X 320-343, colour [1]]
+  Y             3   24   103:54 (Y cycle 54)    103:55 (Y cycle 55)    OOOOOOOOOOOOOOOOOOOOO
+  D015          3   24   103:54 (Y cycle 54)    103:55 (Y cycle 55)    OOOOOOOOOOOOOOOOOOOOO
+  PTR           3   24   103:60 (Y cycle 60)    104:03 (Y+1 cycle 3)   ONNNNNNNNNNNNNNNNNNNN
+  XLO           3   24   104:15 (Y+1 cycle 15)  104:16 (Y+1 cycle 16)  XNNNNNNNNNNNNNNNNNNNN   [line 104: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+  D010          3   24   104:15 (Y+1 cycle 15)  104:16 (Y+1 cycle 16)  XNNNNNNNNNNNNNNNNNNNN   [line 104: nothing drawn; old: 12 pixels at X 280-302, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+  COL           3   24   104:15 (Y+1 cycle 15)  104:16 (Y+1 cycle 16)  XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+  D01C          3   24   104:15 (Y+1 cycle 15)  104:16 (Y+1 cycle 16)  XNNNNNNNNNNNNNNNNNNNN   [line 104: 21 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+  Y             3  320   103:54 (Y cycle 54)    103:55 (Y cycle 55)    OOOOOOOOOOOOOOOOOOOOO
+  D015          3  320   103:54 (Y cycle 54)    103:55 (Y cycle 55)    OOOOOOOOOOOOOOOOOOOOO
+  PTR           3  320   103:60 (Y cycle 60)    104:03 (Y+1 cycle 3)   ONNNNNNNNNNNNNNNNNNNN
+  XLO           3  320   104:48 (Y+1 cycle 48)  104:49 (Y+1 cycle 49)  ONNNNNNNNNNNNNNNNNNNN
+  D010          3  320   104:20 (Y+1 cycle 20)  104:21 (Y+1 cycle 21)  ONNNNNNNNNNNNNNNNNNNN
+  COL           3  320   104:52 (Y+1 cycle 52)  104:53 (Y+1 cycle 53)  XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 320-342, colours [7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+  D01C          3  320   104:52 (Y+1 cycle 52)  104:53 (Y+1 cycle 53)  XNNNNNNNNNNNNNNNNNNNN   [line 104: 21 pixels at X 320-343, colour [1]; old: 12 pixels at X 320-342, colour [1]; new: 24 pixels at X 320-343, colour [1]]
+  Y             7   24   103:54 (Y cycle 54)    103:55 (Y cycle 55)    OOOOOOOOOOOOOOOOOOOOO
+  D015          7   24   103:54 (Y cycle 54)    103:55 (Y cycle 55)    OOOOOOOOOOOOOOOOOOOOO
+  PTR           7   24   104:05 (Y+1 cycle 5)   104:11 (Y+1 cycle 11)  ONNNNNNNNNNNNNNNNNNNN
+  XLO           7   24   104:15 (Y+1 cycle 15)  104:16 (Y+1 cycle 16)  XNNNNNNNNNNNNNNNNNNNN   [line 104: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+  D010          7   24   104:15 (Y+1 cycle 15)  104:16 (Y+1 cycle 16)  XNNNNNNNNNNNNNNNNNNNN   [line 104: nothing drawn; old: 12 pixels at X 280-302, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+  COL           7   24   104:15 (Y+1 cycle 15)  104:16 (Y+1 cycle 16)  XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 24-46, colours [7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+  D01C          7   24   104:15 (Y+1 cycle 15)  104:16 (Y+1 cycle 16)  XNNNNNNNNNNNNNNNNNNNN   [line 104: 21 pixels at X 24-47, colour [1]; old: 12 pixels at X 24-46, colour [1]; new: 24 pixels at X 24-47, colour [1]]
+  Y             7  320   103:54 (Y cycle 54)    103:55 (Y cycle 55)    OOOOOOOOOOOOOOOOOOOOO
+  D015          7  320   103:54 (Y cycle 54)    103:55 (Y cycle 55)    OOOOOOOOOOOOOOOOOOOOO
+  PTR           7  320   104:05 (Y+1 cycle 5)   104:11 (Y+1 cycle 11)  ONNNNNNNNNNNNNNNNNNNN
+  XLO           7  320   104:48 (Y+1 cycle 48)  104:49 (Y+1 cycle 49)  ONNNNNNNNNNNNNNNNNNNN
+  D010          7  320   104:20 (Y+1 cycle 20)  104:21 (Y+1 cycle 21)  ONNNNNNNNNNNNNNNNNNNN
+  COL           7  320   104:52 (Y+1 cycle 52)  104:53 (Y+1 cycle 53)  XNNNNNNNNNNNNNNNNNNNN   [line 104: 12 pixels at X 320-342, colours [7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+  D01C          7  320   104:52 (Y+1 cycle 52)  104:53 (Y+1 cycle 53)  XNNNNNNNNNNNNNNNNNNNN   [line 104: 21 pixels at X 320-343, colour [1]; old: 12 pixels at X 320-342, colour [1]; new: 24 pixels at X 320-343, colour [1]]
+
+SUMMARY, FREE: last write that marks any line of the old occupant (Y_old = 103, displayed 104-124; swept from before 124:00 to after line 125)
+  register sprite    X   last marking write     pattern then
+  XLO           0   24   124:19 (Y_old+21 cycle 19)   OOOOOOOOOOOOOOOOOOOOX   [line 124: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+  PTR           0   24   123:11 (Y_old+20 cycle 11)   OOOOOOOOOOOOOOOOOOOON
+  COL           0   24   124:18 (Y_old+21 cycle 18)   OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+  XLO           0  320   124:48 (Y_old+21 cycle 48)   OOOOOOOOOOOOOOOOOOOON
+  PTR           0  320   123:11 (Y_old+20 cycle 11)   OOOOOOOOOOOOOOOOOOOON
+  COL           0  320   124:55 (Y_old+21 cycle 55)   OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+  XLO           2   24   124:19 (Y_old+21 cycle 19)   OOOOOOOOOOOOOOOOOOOOX   [line 124: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+  PTR           2   24   123:58 (Y_old+20 cycle 58)   OOOOOOOOOOOOOOOOOOOON
+  COL           2   24   124:18 (Y_old+21 cycle 18)   OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+  XLO           2  320   124:48 (Y_old+21 cycle 48)   OOOOOOOOOOOOOOOOOOOON
+  PTR           2  320   123:58 (Y_old+20 cycle 58)   OOOOOOOOOOOOOOOOOOOON
+  COL           2  320   124:55 (Y_old+21 cycle 55)   OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+  XLO           3   24   124:19 (Y_old+21 cycle 19)   OOOOOOOOOOOOOOOOOOOOX   [line 124: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+  PTR           3   24   123:60 (Y_old+20 cycle 60)   OOOOOOOOOOOOOOOOOOOON
+  COL           3   24   124:18 (Y_old+21 cycle 18)   OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+  XLO           3  320   124:48 (Y_old+21 cycle 48)   OOOOOOOOOOOOOOOOOOOON
+  PTR           3  320   123:60 (Y_old+20 cycle 60)   OOOOOOOOOOOOOOOOOOOON
+  COL           3  320   124:55 (Y_old+21 cycle 55)   OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+  XLO           7   24   124:19 (Y_old+21 cycle 19)   OOOOOOOOOOOOOOOOOOOOX   [line 124: nothing drawn; old: 12 pixels at X 56-78, colour [1]; new: 12 pixels at X 24-46, colour [1]]
+  PTR           7   24   124:05 (Y_old+21 cycle 5)    OOOOOOOOOOOOOOOOOOOON
+  COL           7   24   124:18 (Y_old+21 cycle 18)   OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 24-46, colours [1, 7, 15]; old: 12 pixels at X 24-46, colour [1]; new: 12 pixels at X 24-46, colour [7]]
+  XLO           7  320   124:48 (Y_old+21 cycle 48)   OOOOOOOOOOOOOOOOOOOON
+  PTR           7  320   124:05 (Y_old+21 cycle 5)    OOOOOOOOOOOOOOOOOOOON
+  COL           7  320   124:55 (Y_old+21 cycle 55)   OOOOOOOOOOOOOOOOOOOOX   [line 124: 12 pixels at X 320-342, colours [1, 7, 15]; old: 12 pixels at X 320-342, colour [1]; new: 12 pixels at X 320-342, colour [7]]
+
+13590 samples. Stable handler start (line, cycle): (102, 6) x13590. irq_late_count = 0
+handler stable on line 102 cycle 6 in every sample: yes
