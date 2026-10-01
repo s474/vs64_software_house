@@ -499,6 +499,123 @@ So "at most 8 on a row" means, for this multiplexer, at most 8 sprites within an
 window (39 for back-to-back full rows), not 8 on one raster line. The QA soak test's
 "≤ 8 on a row" should be read that way.
 
+**The exact guarantee** (Technical Director, M3 review, 2026-10-01; *derived* from the selection
+rules above and the eviction rules in [Overflow](#overflow-fair-flicker), not measured): a sprite
+at Y is **shown in every frame** if at most 7 other shown-range sprites have Y in
+**Y − 38 … Y + 25**. Why:
+
+- Fewer than 8 others in the 38 lines above means the kept sprite 8 slots earlier is ≥ 39 lines
+  up, so the gap check passes (≥ 25) and no chain of carried-on slots can reach it: the longest
+  one that matters is 7 slots at 2 lines each from a start 23 lines after that sprite, which is
+  done by Y − 3.
+- A later sprite can only evict it if that sprite itself fails to fit, which needs 8 kept
+  sprites within 25 lines above the later one (or within 38 for a carry-on failure). All of those,
+  and the later sprite, are then inside this sprite's window, which makes 9.
+
+The QA soak (`tests/engine/multiplexer/soak.py`, check 3b) uses a symmetric **± 39 lines**, at most
+8 including the sprite itself. That window contains the one above, so every sprite-frame it calls
+uncrowded is one the engine guarantees, and it requires such a sprite to be missing for **0**
+frames, which is stricter than the brief's "no more than 2 consecutive". It is the right reading
+of the brief for this engine, and it isn't an empty test: 40,717 of the 200,000 unpinned
+sprite-frames in a 10,000-frame soak were uncrowded, with 0 missing (**measured**, re-run for the
+review, 2026-10-01). What it doesn't cover, by design: a sprite with ≤ 8 on its own
+raster lines but more than 8 inside the window (two full rows 30 lines apart, say) may flicker.
+For those the limits are the flicker table's: missing at most 2 frames running with nothing
+pinned, 4 with 4 pinned sprites in the crowd (**measured**, `mux_max_age`).
+
+### Slot write deadline
+
+Added in the M3 review (Technical Director, 2026-10-01), after QA's position check found zone
+slots whose writes finish **on** the sprite's own Y line.
+
+**What a zone slot writes, in order:** Y, X low, pointer, colour, `$D010`, and `$D01C` in the mixed
+blocks. Each has its own deadline, set by when the VIC-II uses it:
+
+| Write | Used by the VIC-II | Deadline | Basis |
+|---|---|---|---|
+| Y (`$D001 + 2j`) | The Y comparison on line Y that starts the sprite's DMA | Before that comparison, late on line Y | First DMA "at the end of line Y": **measured** ([vic-ii-timing.md](../docs/reference/vic-ii-timing.md#frame-geometry), `tests/timing/sprite_wrap`). The comparison's cycle is *unmeasured*: the standard figure is cycle 55 (estimate #7) |
+| Pointer (`MUX_SCREEN + $3F8 + j`) | The sprite's pointer fetch, once per DMA line. The first one decides the data shown on line Y + 1 | Before the first fetch: the end of line Y for hardware sprites 0–2, the first cycles of line Y + 1 for 3–7 | Fetch order and position **measured** as CPU halts: sprites 0–2 from cycle 55/56 of the line, 3–7 until cycle 10 of the next ([vic-ii-timing.md](../docs/reference/vic-ii-timing.md#sprite-dma)). The exact fetch cycle per sprite is *unmeasured* |
+| X low, `$D010` bit, colour, `$D01C` bit | Drawing the sprite, first on line Y + 1 | Before the sprite's first pixel on line Y + 1 | *Unmeasured*. These are live registers, so the end of line Y is early enough whatever X is |
+
+**The requirement, stated conservatively:** every write of a slot lands **before cycle 55 of line
+Y** (VICE's cycle numbering). That is the earliest cycle at which sprite DMA has been measured to
+take the bus, so nothing the VIC-II fetches or draws for the sprite can come before it. The true
+deadlines are at or after it; how far after is *unmeasured*.
+
+**What the engine enforces is narrower.** The DEBUG check (`mux_late_count`) reads the raster 4
+cycles after the **Y** store and counts a slot as late if the line is already Y or later. So:
+
+- The Y write is at least 55 cycles early: about a line more than it needs. That's deliberate
+  margin, and `mux_late_count` = 0 in every run proves it for Y.
+- **The other writes aren't checked by anything in the engine.** They follow the check's raster
+  read by 37 CPU cycles in the uniform blocks (5 for the two branches, then four 8-cycle
+  load-and-store pairs) and 45 in the mixed ones (*counted*); 32 and 40 after the Y store in a
+  release build, which has no check and is therefore always earlier than DEBUG.
+- The selection's own rule allows it: a slot fits when its simulated `done` line is **≤** Y, not
+  < Y.
+
+**Measured.** Raster position at the `inx` that follows each block's last write:
+
+| Run | Zone slots | Last write on line Y | Latest | Slack to cycle 55 | Of those, Y on a badline |
+|---|---|---|---|---|---|
+| QA `positions.py`, 700 frames, hires, multicolour and mixed phases | 21,714 sprite-frames (top and zone slots) | 28 | cycle 40 | **15 cycles** | not recorded |
+| Technical Director, 60,000 consecutive zone slots after 100 warm-up frames, the spike as shipped (uniform hires) | 60,000 | 139 (0.23%) | cycle 26 | **29 cycles** | **0** (of 7,475 slots with Y on a badline) |
+
+The second run is a scratch checkpoint script, not kept in the repo: an execution checkpoint on
+the `inx` of each of the 8 uniform blocks (`mux_zone_0` + 81 j + 45, DEBUG), reading `LIN`, `CYC`,
+X and `mux_s_y`,X at every stop. Slack is (Y − `LIN`) × 63 + 55 − `CYC`. Its other results:
+49,520 slots (83%) finished 6 or more lines before Y, 1,204 one line before, and every one of the
+40 closest calls had Y ≡ 4, 5 or 6 (mod 8): one to three lines **below** a badline (badlines are
+lines ≡ 3 with YSCROLL = 3). The badline starves the IRQ, the Y write slips to the end of line
+Y − 1, and the rest lands early on line Y, which is not itself a badline. `mux_late_count` stayed 0.
+
+**Is the observed behaviour safe?** Yes, for everything observed: all six writes were in place at
+least 15 cycles before the conservative deadline in every slot of both runs, and the position
+check found 0 register mismatches. **It isn't proven for every layout**, and here is the gap:
+
+| Line Y is | CPU cycles on line Y before cycle 55 | Needed in the worst phase (the check passes on the last cycle of line Y − 1) | Result |
+|---|---|---|---|
+| Not a badline, no sprite fetch at its start | 55 | 37 uniform / 45 mixed | Safe |
+| Not a badline, sprites 3–7 active from the line above (CPU halted to cycle 10, **measured**) | 44 | 37 / 45 | Uniform safe by 7. Mixed: the `$D01C` store lands on cycle 55, level with the deadline; its real deadline is line Y + 1, so safe in practice, *unproven* |
+| **A badline** (CPU runs cycles 0–11 and 55/56–62 with no sprites, 0–2 cycles with sprites 0–7 around it, **measured**) | 12, or 0–2 | 37 / 45 | **Not safe in the worst phase**: at most the X low write lands; the pointer, colour and `$D010` writes slip past cycle 55, and past the sprite fetches into line Y + 1 when sprites are active. The sprite's first line (Y + 1) would then show the hardware sprite's previous pointer, colour or X bit 8 for one line, in one frame |
+
+The worst phase on a badline needs the Y check to pass in the last ~25 cycles of line Y − 1 with
+Y ≡ 3 (mod 8). It was **never observed** (0 of 7,475), and the measured pattern says why it's rare:
+lateness comes from a badline just above Y, and a badline Y has its nearest badline 8 lines up.
+But nothing in the scheduling arithmetic forbids it, and the spike's motion isn't a proof.
+
+**Decision.** Accepted for v1 as an open risk with a probe owed, not a defect: no failure has been
+seen, the effect if it happens is one wrong raster line on one sprite for one frame, and M3's
+acceptance criteria don't depend on it. It must be closed **before a game relies on the
+multiplexer** (M4). Two probes for the raster-engineer, in this order:
+
+1. **`tests/timing/sprite_latch`: the hardware deadlines** (closes estimates #7 and #8, and
+   replaces the *unmeasured* cells above). One sprite on a stable raster, screen off, borders
+   open, as `tests/timing/sprite_wrap` does it. For each of Y, pointer, X low, the `$D010` bit,
+   colour, the `$D01C` bit and the `$D015` bit: change the register at a swept cycle (every cycle
+   from cycle 30 of line Y to cycle 20 of line Y + 1) and read from VICE's frame buffer whether
+   line Y + 1 shows the old or the new value. Repeat for hardware sprites 0, 2, 3 and 7 (both
+   fetch groups, first and last of each), and for X = 24 and X = 320. Also: rewrite X, pointer and
+   colour at a swept cycle on lines Y_old + 21 and Y_old + 22 and check line Y_old + 21 is
+   unmarked. Output: a table in `vic-ii-timing.md` of the last safe cycle per register and sprite,
+   marked measured.
+2. **`tests/engine/multiplexer_edge`: the engine at the scheduler's limit on badlines.** Static
+   layouts (as `multiplexer_ghost` cycles through phases), each built so slots sit exactly at the
+   simulation's limit (`done` = Y) with Y on a badline and 7 other sprites active across it: a
+   full row at Y ≡ 3 (mod 8) directly under a full row at the 39-line limit; the same at 25 lines
+   for a single reused sprite; each repeated with Y ≡ 2 and 4, and in mixed multicolour. The check
+   is on the **last** write, measured from outside so the engine's timing isn't disturbed: the
+   `inx` checkpoint method above (it belongs in `tests/engine/multiplexer/positions.py` as a
+   mode, tools-engineer or QA), or a `memory` check on a counter the *spike* keeps. Pass: every
+   slot's last write is before the earliest deadline probe 1 measured, in 1,000 frames per layout,
+   DEBUG and release, with `mux_late_count` and `irq_late_count` 0.
+
+If probe 2 finds a slot past the deadline, the Technical Director chooses between two fixes and
+re-baselines: a slot fits only when `done` **<** Y (one line of capacity: the minimum gap becomes
+26 and a full row under a full row 40), or the blocks write the pointer straight after Y so the
+write with the earliest deadline comes first. Either changes locked figures, so neither is done
+without the probe's evidence. v2 must make this provable: [v2 requirements](#multiplexer-v2-requirements).
+
 The IRQ side doesn't need a plan: `mux_irq_zone` writes slot k, then carries on with slot k+1
 if `mux_s_free[k+1]` ≤ the current raster line, re-arms at `mux_s_free[k+1]` if not, and calls
 `IrqDone()` after the last slot. It writes `$D010`/`$D01C` from the cumulative slot values.
@@ -715,7 +832,8 @@ per-slot cost depend on where the linker happened to put them. Since stage 3.5:
 
 When a sprite doesn't fit, something must be dropped for this frame. Simon's decision is that
 nothing vanishes permanently, so the choice rotates. Each virtual sprite has an age,
-`mux_age` (frames since it was last shown, saturating at 255). Selection walks the sprites in
+`mux_age` (frames since it was last shown, saturating at `$FE` as built: `$FF` marks a pinned
+sprite during a slow-path selection). Selection walks the sprites in
 Y order:
 
 ```
@@ -1071,9 +1189,26 @@ Suggested block for `zp.asm`, after the scratch registers:
 
 Non-zero-page engine RAM (in the engine block): the IRQ chain tables (6 bytes per entry, ≤ 96),
 the six virtual arrays (144), `mux_order` and `mux_age` (48), the selection's kept list
-(about 72), and the slot buffers (7 × 64 = 448, aligned). About 760 bytes, plus code
-(IRQ framework **as built**: 310 bytes of code and data, plus 6 per entry and the 8-byte
-tick stub; multiplexer *estimate* ~1.5 KB).
+(about 72), and the slot buffers (7 × 64 = 448, aligned). That was the design estimate: about
+760 bytes, plus ~1.5 KB of multiplexer code.
+
+**As built, the multiplexer is far larger than that estimate** (**measured** from the labels of
+the stage 4 `multiplexer` spike, DEBUG build, `build/multiplexer/main.vs`, 2026-10-01; the release
+build is *unmeasured*, and smaller by the DEBUG checks):
+
+| Part | Addresses in the spike | Bytes |
+|---|---|---|
+| IRQ framework, code and data (`irq_hot_start` to `irq_late_count`), + 6 per chain entry and the 8-byte tick stub | `$0810`–`$0945` | 310 |
+| Padding to the multiplexer's first aligned page | `$0946`–`$09FF` | 186 |
+| Multiplexer data: 9 slot arrays, zone-block tables, virtual arrays, scratch (`mux_s_xlo` to `mux_init`; three aligned pages and the gaps between them) | `$0A00`–`$0F19` | 1,306 |
+| Main-loop code: `mux_init`, `mux_update`, and the slow path (`multiplexer_flicker.asm`, 1,535 of it) | `$0F1A`–`$1869` | 2,384 |
+| `mux_irq_top` (unrolled) and padding to the zone page | `$186A`–`$19FF` | 406 |
+| Zone code: dispatch, 16 unrolled blocks, park | `$1A00`–`$1FAC` | 1,453 |
+| **Engine block in all** | `$0810`–`$1FAC` | **6,045** |
+
+A game's memory map must allow **about 6 KB** for the engine block with the multiplexer, not 2.3.
+That's why the spike's sprite data moved from `$2000` to `$2800` in stage 4. Lifting it is a
+[v2 requirement](#multiplexer-v2-requirements).
 
 ---
 
@@ -1199,10 +1334,14 @@ in every frame (6,000 frames, the diagnosis), and pinning outside the reversal �
 | Non-stress, worst | **5,344** (0 frames below 5,300) | 919,800 frames | the same |
 | Stress, worst | 4,496 (8 frames below 5,300) | 20,000 frames | `spike_idle_min_stress` × 16 **≥ 4,250** (4,480 − ~5%, rounded down to 50) |
 | Stress, worst | **4,480** (451 frames below 5,300) | 919,800 frames | the same |
+| Non-stress, worst, by the spike's own label | **5,328** (margin 28: one iteration) | `make test-long` ×34, about 800,000 frames | the same check: PASS |
+| Stress, worst, by the spike's own label | **4,448** (margin 198) | `make test-long` ×34 | the same check: PASS |
 
 All **measured**, by a checkpoint at `spike_main` that reads each frame's idle count and motion
 state (so the spike's code is as it was, before the labels existed). The spike's own labels read
-5,712 and 4,480 in the `make test` window: the classification costs up to one iteration (16). A stress frame is defined in
+5,712 and 4,480 in the `make test` window, and 5,328 and 4,448 in the sign-off long run: the
+classification and the different window cost one to two iterations (16–32;
+[readings and what they change](#multiplexer-spike-free-cpu-labels)). A stress frame is defined in
 [Multiplexer spike: free-CPU labels](#multiplexer-spike-free-cpu-labels).
 
 - **What a miss looks like.** Nothing, unless the game's own logic also needs more than is left in
@@ -1508,13 +1647,43 @@ checks read these labels. They are `from_stage: 4` and the file's `"stage"` is 4
 - **Why amp 2–5 and not just 2–3**, where the sort is over 1,500: with 2–3 alone, two non-stress
   frames in 919,800 fall below 5,300 (5,248 and 5,264, both amp 5 at D = 10), still inside the
   reversal's re-sort. Amp 6–8 adds nothing (the minimum stays 5,344).
-- **Expected readings** on the stage 4 engine, with the classification costing one iteration or
-  less: non-stress 5,712–5,728 in the `make test` window and ≥ 5,328 in a long run; stress
-  4,480–4,496 and ≥ 4,464. Anything else is reported to the Technical Director, not tuned away.
+- **Expected readings** on the stage 4 engine, as first written (assuming the classification costs
+  one iteration or less): non-stress 5,712–5,728 in the `make test` window and ≥ 5,328 in a long
+  run; stress 4,480–4,496 and ≥ 4,464. The long-run pair was too tight by one iteration and is
+  **corrected below** to ≥ 5,312 and ≥ 4,448. Anything outside the corrected figures is reported to
+  the Technical Director, not tuned away.
 - **Readings as built:** 5,712 (non-stress) and 4,480 (stress) in the `make test` window
   (raster-engineer, commit 2b7aed5; `make test` 34/34, also under `--strict`): both inside the
-  expected ranges, one iteration below the 20,000-frame checkpoint figures. The long-run readings
-  (`make test-long`, about 800,000 frames for these checks) are *not yet recorded here*.
+  expected ranges, one iteration below the 20,000-frame checkpoint figures.
+- **Long-run readings** (**measured**: `make test-long`, ×34, about 800,000 frames for these checks,
+  2026-10-01, 34/34 checks pass; the full table is in the
+  [diagnosis record](../docs/milestones/M3-stage4-pinning-diagnosis.md), "Sign-off long run"):
+
+  | Label | Reading × 16 | Iterations | Limit | Margin | Checkpoint figure, 919,800 frames | Expected |
+  |---|---|---|---|---|---|---|
+  | `spike_idle_min_normal` | **5,328** | 333 | ≥ 5,300 (332 iterations pass) | 28 cycles: **one iteration** | 5,344 | ≥ 5,328: as expected |
+  | `spike_idle_min_stress` | **4,448** | 278 | ≥ 4,250 (266 pass) | 198 cycles: 12 iterations | 4,480 | ≥ 4,464: **one iteration lower** |
+
+- **The stress reading is one iteration under the expectation, and it changes nothing** (Technical
+  Director, 2026-10-01). No limit moves and no promise changes:
+  - **The expectation was wrong, not the engine.** It assumed the classification's 9–16 cycles could
+    cost at most one iteration against the checkpoint figure. That only holds for the same frame in
+    the same phase. The idle count is a whole number of 16-cycle iterations cut off by a tick that
+    the loop polls for, and the long run isn't the checkpoint run: it's a different window (about
+    800,000 frames after the other checks, against 919,800 from the start), in a build whose every
+    frame is 9–16 cycles longer. A second iteration of difference is inside that quantisation.
+    **Corrected expectation:** a long-run reading within **two iterations (32 cycles)** of the
+    checkpoint figure, so ≥ 5,312 non-stress and ≥ 4,448 stress. Both readings meet it.
+  - **The stress floor (4,250) isn't a promise.** It's a tripwire set 5% under the measured worst so
+    a regression in the excepted case shows. 4,448 clears it by 198. What a game is told about
+    that case, "about 6,400", is unchanged: 4,448 + `spike_move`'s 1,909 = 6,357 in the spike with
+    its statistics code, 6,389 by the checkpoint.
+  - **The check that matters is the other one, and its margin is one iteration.** 5,328 against
+    5,300 passes by 28 cycles: 333 iterations where 332 pass and 331 fail. So **any change that
+    adds 17 cycles or more to the worst non-stress frame's main loop fails `make test-long`**,
+    though not necessarily `make test` (5,712 in its window). That's the promise working as
+    designed: such a change is reported, not absorbed. It is why the review proposes headroom
+    as a v2 requirement ([v2 requirements](#multiplexer-v2-requirements), 5).
 
 **QA soak test (10,000 frames)**, in addition to the brief's no-crash / no-jam /
 ≤ 2-missing-frames checks:
@@ -1569,8 +1738,8 @@ records them in the reference docs as measured, and updates this page and the bu
 | 4 | `IRQ_STABLE_CYCLE`: the stable handler's start cycle | **Measured**: 6 | Stable handler users | `irq_chain` spike, `start_cycle` |
 | 5 | Maximum normal jitter with the worst main loop | **Measured**: 7 (8 never seen in 4,000 IRQs, taken branches included) | Acceptance | `irq_chain` spike, `start_cycle` |
 | 6 | Sprite DMA lines per sprite (display on Y+1 … Y+21) | **Measured**: 21 (42 Y-expanded), DMA at the ends of lines Y … Y+20, display Y+1 … Y+21 | DMA budget, `MUX_FREE_AFTER` | `tests/timing/sprite_wrap` (2026-09-30) |
-| 7 | Latest cycle on line Y at which writing the sprite's Y still shows it from Y+1 | Before ~cycle 55 | Scheduling, `MUX_WRITE_LINES` | Probe |
-| 8 | Earliest line/cycle to rewrite X, pointer and colour without marking the previous occupant's last line | Line Y_old + 22 | `MUX_FREE_AFTER` | Probe with screenshots |
+| 7 | Latest cycle on line Y at which writing the sprite's Y still shows it from Y+1; and the same for the pointer, X, `$D010`, colour and `$D01C` (added in the M3 review) | Before ~cycle 55. **Still unmeasured after M3**: the engine keeps the Y write a line early, the other writes are unchecked ([Slot write deadline](#slot-write-deadline)) | Scheduling, `MUX_WRITE_LINES` | Probe `tests/timing/sprite_latch`, specified in [Slot write deadline](#slot-write-deadline). Owed before M4 |
+| 8 | Earliest line/cycle to rewrite X, pointer and colour without marking the previous occupant's last line | Line Y_old + 22. **Still unmeasured after M3**, but bounded: display ends on Y_old + 21 (**measured**, #6), and the position check saw no zone write start before Y_old + 22 (0 of 21,714) | `MUX_FREE_AFTER` | The same probe |
 | 9 | Zone IRQ trigger-to-first-write, and per-slot write time, under worst DMA | **Measured** (stage 2): first write 0–1 lines after the free line (2 once in 2,000); a slot 78 cycles with no DMA, up to ~2 lines with it. `MUX_WRITE_LINES` raised to 2 (1 gave 139 late slots in 3,000 frames) | `MUX_IRQ_LINES`, `MUX_WRITE_LINES` | `multiplexer` spike, `measure.py`, `mux_late_count` = 0 |
 | 10 | Sort, select, build and IRQ costs | **Measured** (stage 2, no flicker/pinning): see [Multiplexer costs](#multiplexer-costs). Over the estimates; budgets re-baselined to the 600-pass raster figures (Technical Director) | Budgets | `multiplexer` spike |
 | 11 | Badline steal when the badline starts during IRQ entry (3 consecutive writes) | 40 | Only for cycle-exact code across a badline | Listed as unmeasured in vic-ii-timing.md |
@@ -1581,9 +1750,75 @@ records them in the reference docs as measured, and updates this page and the bu
 
 ---
 
+## Multiplexer v2 requirements
+
+What multiplexer v2 must achieve. Requirements and measured starting points only: the design is
+v2's own work. v2 is an R&D-track item, due before the first real title (M5) depends on the
+multiplexer; M4 may use v1 ([M3 brief](../docs/milestones/M3-engine-basics.md), rule 3).
+Requirements 1–3 are agreed with Simon. Performance targets are changed only by Simon and the
+producer. Requirements 4–9 come from the Technical Director's M3 review (2026-10-01) and are
+**proposed**, for the producer to confirm when v2 is scheduled.
+
+All starting points are **measured** on the stage 4 engine, raster cycles, DEBUG build, in the
+`multiplexer` spike (24 sprites, 4 pinned), unless marked otherwise.
+
+**Agreed (brief, rule 3):**
+
+| # | Requirement | How it's checked | v1 starting point |
+|---|---|---|---|
+| 1 | **`mux_update` averages ≤ 3,000 raster cycles in normal frames** (no overflow), with fair flicker and pinning kept | `max_avg_cycles` 3000 on `mux_update` → `mux_update_fast`, 600 passes, and in `make test-long` | **4,261** over 7,016 fast frames of 20,000; 4,281 in the sign-off long run; 4,310 in the `make test` window. v1's limit is 5,000. To cut: about 1,260 (30%). Where it goes in a fast frame: sort ~700 (446–3,252), select with the build merged in ~3,450, build tail ~190 (stage 3 fast-path spike) |
+| 2 | **The free-CPU promise in every frame**: idle × 16 ≥ 5,300 (≥ 7,200 for the game), **including a mass sort reversal with 4 pinned sprites in a crowd**, over a 20,000-frame run. The two v1 checks become one again | One `memory` check on a single idle minimum, `min: 5300`, in `make test` and over ≥ 20,000 frames in `make test-long` | Stress frames: **4,448–4,496** (misses by up to 852; 8 frames in 20,000, 1 in about 2,040 over 919,800). Non-stress: **5,328**, a margin of one idle iteration. The worst frame's `mux_update` is 11,783–12,342, of which the sort stress is about 1,600 and pinning about 2,190 ([diagnosis](../docs/milestones/M3-stage4-pinning-diagnosis.md)) |
+| 3 | **The zone IRQ's per-slot cost reviewed**: a measured figure for the code alone and for the worst case with DMA, and a decision on each part that isn't the six writes | A `profile` check per slot path in a spike that isolates it; all IRQ time per frame no higher than v1's | Code alone, slot to slot: **62** DEBUG, 53 release (*counted*), + 8 in mixed multicolour; of the 62, 40 are the writes, 9 the DEBUG late check, 13 the next-slot test. Slot to slot with waits and DMA: up to ~250. A re-armed IRQ costs 107–114 CPU (78 framework + 22 dispatch + 7). One zone IRQ: 155 / 574 / 2,763 (min / avg / max). All IRQs in a frame: 522 / 2,227 / **3,779**, limit 4,000 |
+
+**Kept from v1** (a v2 that loses one of these hasn't met the brief):
+
+- 24 virtual sprites, sorted by Y each frame, the game-facing API unchanged (`mux_init`,
+  `mux_update` with its C flag, `mux_irq_top` as chain entry 0, the six virtual arrays,
+  `MUX_SCREEN`, `MUX_Y_MAX`), double buffering with a repeated frame as the only effect of an overrun.
+- Fair flicker within the [flicker table](#overflow-fair-flicker): `mux_max_age` ≤ 2 with nothing
+  pinned and ≤ 4 with 4 pinned + 20 unpinned (v1 measures exactly 2 and 4).
+- Up to 4 pinned sprites shown every frame: `mux_pin_drop_count` 0 (v1: 0 over 920,000 frames).
+- A sprite with at most 7 others in Y − 38 … Y + 25 is never missing
+  ([the exact guarantee](#scheduling-and-the-minimum-vertical-separation)), checked by the soak's 3b.
+- `mux_late_count`, `irq_late_count` and the spike's overrun count 0; no wrap ghosts; the IRQ
+  framework's locked figures untouched.
+
+**Proposed by the M3 review:**
+
+| # | Requirement | Why | v1 starting point |
+|---|---|---|---|
+| 4 | **Every slot write provably before its deadline**, not only Y: the selection rule, the constants and a DEBUG or test-harness check all refer to the *last* write and to deadlines measured by `tests/timing/sprite_latch` | v1 checks the Y write only, and its fit rule (`done` ≤ Y) allows the rest to land on line Y | 139 of 60,000 zone slots finish on line Y, slack ≥ 29 cycles (15 in QA's run), none on a badline; the worst phase on a badline is unproven ([Slot write deadline](#slot-write-deadline)) |
+| 5 | **Headroom on the promise**: the long-run idle minimum clears 5,300 by at least 5% (≥ 5,565), so an ordinary change doesn't sit one iteration from failing | v1's non-stress margin is 28 cycles in the long run | 5,328 |
+| 6 | **A stated worst case for the sort**, measured: either the full 24-sprite reversal fits the promise, or the engine bounds the work per frame | The full reversal (276 shifts) is still an *estimate*, ~6,000 cycles, and is larger than the spike's three-groups-of-8 reversal | `mux_sort` max 3,252 (the spike's reversal); normal ~600 |
+| 7 | **Source files under about 500 lines, one subsystem each**, every routine header carrying its current measured cost | [Coding standards](../docs/standards/coding-standards.md#files-and-structure). The v1 split was deferred to v2 by the producer | `multiplexer.asm` 746 lines, `multiplexer_flicker.asm` 523; the file header's measured table stops at stage 3.5 |
+| 8 | **A size budget, met and measured in both builds** | The design estimated ~2.3 KB; a game's memory map has to plan for the real figure | 6,045 bytes for the engine block, DEBUG ([Zero page](#zero-page)); release *unmeasured* |
+| 9 | **Release build measured**: the zone IRQ and per-frame IRQ figures taken once with `BUILD=release`, and the write-deadline check run on it | Every budget is a DEBUG figure, and the release zone blocks are different code at a different page offset (53 against 62 per slot) | Only `mux_irq_top` (378 / 381 / 393) and `mux_irq_park` (80) are confirmed equal in release |
+
+**Limits worth reconsidering in the v2 design** (candidates, not requirements; each needs
+Simon's decision or its own proof before it's promised):
+
+- **Full row under a full row: 39 lines → about 33.** The no-CPU candidate in
+  [Scheduling](#scheduling-and-the-minimum-vertical-separation) (first slot of an IRQ charged
+  `MUX_IRQ_LINES + 2`, each continuation 1) spends margin that requirement 4 has to prove first.
+- **A top panel or splits inside the play area** (fixed chain entries inside the zone region,
+  a configurable `MUX_Y_MIN`): excluded from v1 by decision, not designed.
+- **`MUX_Y_MAX` ≥ 80** (from `mux_irq_park` on lines 77–79): a game with a tall bottom panel needs
+  a different park scheme.
+- **The estimates M3 left open**, all in [Estimates to measure](#estimates-to-measure-in-m3): #2
+  (`$D012` written with the current line), #7 and #8 (write deadlines, owed before M4), #11
+  (badline during IRQ entry), #12 (one eviction, profiled rather than derived), and the rows of
+  the flicker table between P = 0 and P = 4.
+
+---
+
 ## v1 limits
 
 Deliberately out of v1, so they don't get assumed:
+
+- **A proof that every slot write beats its deadline.** v1 checks the Y write only; the rest is
+  measured safe in the spike, with probes owed before M4 ([Slot write deadline](#slot-write-deadline)).
+- **The free-CPU promise in a mass sort reversal with pinned sprites in a crowd**
+  ([the one exception](#the-v1-promise-and-its-one-exception)).
 
 - Chain lines ≥ 256; more than 16 chain entries; changing handlers at run time.
 - Sprite X/Y expansion (a decision: see below), per-sprite background priority, and
