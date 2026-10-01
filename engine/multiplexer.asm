@@ -64,8 +64,12 @@
 //   mux_irq_zone -> rti    155 / 574 / 2,763        (56,844 IRQs)
 //   all IRQ time per frame 522 / 2,227 / 3,779
 //   zone slot, back to back 62 (DEBUG) / 53 (release), measured: see MuxZoneBlock
-// Release build (BUILD=release, 2026-10-01, tests/engine/multiplexer_edge/irq_costs.py): see
-// MuxZoneBlock and engine/README.md#multiplexer-costs.
+// Release build (BUILD=release, 2026-10-01, tests/engine/multiplexer_edge/irq_costs.py, the same
+// spike, 20,000 frames; DEBUG beside it):
+//   zone slot, back to back 53 release / 62 DEBUG (61 / 70 in mixed multicolour)
+//   mux_irq_zone -> rti     146 / 542 / 2,752 release (57,179 IRQs); DEBUG 155 / 574 / 2,763
+//   mux_irq_top -> rti      378 x19,972, 393 x28: the same as DEBUG
+//   all IRQ time per frame  522 / 2,147 / 3,700 release; DEBUG 522 / 2,227 / 3,779
 // Overflow frames (fair flicker) and the overloaded spike: engine/README.md#multiplexer-costs.
 //
 // Constraints:
@@ -677,6 +681,11 @@ mux_zone_rearm:
 // and the end test runs only off the fast path. In: X = slot index (base included).
 // Cost per slot, block to block, next slot free already (counted): uniform 53 (release) /
 // 62 (DEBUG: + 9 late check); mixed + 8 for $D01C. Stage 2 was 67 / 78.
+// Measured equal (tests/engine/multiplexer_edge/irq_costs.py, 2026-10-01: the minimum block-to-block
+// time in tests/engine/multiplexer, where DMA and waits can only add): release 53 (35,073 of
+// 198,897 slots) and 61 mixed; DEBUG 62 (4,965 of 29,526) and 70 mixed. When the next sprite
+// frees on the line the test runs on (free = raster: through `more` and `wait`), the test is 38
+// cycles, not 13 (counted), and a slot takes 78 / 87 (release / DEBUG), 86 / 95 mixed.
 // A taken branch that crosses a page costs 1 more cycle (6502-timing.md), so every branch in a
 // block is checked at assembly time: 'next' is the address after the branch, 'target' its target.
 .function mux_crosses(next, target) { .return (>next) != (>target) }

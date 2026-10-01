@@ -1070,6 +1070,64 @@ With the labels built ([as built](#multiplexer-spike-free-cpu-labels)), `make te
 under `--strict`, and reads 5,712 (non-stress) and 4,480 (stress) in its window (raster-engineer,
 commit 2b7aed5): one idle iteration under the 20,000-frame figures, which is the classification's cost.
 
+**Release build** (**measured**, M3 follow-up, raster-engineer, 2026-10-01; VICE 3.10 x64sc PAL, the
+stage 4 engine, the same `multiplexer` spike built with `BUILD=release`). The release zone blocks
+are different code at a different page offset (no late check; `MUX_ZONE_OFFSET` 90, not 64), and
+every other budget figure on this page is a DEBUG one. One trace with
+`tests/engine/multiplexer_edge/irq_costs.py`, which stops at each zone block's entry and at the
+budget runner's own IRQ labels. Raster cycles, min / avg / max:
+
+| Figure | Release, 20,000 frames | Release, 3,000 | DEBUG, 3,000 (same script) | DEBUG, 20,000 (stage 4 table) |
+|---|---|---|---|---|
+| One zone slot, block to block, the code alone (the minimum: next slot free already) | **53** (35,073 of 198,897 slots) | 53 | **62** (4,965 of 29,526) | 62 |
+| The same in mixed multicolour (1,000 frames, `--mixed`) | **61** | | **70** | |
+| One zone slot, block to block, with waits and DMA | 53 / 102 / 295 | 53 / 102 / 294 | 62 / 107 / 301 | |
+| `mux_irq_zone` → `irq_exit_rti` | **146 / 542 / 2,752** (57,179 IRQs) | 146 / 536 / 1,518 | 155 / 567 / 1,528 | 155 / 574 / 2,763 |
+| `mux_irq_top` → `irq_exit_rti` | 378 ×19,972, 393 ×28 | 378 ×2,999, 393 ×1 | 378 ×2,999, 393 ×1 | 378 ×19,973, 393 ×28 |
+| All IRQ time per frame | **522 / 2,147 / 3,700** | 535 / 2,150 / 3,653 | 535 / 2,231 / 3,691 | 522 / 2,227 / 3,779 |
+
+- **The counted per-slot figures are now measured**: 53 release and 62 DEBUG, + 8 in mixed
+  multicolour. The minimum is exact because DMA and waits can only add to a slot's time.
+- **Release is cheaper than DEBUG by 9 cycles a slot and nothing else**: about 80 raster cycles a
+  frame on average (2,147 against 2,227) and 79 on the worst frame (3,700 against 3,779). The
+  DEBUG limits (zone IRQ 2,950, all IRQs 4,000) hold in release with more room.
+- **A slot whose successor frees on the very line the next-slot test runs on costs 25 more**
+  (*counted*: the test takes 38 cycles through its `more` and `wait` exits, not 13): 78 release,
+  87 DEBUG, 86 / 95 mixed. That's the case behind the closest calls in
+  [Slot write deadline](#slot-write-deadline).
+- The DEBUG column reproduces the stage 4 table's first 3,000 frames (zone IRQ 155 / 567 / 1,526,
+  per frame 535 / 2,230 / 3,691), so the script and the budget runner agree.
+
+Reproduce (the DEBUG build must be put back afterwards: `make test` uses it):
+
+```
+make BUILD=release GAME=multiplexer SRC_DIR=tests/engine/multiplexer
+uv run --package budget-runner python tests/engine/multiplexer_edge/irq_costs.py 20000    # about 3 minutes
+uv run --package budget-runner python tests/engine/multiplexer_edge/irq_costs.py 1000 100 --mixed
+make GAME=multiplexer SRC_DIR=tests/engine/multiplexer
+```
+
+**`mux_select` per slot** (**measured**, the same follow-up; DEBUG, 600 frames,
+`tests/engine/multiplexer_edge/routine_costs.py`: the minimum time from one loop iteration to the
+next, by path). The routine's header carried counted figures that were wrong:
+
+| Path | Cycles (X bit 8 clear / set) | Samples on the minimum | Header said |
+|---|---|---|---|
+| Loop 1, slots 0–7 | **74 / 76** | 1,764 / 488 | 68–70 |
+| Loop 2, new zone IRQ | **108 / 110** | 583 / 206 | 108 |
+| Loop 2, carry on, `done` = Y | **122 / 124** | 13 / 5 | 124 |
+| Loop 2, carry on, `done` < Y | **124 / 126** | 425 / 135 | 124 |
+
+Loop 2 pays three page crossings: `mux_s_done − 1,x` is read from the page before `mux_s_done`
+(which sits at a page start), once on the new-IRQ path and twice when carrying on, and the taken
+`bcc !carry` crosses from page `$10` to `$11` in the M3 builds. `mux_pin_save,x` also crosses a
+page for sprite numbers 4 and up (one cycle per pinned sprite in `mux_rebuild`'s restore). The
+arrays weren't moved: that would change locked figures, so it's left to v2. The same script gives
+the slow-path helpers their first measured figures (raster, IRQs excluded, min / avg / max):
+`mux_fill_kept` 149 / 356 / 753, `mux_rebuild` 542 / 1,162 / 2,170, `mux_mixed_d01c` 444 / 1,161 /
+1,996 (mixed multicolour frames only), `mux_set_blocks` 1,136 / 1,289 / 1,611 (twice per change of
+multicolour mode).
+
 ### Budget units
 
 Decided after stage 2 (Technical Director): **every multiplexer budget is raster time in the
