@@ -1,0 +1,19 @@
+1. PRG md5, f913ad0 against the working tree
+   multiplexer       debug    before 8365fc8d91ffda9070cb14e5d89f68eb  after 8365fc8d91ffda9070cb14e5d89f68eb  identical
+   multiplexer       release  before cf4bd5627ef1a5c8a83afc9ec7ed5445  after cf4bd5627ef1a5c8a83afc9ec7ed5445  identical
+   multiplexer_edge  debug    before 28917c7d326d0982b5a9775f3fdb50e2  after 28917c7d326d0982b5a9775f3fdb50e2  identical
+   multiplexer_edge  release  before 8e4f64ba403fbe33a18fc76594d2e890  after 8e4f64ba403fbe33a18fc76594d2e890  identical
+2. One nop added: the build must stop with the guard's message
+   nop in a block's writes      debug    make exit 2: stopped
+      Error: MuxZoneBlock changed size: its size is locked because its timing is (3 cycles of margin on a badline). See engine/README.md#slot-write-deadline, and rerun tests/engine/multiplexer_edge/edge.py and its hunts (--hunt, DEBUG and release) BEFORE changing the size constant in engine/multiplexer.asm
+   nop in a block's writes      release  make exit 2: stopped
+      Error: MuxZoneBlock changed size: its size is locked because its timing is (3 cycles of margin on a badline). See engine/README.md#slot-write-deadline, and rerun tests/engine/multiplexer_edge/edge.py and its hunts (--hunt, DEBUG and release) BEFORE changing the size constant in engine/multiplexer.asm
+   nop in the next-slot test    debug    make exit 2: stopped
+      Error: MuxZoneBlock changed size: its size is locked because its timing is (3 cycles of margin on a badline). See engine/README.md#slot-write-deadline, and rerun tests/engine/multiplexer_edge/edge.py and its hunts (--hunt, DEBUG and release) BEFORE changing the size constant in engine/multiplexer.asm
+   nop in the next-slot test    release  make exit 2: stopped
+      Error: MuxZoneBlock changed size: its size is locked because its timing is (3 cycles of margin on a badline). See engine/README.md#slot-write-deadline, and rerun tests/engine/multiplexer_edge/edge.py and its hunts (--hunt, DEBUG and release) BEFORE changing the size constant in engine/multiplexer.asm
+   nop in the dispatch          debug    make exit 2: stopped
+      Error: mux_irq_zone dispatch changed size: its size is locked because its timing is (3 cycles of margin on a badline). See engine/README.md#slot-write-deadline, and rerun tests/engine/multiplexer_edge/edge.py and its hunts (--hunt, DEBUG and release) BEFORE changing the size constant in engine/multiplexer.asm
+   nop in the dispatch          release  make exit 2: stopped
+      Error: mux_irq_zone dispatch changed size: its size is locked because its timing is (3 cycles of margin on a badline). See engine/README.md#slot-write-deadline, and rerun tests/engine/multiplexer_edge/edge.py and its hunts (--hunt, DEBUG and release) BEFORE changing the size constant in engine/multiplexer.asm
+RESULT: PASS

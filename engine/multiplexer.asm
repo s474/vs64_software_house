@@ -79,10 +79,16 @@
 //   - THE ZONE BLOCKS AND THEIR NEXT-SLOT TEST CAN'T GROW (M3 follow-up, 2026-10-01,
 //     engine/README.md#slot-write-deadline): in a run of slots 2 lines apart with 7 other sprites
 //     displayed and a slot's Y on a badline, the last store of a DEBUG mixed-multicolour block
-//     lands as late as cycle 50 of line Y - 1 (counted for that path, and the latest measured:
-//     tests/engine/multiplexer_edge/edge.py --hunt; not proven the worst of every layout), and
-//     cycle 54 is the last on which a store can be made before line Y + 1: 4 cycles of margin
-//     (counted: 12 uniform; 13 / 21 in a release build). Rerun edge.py after any change here.
+//     lands as late as cycle 51 of line Y - 1 (the latest measured: tests/engine/multiplexer_edge/
+//     edge.py --hunt 750 --hunt-space wide, F1 2026-10-01; the count for that path said 50, so the
+//     count is not a bound, and 51 is not proven the worst of every layout), and cycle 54 is the
+//     last on which a store can be made before line Y + 1: 3 cycles of margin. Latest measured in
+//     the other modes: DEBUG uniform 37 (margin 17), release mixed 35 (19), release uniform 15
+//     (39). Rerun edge.py and its hunts after any change here.
+//     ENFORCED BY SIZE since 2026-10-01 (M3 follow-up F4): the build stops if a block, its
+//     next-slot test or the dispatch isn't the byte size that was measured (MUX_ZONE_*_BYTES, by
+//     the blocks). A same-size change (other opcodes or addressing modes) gets past it: the size
+//     lock is a tripwire, not a timing proof.
 //   - No fixed chain entry between MUX_TOP_LINE and MUX_Y_MAX + 2.
 //   - A zone IRQ's raster span includes DMA (badlines, sprites); see engine/README.md#dma-inside-an-irq.
 //   - Self-modifying: the selection loops' mux_order operands (code must be in RAM, as it is).
@@ -662,6 +668,7 @@ mux_irq_zone:
         sta mux_zone_jmp + 2            // 4
 mux_zone_jmp:
         jmp mux_zone_jmp                // 3  = 22 (operand written above)
+mux_zone_dispatch_end:
 
 // End of the frame's slots: advance the chain, parking the wrap ghosts first if there are any
 // (mux_zone_park, after the blocks). Cost: 10 more than IrqDone alone with nothing to park (counted;
@@ -697,8 +704,29 @@ mux_zone_rearm:
 // block is checked at assembly time: 'next' is the address after the branch, 'target' its target.
 .function mux_crosses(next, target) { .return (>next) != (>target) }
 
+// SIZE LOCK (M3 follow-up F4, 2026-10-01): the assembled size of the code whose timing
+// tests/engine/multiplexer_edge/edge.py measured. A size that differs stops the build: the code
+// isn't the code that was measured any more. The checks assemble to nothing (the PRGs of every
+// spike are byte-identical with and without them, both builds).
+//   block, uniform / mixed    DEBUG 81 / 87, release 66 / 72 (the late check is 15 bytes, $D01C 6)
+//   next-slot test            36 in both (from the block's inx to the next block)
+//   dispatch (mux_irq_zone)   17 in both
+// To change one deliberately: read engine/README.md#slot-write-deadline, make the change, rerun
+// edge.py and all three hunts in DEBUG and release, get the Technical Director's review of the
+// results, and only then update the constant.
+#if DEBUG
+.const MUX_ZONE_BLOCK_BYTES = 81        // uniform block, with the 15-byte late check
+#else
+.const MUX_ZONE_BLOCK_BYTES = 66        // uniform block
+#endif
+.const MUX_ZONE_MIXED_BYTES    = 6      // what a mixed block adds: lda mux_s_d01c,x / sta $D01C
+.const MUX_ZONE_TEST_BYTES     = 36     // inx .. next
+.const MUX_ZONE_DISPATCH_BYTES = 17     // mux_irq_zone .. the jmp's last byte
+.const MUX_ZONE_LOCK_MSG = ": its size is locked because its timing is (3 cycles of margin on a badline). See engine/README.md#slot-write-deadline, and rerun tests/engine/multiplexer_edge/edge.py and its hunts (--hunt, DEBUG and release) BEFORE changing the size constant in engine/multiplexer.asm"
+        .errorif (mux_zone_dispatch_end - mux_irq_zone) != MUX_ZONE_DISPATCH_BYTES, "mux_irq_zone dispatch changed size" + MUX_ZONE_LOCK_MSG
+
 .macro MuxZoneBlock(j, mixed) {
-        lda mux_s_y,x                   // 4
+blk:    lda mux_s_y,x                   // 4
         sta MUX_VIC_SPR + 1 + j * 2     // 4
 #if DEBUG
         cmp MUX_VIC_RASTER              // 4  Y - raster: late if the raster is already on or past Y
@@ -722,22 +750,25 @@ ok:
             lda mux_s_d01c,x            // 4
             sta MUX_VIC_MCOLOR          // 4
         }
-        inx                             // 2
+test:   inx                             // 2
         lda mux_s_free,x                // 4  next slot's free line ($FF after the last slot)
         cmp MUX_VIC_RASTER              // 4
-        bcc next                        // 3  free < raster: go   (= 13 from inx)
+        bcc next                        // 3  free < raster: go   (= 13 from inx; not taken: 2)
 n4:     cpx zp_mux_end                  // 3
-        bne more                        // 3
+        bne more                        // 3  taken (not the last slot)
 n5:     jmp mux_zone_done
 more:   sbc #2                          // 2  C = 0 (X < end): A = free - 3
         cmp MUX_VIC_RASTER              // 4
-        bcc wait                        // 2  free - 3 < raster: frees within 2 lines
+        bcc wait                        // 3  taken: free - 3 < raster, frees within 2 lines (not taken: 2)
 n6:     jmp mux_zone_rearm
 wait:   lda mux_s_free,x                // 4
 w:      cmp MUX_VIC_RASTER              // 4
-        beq next                        // 2
-n7:     bcs w                           // 3  free > raster: wait
+        beq next                        // 3  taken: free = raster, go (= 38 from inx: 2 + 4 + 4 + 2 + 3 + 3
+                                        //    + 2 + 4 + 3 + 4 + 4 + 3); not taken: 2
+n7:     bcs w                           // 3  free > raster: wait (9 a turn)
 next:
+        .errorif (next - blk) != MUX_ZONE_BLOCK_BYTES + (mixed ? MUX_ZONE_MIXED_BYTES : 0), "MuxZoneBlock changed size" + MUX_ZONE_LOCK_MSG
+        .errorif (next - test) != MUX_ZONE_TEST_BYTES, "MuxZoneBlock's next-slot test changed size" + MUX_ZONE_LOCK_MSG
         .errorif mux_crosses(n4, next) || mux_crosses(n5, more) || mux_crosses(n6, wait) || mux_crosses(n7, next) || mux_crosses(next, w), "mux zone block: a branch crosses a page"
 }
 
