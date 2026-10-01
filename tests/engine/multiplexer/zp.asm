@@ -19,3 +19,9 @@
 .label zp_spike_idle_lo = $11   // idle-loop iterations this frame
 .label zp_spike_idle_hi = $12
 .label zp_spike_acc     = $13   // offset accumulator
+
+// Free-CPU minima (engine/README.md#multiplexer-spike-free-cpu-labels): 2 bytes each, little-endian,
+// $FFFF at start. In zero page so the class-indexed compare costs no more than an absolute one.
+.label zp_spike_idle_min     = $14                      // 4 bytes: normal, stress
+.label spike_idle_min_normal = zp_spike_idle_min        // fewest idle iterations in a non-stress frame
+.label spike_idle_min_stress = zp_spike_idle_min + 2    // fewest in a stress frame

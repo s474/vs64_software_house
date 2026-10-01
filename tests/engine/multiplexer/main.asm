@@ -1,7 +1,7 @@
-// multiplexer spike (M3 stage 3): 24 virtual sprites through engine/multiplexer.asm, sorted,
-// scheduled and written by zone IRQs, double buffered, with fair flicker. No pinning yet
-// (stage 4). The motion alternates between frames that keep <= 8 sprites in every scheduling
-// window (the fast path) and frames that overload them (flicker):
+// multiplexer spike (M3 stage 4): 24 virtual sprites through engine/multiplexer.asm, sorted,
+// scheduled and written by zone IRQs, double buffered, with fair flicker and pinned sprites. The
+// motion alternates between frames that keep <= 8 sprites in every scheduling window (the fast
+// path) and frames that overload them (flicker):
 //
 //   - Three groups of 8 (group g = v mod 3, member j = v / 3, so the virtual order interleaves
 //     the groups and the sort has real work to do).
@@ -11,13 +11,18 @@
 //   - Group g's Y = b + g * D + off[j]. Because the offsets are identical, the sprite 8 places
 //     earlier in Y order is always exactly D lines higher, so the scheduling window holds 8.
 //   - D breathes between SPIKE_DLO = SPIKE_DMIN - SPIKE_OVERLOAD and SPIKE_DMIN + 20. While
-//     D >= SPIKE_DMIN every window holds <= 8 (no drops: the fast path); below it the rows
-//     crowd each other and the multiplexer has to flicker (stage 3). SPIKE_DMIN is the scheduler's exact
-//     limit for a full row of 8 under another full row (FREE_AFTER + IRQ_LINES + 8 * WRITE_LINES),
-//     so at amp = 0 and D = DMIN every zone slot is kept with no slack: mux_late_count = 0
-//     there is what validates the constants. b bounces between MUX_Y_MIN and the lowest base
-//     that keeps group 2 at Y <= MUX_Y_MAX.
+//     D >= SPIKE_DMIN the formation keeps <= 8 in every window; below it the rows crowd each
+//     other and the multiplexer has to flicker. SPIKE_DMIN is the scheduler's exact limit for a
+//     full row of 8 under another full row (FREE_AFTER + IRQ_LINES + 8 * WRITE_LINES). b bounces
+//     between MUX_Y_MIN and the lowest base that keeps group 2 at Y <= MUX_Y_MAX.
 //   - X: each sprite bounces horizontally over 24-320 at 1-3 pixels a frame (X bit 8 in use).
+//   - Pinned (stage 4, engine/README.md#pinned-sprites): sprites 0-3 have mux_flags bit 7, the
+//     maximum, so capacity is tested at its worst. Sprite 0, the "player", leaves the formation
+//     and sweeps the whole shown range, MUX_Y_MIN to MUX_Y_MAX and back, 1 line a frame, through
+//     every crowd. Sprite 1 tracks sprite 0's Y (at its own X) on the way down, and mirrors it
+//     (MUX_Y_MIN + MUX_Y_MAX - y0) on the way up, so two pinned sprites share a row inside a crowd
+//     for half of every sweep. Sprites 2 and 3 stay in the formation. 4-23 are unpinned. With
+//     sprites 0 and 1 in the formation's windows, frames with D >= SPIKE_DMIN can overflow too.
 //
 // Chain: entry 0 mux_irq_top at $10, entry 1 spike_bottom at $FB (does nothing: proves a fixed
 // entry coexists with the zone IRQs). Main loop: irq_wait_frame (via the idle loop), move,
@@ -27,8 +32,10 @@
 // converted by make to build/multiplexer/sprites.hires.bin.
 //
 // DEBUG counters read by budget.json and the report: irq_late_count, mux_late_count,
-// mux_max_age, spike_overrun_count, spike_idle_min; reported: spike_drop_total (sprites dropped
-// or evicted, summed) and spike_flicker_frames (frames with at least one).
+// mux_max_age (unpinned), mux_pin_drop_count, mux_pin_excess_count, spike_overrun_count,
+// spike_idle_min_normal and spike_idle_min_stress (engine/README.md#multiplexer-spike-free-cpu-labels;
+// both in zero page, see zp.asm); reported: spike_drop_total (sprites dropped or evicted, summed) and
+// spike_flicker_frames (frames with at least one).
 //
 // Build: make GAME=multiplexer SRC_DIR=tests/engine/multiplexer
 // Test:  make test ARGS=multiplexer
@@ -41,8 +48,8 @@ BasicUpstart2(start)
 .const MUX_SCREEN = $0400
 .const MUX_Y_MAX  = $f9
 
-.const SPRITE_DATA = $2000                      // VIC bank 0: $1000-$1FFF is character ROM to the VIC
-.const SPIKE_PTR0  = SPRITE_DATA / 64           // $80
+.const SPRITE_DATA = $2800                      // VIC bank 0: $1000-$1FFF is character ROM to the VIC (was $2000 until stage 4)
+.const SPIKE_PTR0  = SPRITE_DATA / 64           // $A0
 
 * = $0810 "Engine"
 #import "engine/irq.asm"
@@ -62,7 +69,7 @@ BasicUpstart2(start)
 .const SPIKE_DLO     = SPIKE_DMIN - SPIKE_OVERLOAD
 .const SPIKE_XMIN    = 24
 .const SPIKE_XMAX    = 320
-.const SPIKE_WARMUP  = 50                       // frames before spike_idle_min starts counting
+.const SPIKE_WARMUP  = 50                       // frames before the spike_idle_min_* pair starts counting
 .errorif MUX_Y_MIN + 2 * SPIKE_DMAX + SPIKE_OFF_MAX > MUX_Y_MAX, "spike motion doesn't fit the shown range"
 
 * = * "Spike"
@@ -80,6 +87,12 @@ start:
         inx
         bne !-
 
+        lda #$ff                        // free-CPU minima: $FFFF each (zero page, so set here)
+        ldx #3
+!:      sta zp_spike_idle_min,x
+        dex
+        bpl !-
+
         jsr mux_init
         ldx #MUX_COUNT - 1              // virtual sprites: pointer, colour, X, X speed
 !:      txa
@@ -92,6 +105,7 @@ start:
         sta mux_x_lo,x
         lda #0
         sta mux_x_hi,x
+        lda spike_flags0,x              // 0-3 pinned
         sta mux_flags,x
         lda spike_dx0,x
         sta spike_dx,x
@@ -145,22 +159,32 @@ spike_idle:
 spike_idle_cmp:
         cmp #$00                        // 2
         beq spike_idle                  // 3  = 16
-        // New frame. Keep the fewest iterations seen, after the warm-up.
+        // New frame. Keep the fewest iterations seen in this frame's class, after the warm-up.
+        // Class (engine/README.md#multiplexer-spike-free-cpu-labels): stress = spike_move left
+        // spike_damp = 1 and spike_amp = 2..5; X = 0 (normal) or 2 (stress) indexes the pair.
+        // TIMING: the classification adds 9 cycles (spike_damp negative) or 16 (positive) to the
+        // old single-minimum code, limit 16. The minima are in zero page so that the indexed
+        // compares and stores cost what the old absolute ones did (4 each).
         lda spike_warm
         beq !+
         dec spike_warm
         jmp spike_main
-!:      lda zp_spike_idle_hi
-        cmp spike_idle_min + 1
+!:      ldx #0                          // 2  normal
+        lda spike_damp                  // 4
+        bmi !cls+                       // 3 taken = 9 / 2
+        ldy spike_amp                   // 4
+        ldx spike_class,y               // 4  = 16 (no page crossing: asserted at the table)
+!cls:   lda zp_spike_idle_hi            // 3
+        cmp zp_spike_idle_min + 1,x     // 4
         bcc !new+
         bne !old+
         lda zp_spike_idle_lo
-        cmp spike_idle_min
+        cmp zp_spike_idle_min,x         // 4
         bcs !old+
 !new:   lda zp_spike_idle_lo
-        sta spike_idle_min
+        sta zp_spike_idle_min,x         // 4
         lda zp_spike_idle_hi
-        sta spike_idle_min + 1
+        sta zp_spike_idle_min + 1,x     // 4
 !old:   jmp spike_main
 
 // Chain entry 1 at $FB: nothing to do.
@@ -297,6 +321,29 @@ spike_move:
         sta spike_dx,x
 !xok:   dex
         bpl !spr-
+
+        // Pinned sprites 0 and 1 leave the formation. Sprite 0 sweeps MUX_Y_MIN..MUX_Y_MAX and back.
+        lda spike_py
+        clc
+        adc spike_pdy
+        cmp #MUX_Y_MAX
+        bcc !+
+        ldx #$ff                        // reached the bottom: go up
+        stx spike_pdy
+        lda #MUX_Y_MAX
+!:      cmp #MUX_Y_MIN + 1
+        bcs !+
+        ldx #1                          // reached the top: go down
+        stx spike_pdy
+        lda #MUX_Y_MIN
+!:      sta spike_py
+        sta mux_y + 0
+        ldx spike_pdy                   // sprite 1: the same Y on the way down, mirrored on the way up
+        bpl !+
+        eor #$ff                        // MUX_Y_MIN + MUX_Y_MAX - y0 = (MUX_Y_MIN + MUX_Y_MAX + 1) + ~y0,
+        clc                             // mod 256 (the result is in MUX_Y_MIN..MUX_Y_MAX)
+        adc #(MUX_Y_MIN + MUX_Y_MAX + 1) & $ff
+!:      sta mux_y + 1
         rts
 
 // ------------------------------------------------------------------------------------------
@@ -305,6 +352,7 @@ spike_j:        .fill MUX_COUNT, i / 3          // member within the group
 spike_g:        .fill MUX_COUNT, mod(i, 3)      // group
 spike_x0:       .fill MUX_COUNT, SPIKE_XMIN + i * 12
 spike_dx0:      .fill MUX_COUNT, (mod(i, 2) == 0) ? (mod(i, 3) + 1) : ($100 - (mod(i, 3) + 1))
+spike_flags0:   .fill MUX_COUNT, (i < 4) ? $80 : 0     // mux_flags: 0-3 pinned, all hires
 spike_colours:  .byte WHITE, YELLOW, CYAN, GREEN, LIGHT_RED, ORANGE, LIGHT_GREEN, LIGHT_GREY
                 .byte PURPLE, RED, BROWN, GREY, LIGHT_BLUE, WHITE, YELLOW, CYAN
                 .byte GREEN, LIGHT_RED, ORANGE, LIGHT_GREEN, LIGHT_GREY, PURPLE, RED, BROWN
@@ -318,9 +366,14 @@ spike_dd:       .byte 1
 spike_amp:      .byte 12
 spike_damp:     .byte 1
 spike_dir:      .byte 0
+spike_py:       .byte MUX_Y_MIN         // sprite 0's Y (the sweep)
+spike_pdy:      .byte 1                 // +1 down, -1 up
 spike_warm:     .byte SPIKE_WARMUP
 
-spike_idle_min:         .word $ffff     // fewest idle iterations in a frame, after the warm-up
+// Frame class by spike_amp when spike_damp = 1: 2 (the stress minimum's offset) for amp 2-5, else 0.
+spike_class:    .fill SPIKE_AMP_MAX + 1, (i >= 2 && i <= 5) ? 2 : 0
+.errorif (>spike_class) != (>(spike_class + SPIKE_AMP_MAX)), "spike_class crosses a page (ldx abs,y would cost a cycle)"
+
 spike_overrun_count:    .byte 0         // frames whose work didn't finish before the next tick
 spike_drop_total:       .word 0         // DEBUG: sprites dropped or evicted, summed
 spike_flicker_frames:   .word 0         // DEBUG: frames with at least one sprite dropped

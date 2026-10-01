@@ -33,7 +33,7 @@ BasicUpstart2(start)
 .const MUX_SCREEN = $0400
 .const MUX_Y_MAX  = $c0                         // fixed entries from $C2: the border opener is at $F9
 
-.const SPRITE_DATA  = $2000
+.const SPRITE_DATA  = $2800                    // was $2000 until the stage 4 engine outgrew it
 .const PROBE_PTR0   = SPRITE_DATA / 64
 .const PROBE_WRAP_Y = 311 - 256                 // largest Y that matches a second line on PAL
 .const PROBE_PHASES = 5

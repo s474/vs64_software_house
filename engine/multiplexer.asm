@@ -1,9 +1,10 @@
-// engine/multiplexer.asm: sprite multiplexer v1 (M3 stage 3). Design contract:
+// engine/multiplexer.asm: sprite multiplexer v1 (M3 stage 4). Design contract:
 // engine/README.md#sprite-multiplexer-v1-enginemultiplexerasm
 //
-// STAGE 3 SCOPE: sort, fast-path select (the build merged into the keep path), slow path with
-// rebuild, zone IRQs, double buffer, constant $D01C when every sprite has the same multicolour
-// bit. NOT YET: pinned sprites (stage 4): mux_flags bit 7 is ignored.
+// SCOPE: sort, fast-path select (the build merged into the keep path), slow path with rebuild and
+// fair flicker, pinned sprites (stage 4: mux_flags bit 7, at most MUX_MAX_PINNED, see
+// engine/README.md#pinned-sprites), zone IRQs, double buffer, constant $D01C when every sprite has
+// the same multicolour bit.
 //
 // API (engine/README.md#api)
 //   mux_init      Hide all virtual sprites, reset. Call once, before irq_init. Uses A, X.
@@ -12,7 +13,8 @@
 //                 previous build hasn't been shown yet). Uses A, X, Y, zp_tmp0-zp_tmp3.
 //   mux_irq_top   Chain entry 0: IrqNormal(MUX_TOP_LINE, mux_irq_top).
 //   Virtual arrays (24 each, main loop writes): mux_x_lo, mux_x_hi (bit 0), mux_y (MUX_OFF hides),
-//   mux_ptr, mux_col, mux_flags (bit 0 multicolour; bit 7 pinned: stage 4).
+//   mux_ptr, mux_col, mux_flags (bit 0 multicolour; bit 7 pinned: never evicted by flicker, and
+//   evicts unpinned sprites to fit; the first MUX_MAX_PINNED in virtual order 0-23 are honoured).
 //
 // The game defines before the import: MUX_SCREEN (screen whose +$3F8 are the sprite pointers) and
 // MUX_Y_MAX (largest Y shown, $50-$F9: >= 80 so mux_irq_park on lines 77-79 is in the zone region).
@@ -82,6 +84,8 @@
                                         // >= 7 lines of margin on full rows (README #9)
 .const MUX_GAP_MIN     = MUX_FREE_AFTER + MUX_IRQ_LINES + MUX_WRITE_LINES   // 25: y[k] - y[k-8] at least
 .const MUX_BUF         = 32             // buffer 1's base index in the slot arrays
+.const MUX_MAX_PINNED  = 4              // most sprites honoured as pinned in a frame (decision)
+.const MUX_PIN_EVICT_MAX = 8            // most evictions pinned sprites may make in one mux_update (estimate #14)
 // Wrap ghosts (engine/README.md#wrap-ghosts): the VIC compares sprite Y with raster bits 0-7, so on
 // PAL a sprite left enabled at Y <= MUX_WRAP_Y matches again on line 256 + Y and is displayed a
 // second time across the frame wrap. A hardware sprite whose last slot of the frame has such a Y
@@ -167,7 +171,8 @@ mux_ptr:        .fill MUX_COUNT, 0
 mux_col:        .fill MUX_COUNT, 0
 mux_flags:      .fill MUX_COUNT, 0
 mux_order:      .fill MUX_COUNT + 1, i
-mux_age:        .fill MUX_COUNT, 0      // frames since last shown (saturating); see mux_dirty
+mux_age:        .fill MUX_COUNT + 1, 0  // frames since last shown (saturating at $FE); see mux_dirty. [24]: a
+                                        // dummy for mux_pin_list's padding (never a real sprite's)
 mux_t_d015:     .byte $00, $01, $03, $07, $0f, $1f, $3f, $7f, $ff
 mux_tpl_lo:     .for (var i = 0; i < 16; i++) .byte <mux_zone_blk(i & 7, i >= 8)
 mux_tpl_hi:     .for (var i = 0; i < 16; i++) .byte >mux_zone_blk(i & 7, i >= 8)
@@ -176,6 +181,7 @@ mux_mc_mode:    .byte 0                 // this frame: 0 all hires, 1 all multic
 mux_blk_mode:   .byte 0, 0              // per buffer: 0 uniform zone blocks in mux_t_blk, 1 mixed
 mux_slow_from:  .byte 0                 // $FF: fast frame; else the first slot to rebuild
 mux_dirty:      .byte 0                 // 1: some mux_age may be non-zero (a sprite was dropped)
+mux_flag_or:    .byte 0                 // this frame: OR of the 24 mux_flags (bit 7: any flagged pinned)
 mux_vars_end:
         .errorif (mux_x_lo >> 8) != ((mux_vars_end - 1) >> 8), "multiplexer variables cross a page"
         // The selection indexes mux_order with the slot index (base 0 or 32) from a self-modified
@@ -186,12 +192,20 @@ mux_vars_end:
 mux_ev_b8:      .byte 0                 // base + 8
 mux_ev_lo:      .byte 0                 // k - 8
 mux_ev_k1:      .byte 0                 // k - 1
-mux_ev_j0:      .byte 0                 // max(w, base + 8)
+// Pinned sprites (engine/README.md#pinned-sprites)
+mux_pin_first:  .byte MUX_MAX_PINNED    // this frame's pinned sprites are mux_pin_list[first .. MUX_MAX_PINNED - 1]
+mux_pin_list:   .fill MUX_MAX_PINNED, MUX_COUNT   // entries before first = MUX_COUNT (a dummy index), so
+                                        // the slow path can mark and restore all 4 unrolled
+mux_pin_evict:  .byte 0                 // evictions made by pinned sprites in this mux_update
+mux_pin_save:   .fill MUX_COUNT + 1, 0  // pinned sprites' real ages while the slow path marks them $FF
 
 #if DEBUG
 mux_late_count: .byte 0                // slots the zone IRQ reached on or after their Y line (saturating)
-mux_max_age:    .byte 0                 // highest mux_age ever reached
-mux_drop_count: .byte 0                 // sprites dropped in the last mux_update
+mux_max_age:    .byte 0                 // highest mux_age ever reached by an unpinned sprite
+mux_drop_count: .byte 0                 // sprites dropped or evicted in the last mux_update
+mux_pin_drop_count:   .byte 0           // pinned sprites in the shown range dropped (saturating)
+mux_pin_excess_count: .byte 0           // overflow frames with more than MUX_MAX_PINNED flagged pinned (saturating;
+                                        // counted in mux_pin_pass, so never in a frame where everything fits)
 #endif
 
 // ------------------------------------------------------------------------------------------
@@ -228,7 +242,11 @@ mux_init:
         sta mux_late_count
         sta mux_max_age
         sta mux_drop_count
+        sta mux_pin_drop_count
+        sta mux_pin_excess_count
 #endif
+        lda #MUX_MAX_PINNED
+        sta mux_pin_first
         rts
 
 // ------------------------------------------------------------------------------------------
@@ -299,10 +317,12 @@ mux_sort_end:
 //   The first sprite that doesn't fit leaves for the slow path (mux_sel_fail), for the rest of
 //   the frame.
 // X = slot index (base + k), Y = virtual sprite, zp_tmp3 = base + 8
-// Cost (counted): setup ~150; loop 1 68-70 per slot; loop 2 108 (new IRQ) / 124 (carry on) per slot
+// Cost (counted): setup ~155; loop 1 68-70 per slot; loop 2 108 (new IRQ) / 124 (carry on) per slot.
+// Pinning costs nothing here: the pinned set is only evaluated in frames that overflow (mux_slow)
 mux_select:
         lda mux_flags + 0               // multicolour mode: OR of bit 0 over all 24 = 0 -> all hires
         .for (var i = 1; i < MUX_COUNT; i++) ora mux_flags + i
+        sta mux_flag_or                 // 4  its bit 7: any sprite flagged pinned (read by mux_slow)
         and #1
         beq !mode+                      // mode 0
         lda mux_flags + 0               // AND of bit 0 = 1 -> all multicolour
