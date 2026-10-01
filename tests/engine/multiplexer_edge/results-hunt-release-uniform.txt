@@ -1,0 +1,110 @@
+==== hunt_piece.sh uniform 750 1 --hunt-mode uniform
+hunt: multiplexer_edge.prg, release build, mode uniform, narrow staircases (steps from [2, 3, 4]), seed 1: 750 random layouts, 20 frames each, then hill climbs of 60 steps.
+Objective: Y on a badline. Closest 10 of the random layouts (slack of the last write to Y:53; 63 + 53 - slack = its cycle on line Y - 1):
+   slack  101  slot 19 Y 131 last write 130:15  base 72 steps [2, 3, 2, 2, 3, 4, 4, 2, 2, 4, 4, 2, 2, 4, 2, 4, 2, 4, 3, 4, 4]
+   slack  102  slot 10 Y 107 last write 106:14  base 74 steps [4, 4, 2, 2, 2, 3, 3, 2, 4, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 4]
+   slack  102  slot 10 Y 107 last write 106:14  base 74 steps [4, 4, 4, 2, 2, 2, 4, 2, 2, 4, 2, 4, 3, 2, 3, 3, 2, 2, 2, 2, 2]
+   slack  102  slot 17 Y 123 last write 122:14  base 69 steps [3, 4, 4, 2, 4, 2, 4, 4, 4, 3, 2, 3, 3, 2, 2, 2, 2, 3, 2, 2, 2]
+   slack  102  slot 18 Y 131 last write 130:14  base 73 steps [4, 3, 4, 3, 2, 2, 2, 2, 4, 4, 2, 2, 4, 2, 2, 2, 4, 2, 2, 2, 2]
+   slack  102  slot 19 Y 123 last write 122:14  base 64 steps [2, 2, 2, 2, 3, 3, 2, 2, 3, 4, 4, 2, 2, 2, 4, 2, 3, 4, 2, 3, 2]
+   slack  102  slot 19 Y 131 last write 130:14  base 70 steps [4, 3, 4, 3, 2, 2, 2, 4, 2, 2, 4, 4, 2, 2, 2, 2, 3, 2, 4, 2, 2]
+   slack  103  slot 13 Y  99 last write 98:13  base 60 steps [2, 2, 2, 4, 4, 2, 4, 2, 2, 2, 2, 2, 4, 2, 3, 2, 3, 3, 2, 3, 2]
+   slack  103  slot 17 Y 123 last write 122:13  base 69 steps [3, 4, 3, 4, 2, 4, 2, 4, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 2, 4, 2]
+   slack  104  slot 10 Y  83 last write 82:12  base 50 steps [4, 4, 4, 2, 4, 2, 2, 2, 2, 2, 2, 3, 3, 4, 2, 4, 3, 3, 4, 3, 2]
+   climbed from 101 to 101: slack  101  slot 19 Y 131 last write 130:15  base 72 steps [2, 3, 4, 2, 3, 4, 3, 2, 2, 3, 4, 4, 2, 2, 2, 4, 2, 4, 3, 4, 2]
+   climbed from 102 to 102: slack  102  slot 10 Y 107 last write 106:14  base 74 steps [4, 4, 3, 2, 4, 2, 2, 3, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 4]
+   climbed from 102 to 101: slack  101  slot 18 Y 131 last write 130:15  base 73 steps [4, 4, 2, 2, 2, 4, 2, 2, 2, 4, 2, 4, 3, 2, 2, 3, 3, 2, 2, 2, 2]
+   climbed from 102 to 101: slack  101  slot 17 Y 123 last write 122:15  base 69 steps [3, 4, 4, 2, 4, 2, 3, 4, 2, 2, 4, 3, 3, 2, 4, 2, 4, 4, 4, 2, 3]
+   climbed from 102 to 101: slack  101  slot 18 Y 131 last write 130:15  base 73 steps [4, 4, 2, 3, 3, 2, 2, 2, 4, 4, 2, 2, 4, 4, 2, 4, 4, 2, 2, 4, 2]
+   climbed from 102 to 101: slack  101  slot 21 Y 131 last write 130:15  base 64 steps [2, 2, 2, 2, 3, 3, 3, 2, 3, 4, 4, 4, 3, 2, 4, 2, 3, 4, 2, 3, 4]
+   climbed from 102 to 101: slack  101  slot 11 Y 107 last write 106:15  base 71 steps [4, 3, 4, 4, 2, 2, 2, 3, 2, 2, 3, 4, 2, 2, 2, 2, 3, 2, 4, 2, 2]
+   climbed from 103 to 102: slack  102  slot 21 Y 123 last write 122:14  base 59 steps [2, 2, 2, 4, 4, 2, 4, 3, 2, 2, 2, 2, 4, 2, 3, 2, 3, 2, 2, 4, 2]
+   climbed from 103 to 101: slack  101  slot 12 Y 107 last write 106:15  base 68 steps [3, 4, 3, 4, 3, 4, 2, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 2]
+   climbed from 104 to 104: slack  104  slot 10 Y  83 last write 82:12  base 50 steps [4, 4, 4, 4, 4, 2, 3, 2, 3, 2, 2, 3, 2, 4, 3, 4, 2, 2, 4, 2, 2]
+hunt: 1092 layouts tried, 0 of them overflowing (flicker); 349440 zone slots scored, 0 past Y:53. Least slack of any slot, any Y: slack   39  slot 10 Y  94 last write 94:14
+hunt: closest found, Y on a badline: slack  101  slot 19 Y 131 last write 130:15 = cycle 15 of line Y - 1
+   Y = [72, 74, 77, 79, 81, 84, 88, 92, 97, 99, 102, 106, 110, 112, 114, 118, 122, 124, 128, 131, 135, 138, 142, 146]
+   flags = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+   Again, 1000 frames, with every register write:
+hunt best (Y on a badline)          1000 fr  15856 zone slots | least slack   100 ( 1.59 lines; slot 10, Y 102, last write 101:16) | Y on a badline:   1982, least   101 ( 1.60 lines; slot 19, Y 131, last write 130:15) | last write on line Y: 0 | past Y:53: 0 | pictures 10/10
+hunt best (Y on a badline, detail)  200 fr  15920 writes | least slack to its own deadline: Y 150, XLO 164, PTR 135, COL 148, D010 122
+climb 0 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 150, XLO 164, PTR 135, COL 148, D010 121
+climb 1 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 91, XLO 105, PTR 82, COL 89, D010 63
+climb 2 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 91, XLO 105, PTR 82, COL 89, D010 63
+climb 3 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 90, XLO 104, PTR 75, COL 88, D010 61
+climb 4 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 151, XLO 165, PTR 136, COL 149, D010 122
+climb 5 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 151, XLO 165, PTR 139, COL 149, D010 123
+climb 6 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 90, XLO 104, PTR 75, COL 88, D010 62
+climb 7 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 98, XLO 112, PTR 83, COL 96, D010 88
+climb 8 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 98, XLO 112, PTR 83, COL 96, D010 62
+climb 9 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 103, XLO 117, PTR 102, COL 101, D010 93
+   Least slack of each register to its own deadline, over those 95920 writes:
+      Y on a badline  Y     slack to its own deadline  152  (slot 19, hardware sprite 3, Y 131, written at 129:27)
+      Y on a badline  XLO   slack to its own deadline  166  (slot 19, hardware sprite 3, Y 131, written at 129:35)
+      Y on a badline  PTR   slack to its own deadline  137  (slot 10, hardware sprite 2, Y 107, written at 105:43)
+      Y on a badline  COL   slack to its own deadline  150  (slot 19, hardware sprite 3, Y 131, written at 129:51)
+      Y on a badline  D010  slack to its own deadline  123  (slot 19, hardware sprite 3, Y 131, written at 130:15)
+      any Y           Y     slack to its own deadline   90  (slot 10, hardware sprite 2, Y 101, written at 100:26)
+      any Y           XLO   slack to its own deadline  104  (slot 10, hardware sprite 2, Y 101, written at 100:34)
+      any Y           PTR   slack to its own deadline   75  (slot 10, hardware sprite 2, Y 101, written at 100:42)
+      any Y           COL   slack to its own deadline   88  (slot 10, hardware sprite 2, Y 101, written at 100:50)
+      any Y           D010  slack to its own deadline   61  (slot 10, hardware sprite 2, Y 101, written at 101:14)
+   counters: edge_overrun_count = 0
+hunt RESULT: no write past a deadline, pictures right
+exit 0
+
+==== hunt_piece.sh uniform 750 2 --hunt-mode uniform
+hunt: multiplexer_edge.prg, release build, mode uniform, narrow staircases (steps from [2, 3, 4]), seed 2: 750 random layouts, 20 frames each, then hill climbs of 60 steps.
+Objective: Y on a badline. Closest 10 of the random layouts (slack of the last write to Y:53; 63 + 53 - slack = its cycle on line Y - 1):
+   slack  101  slot 11 Y  99 last write 98:15  base 64 steps [2, 4, 4, 4, 2, 2, 4, 2, 2, 4, 2, 2, 3, 3, 2, 3, 4, 2, 4, 2, 3]
+   slack  101  slot 19 Y 131 last write 130:15  base 71 steps [2, 4, 4, 4, 4, 4, 2, 2, 2, 3, 2, 2, 3, 2, 3, 2, 4, 2, 2, 3, 2]
+   slack  101  slot 20 Y 131 last write 130:15  base 68 steps [2, 4, 3, 4, 2, 4, 3, 3, 2, 2, 2, 4, 2, 2, 2, 2, 2, 3, 3, 2, 2]
+   slack  101  slot 21 Y 131 last write 130:15  base 66 steps [3, 3, 2, 3, 3, 4, 2, 3, 2, 2, 3, 4, 2, 2, 2, 3, 2, 2, 4, 2, 4]
+   slack  102  slot 10 Y 107 last write 106:14  base 74 steps [4, 4, 2, 2, 2, 4, 3, 2, 4, 2, 2, 4, 2, 3, 2, 4, 2, 4, 2, 2, 3]
+   slack  102  slot 11 Y  99 last write 98:14  base 64 steps [2, 4, 4, 2, 2, 4, 2, 2, 4, 2, 3, 3, 2, 2, 3, 4, 3, 2, 3, 2, 4]
+   slack  102  slot 13 Y 107 last write 106:14  base 68 steps [2, 2, 3, 3, 4, 4, 2, 2, 2, 3, 2, 3, 2, 2, 4, 2, 4, 3, 2, 2, 2]
+   slack  102  slot 18 Y 115 last write 114:14  base 57 steps [4, 4, 2, 2, 2, 2, 2, 2, 3, 4, 2, 3, 2, 2, 2, 2, 4, 3, 2, 2, 4]
+   slack  102  slot 18 Y 115 last write 114:14  base 57 steps [4, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 3, 4, 2, 2, 2, 3, 2, 2, 3]
+   slack  102  slot 19 Y 123 last write 122:14  base 62 steps [3, 2, 2, 2, 2, 2, 2, 4, 3, 4, 3, 3, 4, 2, 3, 2, 4, 2, 4, 2, 4]
+   climbed from 101 to 101: slack  101  slot 11 Y  99 last write 98:15  base 64 steps [2, 4, 4, 4, 2, 2, 4, 2, 4, 4, 2, 2, 3, 2, 2, 2, 2, 3, 2, 4, 3]
+   climbed from 101 to 101: slack  101  slot 19 Y 131 last write 130:15  base 71 steps [2, 4, 4, 4, 4, 4, 2, 2, 3, 3, 4, 2, 4, 3, 3, 2, 2, 2, 2, 3, 2]
+   climbed from 101 to 101: slack  101  slot 20 Y 131 last write 130:15  base 68 steps [2, 4, 3, 4, 2, 2, 3, 3, 2, 2, 2, 4, 2, 2, 3, 2, 4, 2, 3, 4, 2]
+   climbed from 101 to 101: slack  101  slot 21 Y 131 last write 130:15  base 66 steps [3, 3, 2, 3, 4, 4, 2, 3, 2, 2, 2, 4, 2, 4, 2, 3, 2, 2, 4, 3, 4]
+   climbed from 102 to 102: slack  102  slot 18 Y 131 last write 130:14  base 73 steps [4, 3, 3, 3, 2, 3, 3, 2, 4, 2, 3, 2, 2, 3, 2, 4, 2, 2, 2, 2, 2]
+   climbed from 102 to 101: slack  101  slot 11 Y  99 last write 98:15  base 64 steps [2, 4, 4, 3, 2, 3, 2, 2, 3, 2, 4, 2, 2, 3, 4, 4, 2, 4, 3, 2, 4]
+   climbed from 102 to 101: slack  101  slot 13 Y 107 last write 106:15  base 68 steps [2, 2, 3, 3, 4, 4, 4, 2, 3, 3, 2, 2, 3, 2, 4, 2, 4, 4, 2, 2, 2]
+   climbed from 102 to 102: slack  102  slot 18 Y 115 last write 114:14  base 57 steps [4, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 4, 3, 3, 2, 4]
+   climbed from 102 to 102: slack  102  slot 18 Y 115 last write 114:14  base 57 steps [4, 4, 2, 2, 2, 2, 2, 4, 3, 4, 2, 2, 4, 4, 2, 2, 4, 3, 2, 2, 4]
+   climbed from 102 to 101: slack  101  slot 19 Y 123 last write 122:15  base 62 steps [2, 2, 2, 2, 2, 2, 2, 4, 3, 4, 3, 3, 2, 2, 3, 2, 3, 2, 2, 4, 2]
+hunt: 1127 layouts tried, 0 of them overflowing (flicker); 360640 zone slots scored, 0 past Y:53. Least slack of any slot, any Y: slack   39  slot 10 Y  94 last write 94:14
+hunt: closest found, Y on a badline: slack  101  slot 11 Y  99 last write 98:15 = cycle 15 of line Y - 1
+   Y = [64, 66, 70, 74, 78, 80, 82, 86, 89, 91, 95, 99, 103, 105, 108, 111, 114, 116, 120, 124, 128, 132, 134, 137]
+   flags = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+   Again, 1000 frames, with every register write:
+hunt best (Y on a badline)          1000 fr  15856 zone slots | least slack   101 ( 1.60 lines; slot 11, Y 99, last write 98:15) | Y on a badline:   1982, least   101 ( 1.60 lines; slot 11, Y 99, last write 98:15) | last write on line Y: 0 | past Y:53: 0 | pictures 10/10
+hunt best (Y on a badline, detail)  200 fr  15920 writes | least slack to its own deadline: Y 151, XLO 165, PTR 137, COL 149, D010 123
+climb 0 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 151, XLO 165, PTR 137, COL 149, D010 123
+climb 1 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 90, XLO 104, PTR 75, COL 88, D010 61
+climb 2 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 94, XLO 108, PTR 79, COL 92, D010 84
+climb 3 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 94, XLO 108, PTR 85, COL 92, D010 84
+climb 4 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 102, XLO 116, PTR 93, COL 100, D010 92
+climb 5 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 152, XLO 166, PTR 139, COL 150, D010 64
+climb 6 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 98, XLO 112, PTR 83, COL 96, D010 88
+climb 7 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 153, XLO 167, PTR 138, COL 151, D010 124
+climb 8 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 153, XLO 167, PTR 138, COL 151, D010 124
+climb 9 end (Y on a badline, detail)  100 fr   8000 writes | least slack to its own deadline: Y 151, XLO 165, PTR 139, COL 149, D010 122
+   Least slack of each register to its own deadline, over those 95920 writes:
+      Y on a badline  Y     slack to its own deadline  152  (slot 11, hardware sprite 3, Y 99, written at 97:27)
+      Y on a badline  XLO   slack to its own deadline  166  (slot 11, hardware sprite 3, Y 99, written at 97:35)
+      Y on a badline  PTR   slack to its own deadline  137  (slot 18, hardware sprite 2, Y 131, written at 129:43)
+      Y on a badline  COL   slack to its own deadline  150  (slot 11, hardware sprite 3, Y 99, written at 97:51)
+      Y on a badline  D010  slack to its own deadline  123  (slot 11, hardware sprite 3, Y 99, written at 98:15)
+      any Y           Y     slack to its own deadline   90  (slot 12, hardware sprite 4, Y 110, written at 109:26)
+      any Y           XLO   slack to its own deadline  104  (slot 12, hardware sprite 4, Y 110, written at 109:34)
+      any Y           PTR   slack to its own deadline   75  (slot 10, hardware sprite 2, Y 102, written at 101:42)
+      any Y           COL   slack to its own deadline   88  (slot 12, hardware sprite 4, Y 110, written at 109:50)
+      any Y           D010  slack to its own deadline   61  (slot 12, hardware sprite 4, Y 110, written at 110:14)
+   counters: edge_overrun_count = 0
+hunt RESULT: no write past a deadline, pictures right
+exit 0
+

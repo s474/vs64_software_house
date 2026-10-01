@@ -50,9 +50,26 @@ for the release build add BUILD=release, run this, then rebuild without it so ma
         [--frames 1000] [--sweep-frames 200] [--random 300] [--stairs 300] [--detail-frames 100] [--seed 1] \
         [--quick] [--prg build/multiplexer_edge/multiplexer_edge.prg]
 
---hunt N: instead of all that, search for the closest call on a badline: N random staircases (20
-frames each, fast tier), then a hill climb from the ten closest; the closest layout is then run for
-1,000 frames with the detail tier. --hunt 1500 takes about 20 minutes.
+--hunt N: instead of all that, search for the closest call: N random layouts (fast tier), then hill
+climbs of --climb steps (default 60) from the closest; the closest layout is then run for
+--final-frames (1,000) with the picture check, and it and every climb's end point with the detail
+tier. Every layout is scored two ways: the last write of a slot whose Y is a badline (how late on
+line Y - 1), and the least slack of any slot's last write to Y:53.
+  --hunt-mode mixed     (default) staircases, the middle row multicolour: the mixed zone blocks
+  --hunt-mode uniform   the same staircases with no multicolour flag: the uniform zone blocks
+  --hunt-mode flicker   the dense random layouts, which overflow, so the selection's slow path
+                        (eviction, fair flicker) builds the slots and they change every frame.
+                        40 frames a layout; a layout that never overflows in them doesn't count;
+                        climbs from the ten closest on a badline AND the five closest at any Y.
+  --hunt-space wide     staircases with steps of 2-6 lines and base lines 32-110 (narrow, the
+                        default and the original hunt: 2-4 and 40-75)
+  --seed S, --hunt-frames F (20; flicker 40)
+  --hunt-start B,S1,...,S21   staircase hunts: add this layout (base line, 21 steps) to the random
+                        ones, to climb on from a closest call found earlier (e.g. --hunt 1 --climb 400)
+--hunt 1500 takes 5 to 8 minutes a build and mode (measured 2026-10-01; several can run side by
+side, each starts its own VICE). To keep both builds without rebuilding in between, copy
+build/multiplexer_edge/multiplexer_edge.prg and main.vs somewhere under build/ after each make and
+pass --prg. hunt_all.sh beside this file runs every hunt behind the results below, both builds.
 --quick: 100 frames a phase, 50 a sweep layout, 40 random layouts and staircases. Exit code 0 = no
 write past a deadline, every picture right, counters 0; 1 otherwise. A full run takes about 15 minutes.
 
@@ -69,9 +86,21 @@ and the reasoning in engine/README.md#slot-write-deadline):
   closest call with Y on a badline           last write Y-1:46      Y-1:33
     in the hunt (1,855 / 1,857 layouts)      Y-1:50                 Y-1:35
   mux_late_count, irq_late_count             0, 0                   (not in a release build)
-No miss could be provoked. On a badline the DEBUG mixed build's last store lands as late as cycle
-50 of line Y - 1 (counted for the path that produces it, and the latest the hunt found; not proven
-to be the worst of every layout); cycle 54 is the last a store can be made on: 4 to spare.
+No miss could be provoked in the main run.
+
+FOLLOW-UP HUNTS (F1, F2; 2026-10-01; hunt_piece.sh lists the pieces; outputs in
+results-hunt-{debug,release}-{uniform,mixed-wide,flicker}.txt). Latest last write with Y on a
+badline (cycle of line Y - 1; cycle 54 is the last a store can be made on), and the least slack of
+any slot's last write to Y:53:
+                                             DEBUG                  release           layouts
+  uniform staircases (2 x 750)               37, slack 20           15, slack 39      2,223 / 2,219
+  mixed staircases, wide (2 x 750 + climbs)  51, slack 4            30, slack 24      3,603 / 2,294
+  flicker (3 x 400, ~86% overflowing)        46, slack 9            23, slack 31      3,786 / 3,813
+  writes past a deadline, wrong pictures     0, 0                   0, 0
+So the measured margins to cycle 54 are 3 (DEBUG mixed: cycle 51, ONE PAST the counted 50, so the
+count is not a bound), 17 (DEBUG uniform), 19 (release mixed, cycle 35 in the first hunt) and 39
+(release uniform). Flicker frames are no later than the staircases. None of this is proven to be
+the worst of every layout.
 """
 
 import argparse
@@ -159,6 +188,7 @@ def deadline(reg: str, hw: int, y: int) -> int:
 class Edge:
     def __init__(self, prg: Path) -> None:
         self.v = Vice(prg, 20)
+        self.prg = prg
         self.mon, s = self.v.mon, self.v.symbols
         self.s = s
         self.debug = "mux_late_count" in s
@@ -423,67 +453,208 @@ def run_detail(e: Edge, name: str, frames: int, dtot: dict) -> None:
     sys.stdout.flush()
 
 
-def hunt(e: Edge, n: int, frames: int, seed: int) -> int:
-    """Look for the layout that brings a badline-Y slot's last write closest to the end of line
-    Y - 1 (after which it could only land on line Y + 1): n random staircases, then a hill climb
-    from the ten closest (change one step or the base line, keep it if it gets closer)."""
+def overflowing(e: Edge, ys: list[int]) -> bool:
+    """True if the frame on screen shows fewer sprites than the layout has in range: the selection's
+    slow path (eviction, fair flicker) built its slots. Read from outside: the front buffer's count."""
+    m, s = e.mon, e.s
+    base, end = m.mem_get(s["zp_mux_front"], s["zp_mux_front"])[0], m.mem_get(s["zp_mux_end"], s["zp_mux_end"])[0]
+    return end - base < sum(1 for y in ys if MUX_Y_MIN <= y <= MUX_Y_MAX)
+
+
+STEPS = {"narrow": (2, 2, 2, 3, 4), "wide": (2, 2, 2, 2, 3, 4, 5, 6)}
+BASES = {"narrow": (40, 75, 32, 90), "wide": (32, 110, 30, 130)}      # random lo, hi; climb lo, hi
+NONE = (10 ** 6, 0, 0, 0)
+
+
+class StairGenome:
+    """Staircases (see staircase()): mixed = the middle row multicolour (the mixed zone blocks run),
+    uniform = no multicolour flag at all (the uniform blocks: $D01C written once, by mux_irq_top)."""
+
+    def __init__(self, rng: random.Random, mode: str, space: str) -> None:
+        self.rng, self.steps, self.bases = rng, STEPS[space], BASES[space]
+        self.flags = [1 if 8 <= v < 16 and mode == "mixed" else 0 for v in range(24)]
+        self.from_slots, self.must_overflow = False, False
+
+    def new(self):
+        return (self.rng.randint(*self.bases[:2]), tuple(self.rng.choice(self.steps) for _ in range(21)))
+
+    def mutate(self, g):
+        base, steps = g[0], list(g[1])
+        if self.rng.random() < 0.3:
+            base = max(self.bases[2], min(self.bases[3], base + self.rng.choice((-2, -1, 1, 2))))
+        else:
+            steps[self.rng.randrange(21)] = self.rng.choice(self.steps[1:])
+        return (base, tuple(steps))
+
+    def realise(self, g):
+        return staircase(g[0], list(g[1])), self.flags
+
+    def text(self, g) -> str:
+        return f"base {g[0]} steps {list(g[1])}"
+
+
+class DenseGenome:
+    """The random dense layouts of the main run (12-24 sprites inside 30-120 lines, random
+    multicolour and pinned flags), which overflow: the slow path evicts and flickers, so the slots
+    differ from frame to frame. A layout that never overflows in the frames scored doesn't count."""
+
+    def __init__(self, rng: random.Random) -> None:
+        self.rng = rng
+        self.from_slots, self.must_overflow = True, True
+
+    def new(self):
+        rng = self.rng
+        n, base, span = rng.randint(12, 24), rng.randint(32, 150), rng.randint(30, 120)
+        ys = [min(MUX_Y_MAX, base + rng.randint(0, span)) if v < n else MUX_OFF for v in range(24)]
+        rng.shuffle(ys)
+        mc = rng.random() < 0.5
+        pins = rng.randint(0, 4)
+        return (tuple(ys), tuple((rng.randint(0, 1) if mc else 0) | (0x80 if v < pins else 0) for v in range(24)))
+
+    def mutate(self, g):
+        rng, ys, fl = self.rng, list(g[0]), list(g[1])
+        shown = [v for v in range(24) if ys[v] != MUX_OFF]
+        clip = lambda y: max(MUX_Y_MIN, min(MUX_Y_MAX, y))  # noqa: E731
+        r = rng.random()
+        v = rng.choice(shown) if shown else 0
+        if r < 0.45 and shown:                      # nudge one sprite
+            ys[v] = clip(ys[v] + rng.choice((-3, -2, -1, 1, 2, 3)))
+        elif r < 0.60 and shown:                    # move one sprite anywhere inside the layout's span
+            ys[v] = rng.randint(min(ys[w] for w in shown), max(ys[w] for w in shown))
+        elif r < 0.72:                              # the whole layout up or down (against the badlines)
+            d = rng.choice((-2, -1, 1, 2))
+            ys = [y if y == MUX_OFF else clip(y + d) for y in ys]
+        elif r < 0.80 and shown:                    # hide one, or show a hidden one near another
+            w = rng.randrange(24)
+            if ys[w] == MUX_OFF:
+                ys[w] = clip(ys[v] + rng.randint(-8, 8))
+            elif len(shown) > 10:
+                ys[w] = MUX_OFF
+        elif r < 0.92:                              # multicolour bit of one sprite
+            fl[rng.randrange(24)] ^= 1
+        else:                                       # pinned flag of one sprite
+            fl[rng.randrange(24)] ^= 0x80
+        return (tuple(ys), tuple(fl))
+
+    def realise(self, g):
+        return list(g[0]), list(g[1])
+
+    def text(self, g) -> str:
+        return f"Y = {list(g[0])}  flags = {list(g[1])}"
+
+
+def hunt(e: Edge, n: int, frames: int, seed: int, mode: str = "mixed", space: str = "narrow",
+         climb: int = 60, final_frames: int = 1000, start: str = "") -> int:
+    """Look for the layout that brings a slot's last write closest to its limit: n random layouts,
+    then hill climbs from the closest (change one thing, keep it if it gets closer or stays level).
+    Two objectives, both scored for every layout:
+      badline  the slot's Y is a badline: its last write against the end of line Y - 1 (after which
+               it could only land on line Y + 1). Climbed from the ten closest.
+      any Y    the least slack of any slot's last write to Y:53. Climbed from the five closest in
+               flicker mode only (staircases: reported, not climbed).
+    mode: mixed / uniform = staircases (StairGenome); flicker = dense layouts that overflow (DenseGenome)."""
     rng = random.Random(seed)
-    flags = [1 if 8 <= v < 16 else 0 for v in range(24)]
+    gen = DenseGenome(rng) if mode == "flicker" else StairGenome(rng, mode, space)
     seen: dict[tuple, tuple] = {}
+    stats: Counter = Counter()
+    fmt = lambda t: f"slack {t[0]:4d}  slot {t[1]:2d} Y {t[2]:3d} last write {t[3] // CPL}:{t[3] % CPL:02d}"  # noqa: E731
 
-    def score(base: int, steps: list[int]):
-        key = (base, tuple(steps))
-        if key not in seen:
-            e.manual(staircase(base, steps), flags, settle=3)
-            recs = [(y * CPL + UNIFORM - w, k % 32, y, w) for k, y, w in e.fast(frames) if badline(y)]
-            seen[key] = min(recs) if recs else (10 ** 6, 0, 0, 0)
-        return seen[key]
+    def score(g):
+        if g not in seen:
+            ys, flags = gen.realise(g)
+            e.manual(ys, flags, settle=4 if gen.must_overflow else 3)
+            over, recs, done = False, [], 0
+            while done < frames:                    # in pieces, to see whether the frames overflow
+                recs += e.fast(min(5, frames - done))
+                done += 5
+                over = over or overflowing(e, ys)
+            stats["layouts"] += 1
+            stats["overflowing"] += over
+            if gen.must_overflow and not over:
+                seen[g] = (NONE, NONE)
+            else:
+                sl = [(y * CPL + UNIFORM - w, k % 32, y, w) for k, y, w in recs]
+                stats["slots"] += len(sl)
+                stats["late"] += sum(1 for t in sl if t[0] < 0)
+                seen[g] = (min((t for t in sl if badline(t[2])), default=NONE), min(sl, default=NONE))
+        return seen[g]
 
+    print(f"hunt: {e.prg.name}, {'DEBUG' if e.debug else 'release'} build, mode {mode}"
+          + ("" if mode == "flicker" else f", {space} staircases (steps from {sorted(set(gen.steps))})")
+          + f", seed {seed}: {n} random layouts, {frames} frames each, then hill climbs of {climb} steps.")
     pool = []
     for _ in range(n):
-        base, steps = rng.randint(40, 75), [rng.choice((2, 2, 2, 3, 4)) for _ in range(21)]
-        pool.append((score(base, steps), base, steps))
-    pool.sort(key=lambda t: t[0])
-    print(f"hunt: {n} random staircases, {frames} frames each. Closest ten (slack of a badline-Y slot's last "
-          f"write to Y:{UNIFORM}; 63 + 53 - slack = its cycle on line Y - 1):")
-    for sc, base, steps in pool[:10]:
-        print(f"   slack {sc[0]:4d}  slot {sc[1]:2d} Y {sc[2]:3d} last write {sc[3] // CPL}:{sc[3] % CPL:02d}  base {base} steps {steps}")
-    best = pool[0]
-    for start in pool[:10]:
-        cur = start
-        for _ in range(60):
-            base, steps = cur[1], list(cur[2])
-            if rng.random() < 0.3:
-                base = max(32, min(90, base + rng.choice((-2, -1, 1, 2))))
-            else:
-                steps[rng.randrange(21)] = rng.choice((2, 2, 3, 4))
-            sc = score(base, steps)
-            if sc[0] <= cur[0][0]:
-                cur = (sc, base, steps)
-        print(f"   climbed from {start[0][0]} to {cur[0][0]}: slot {cur[0][1]} Y {cur[0][2]} last write "
-              f"{cur[0][3] // CPL}:{cur[0][3] % CPL:02d}  base {cur[1]} steps {cur[2]}")
-        sys.stdout.flush()
-        if cur[0][0] < best[0][0]:
-            best = cur
-    sc, base, steps = best
-    ys = staircase(base, steps)
-    print(f"hunt: closest found: slack {sc[0]} (slot {sc[1]}, Y {sc[2]}, last write {sc[3] // CPL}:{sc[3] % CPL:02d}); "
-          f"{len(seen)} layouts tried.\n   Y = {ys}\n   Again, 1,000 frames, with every register write:")
-    e.manual(ys, flags)
-    totals = {"slots": 0, "badline": 0, "on_y": 0, "late": 0, "frames": 0, "worst": None, "worst_bl": None}
-    dtot = {"late": [], "min": {}, "min_bl": {}, "writes": 0, "y_before": 10 ** 6, "y_before_bl": 10 ** 6}
-    run_layout(e, "hunt best", 1000, 10, False, totals)
-    run_detail(e, "hunt best (detail)", 200, dtot)
-    for reg in ("Y", "XLO", "PTR", "COL", "D010", "D01C"):
-        if reg in dtot["min_bl"]:
-            sl, _name, k, y, pos = dtot["min_bl"][reg]
-            print(f"      Y on a badline  {reg:5s} slack to its own deadline {sl:4d}  (slot {k % 32}, hardware sprite "
-                  f"{k & 7}, Y {y}, written at {pos // CPL}:{pos % CPL:02d})")
-    print("   counters: " + ", ".join(f"{k} = {v}" for k, v in e.counters().items()))
-    late = totals["late"] or len(dtot["late"]) or e.bad_pictures
-    print("hunt RESULT: " + ("a write past a deadline or a wrong picture: FAIL" if late else
+        g = gen.new()
+        pool.append((score(g), g))
+    if start:                                       # a known staircase (base, then its 21 steps) joins the pool
+        nums = [int(t) for t in start.split(",")]
+        if mode == "flicker" or len(nums) != 22:
+            raise SystemExit("--hunt-start: staircase modes only; base and 21 steps, comma separated")
+        pool.append((score((nums[0], tuple(nums[1:]))), (nums[0], tuple(nums[1:]))))
+    targets = [(0, "Y on a badline", 10)] + ([(1, "any Y", 5)] if mode == "flicker" else [])
+    best, ends = {}, {}
+    for obj, title, starts in targets:
+        pool.sort(key=lambda t: t[0][obj])
+        print(f"Objective: {title}. Closest {starts} of the random layouts (slack of the last write to Y:{UNIFORM}"
+              + ("; 63 + 53 - slack = its cycle on line Y - 1):" if obj == 0 else "):"))
+        for sc, g in pool[:starts]:
+            print(f"   {fmt(sc[obj])}  {gen.text(g)}")
+        best[obj], ends[obj] = pool[0], []
+        for start in pool[:starts]:
+            cur = start
+            for _ in range(climb):
+                g = gen.mutate(cur[1])
+                sc = score(g)
+                if sc[obj][0] <= cur[0][obj][0]:
+                    cur = (sc, g)
+            print(f"   climbed from {start[0][obj][0]} to {cur[0][obj][0]}: {fmt(cur[0][obj])}  {gen.text(cur[1])}")
+            sys.stdout.flush()
+            ends[obj].append(cur)
+            if cur[0][obj][0] < best[obj][0][obj][0]:
+                best[obj] = cur
+    anyy = min((v[1] for v in seen.values()), default=NONE)
+    print(f"hunt: {stats['layouts']} layouts tried, {stats['overflowing']} of them overflowing (flicker); "
+          f"{stats['slots']} zone slots scored, {stats['late']} past Y:{UNIFORM}. Least slack of any slot, any Y: {fmt(anyy)}")
+    fail = stats["late"]
+    for obj, title, _ in targets:
+        sc, g = best[obj]
+        ys, flags = gen.realise(g)
+        t = sc[obj]
+        if t == NONE:
+            print(f"hunt: nothing found for {title}")
+            continue
+        print(f"hunt: closest found, {title}: {fmt(t)}"
+              + (f" = cycle {t[3] % CPL} of line Y - {t[2] - t[3] // CPL}" if t[2] > t[3] // CPL else " (on its own Y line)")
+              + f"\n   Y = {ys}\n   flags = {flags}\n   Again, {final_frames} frames, with every register write:")
+        e.manual(ys, flags)
+        totals = {"slots": 0, "badline": 0, "on_y": 0, "late": 0, "frames": 0, "worst": None, "worst_bl": None}
+        dtot = {"late": [], "min": {}, "min_bl": {}, "writes": 0, "y_before": 10 ** 6, "y_before_bl": 10 ** 6}
+        before = e.bad_pictures
+        run_layout(e, f"hunt best ({title})", final_frames, 10, gen.from_slots, totals)
+        run_detail(e, f"hunt best ({title}, detail)", max(40, final_frames // 5), dtot)
+        # Every climb's end point too (a flicker layout's closest frame may not come round again
+        # in one layout's rerun): the figures below are the least over all of them.
+        for i, (_sc, g2) in enumerate(ends[obj]):
+            if g2 != g and _sc[obj] != NONE:
+                e.manual(*gen.realise(g2))
+                run_detail(e, f"climb {i} end ({title}, detail)", max(40, final_frames // 10), dtot)
+        print(f"   Least slack of each register to its own deadline, over those {dtot['writes']} writes:")
+        for key, name in (("min_bl", "Y on a badline"), ("min", "any Y")):
+            for reg in ("Y", "XLO", "PTR", "COL", "D010", "D01C"):
+                if reg in dtot[key]:
+                    sl, _name, k, y, pos = dtot[key][reg]
+                    print(f"      {name:15s} {reg:5s} slack to its own deadline {sl:4d}  (slot {k % 32}, hardware sprite "
+                          f"{k & 7}, Y {y}, written at {pos // CPL}:{pos % CPL:02d})")
+        fail += totals["late"] + len(dtot["late"]) + (e.bad_pictures - before)
+        for name, k, y, reg, pos in dtot["late"][:10]:
+            print(f"      LATE: slot {k % 32} (hardware sprite {k & 7}) Y {y}, {reg} written at {pos // CPL}:{pos % CPL:02d}")
+    c = e.counters()
+    print("   counters" + (" (a flicker layout drops sprites by design, and a new layout can overrun a frame)"
+                           if mode == "flicker" else "") + ": " + ", ".join(f"{k} = {v}" for k, v in c.items()))
+    fail += sum(v for k, v in c.items() if k in ("mux_late_count", "irq_late_count"))
+    print("hunt RESULT: " + ("a write past a deadline, a wrong picture or a late counter: FAIL" if fail else
                              "no write past a deadline, pictures right"))
-    return 1 if late else 0
+    return 1 if fail else 0
 
 
 def main() -> int:
@@ -496,7 +667,15 @@ def main() -> int:
     ap.add_argument("--detail-frames", type=int, default=100)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--quick", action="store_true")
-    ap.add_argument("--hunt", type=int, default=0, help="only hunt: this many random staircases, then a hill climb")
+    ap.add_argument("--hunt", type=int, default=0, help="only hunt: this many random layouts, then hill climbs")
+    ap.add_argument("--hunt-mode", choices=("mixed", "uniform", "flicker"), default="mixed",
+                    help="mixed / uniform multicolour staircases, or dense layouts that overflow and flicker")
+    ap.add_argument("--hunt-space", choices=("narrow", "wide"), default="narrow",
+                    help="staircases: steps of 2-4 lines (narrow, the original hunt) or 2-6 and more base lines (wide)")
+    ap.add_argument("--hunt-frames", type=int, default=0, help="frames a layout is scored over (default 20; flicker 40)")
+    ap.add_argument("--hunt-start", default="", help="staircase hunts: also climb from this layout: base,step1,...,step21")
+    ap.add_argument("--climb", type=int, default=60, help="hill-climb steps from each start")
+    ap.add_argument("--final-frames", type=int, default=1000, help="frames of the closing run on the closest layout")
     ap.add_argument("--prg", type=Path, default=REPO / "build" / "multiplexer_edge" / "multiplexer_edge.prg")
     a = ap.parse_args()
     if a.quick:
@@ -504,7 +683,8 @@ def main() -> int:
     e = Edge(a.prg)
     if a.hunt:
         try:
-            return hunt(e, a.hunt, 20, a.seed)
+            return hunt(e, a.hunt, a.hunt_frames or (40 if a.hunt_mode == "flicker" else 20), a.seed,
+                        a.hunt_mode, a.hunt_space, a.climb, a.final_frames, a.hunt_start)
         finally:
             e.close()
     totals = {"slots": 0, "badline": 0, "on_y": 0, "late": 0, "frames": 0, "worst": None, "worst_bl": None}

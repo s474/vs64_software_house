@@ -686,15 +686,19 @@ or anywhere else. With Y on a badline the Y check never passed late on line Y �
 never later than cycle 45 of line Y − 2. This is **measured, not proven**: it holds for the layouts
 listed below, and nothing in the scheduling arithmetic guarantees it.
 
-**The margin is small.** With Y on a badline, the latest last store found is cycle **50 of line
-Y − 1** (DEBUG, mixed multicolour), and cycle 54 is the last on which a store can be made before
-line Y + 1: **4 cycles**. It is 12 in DEBUG uniform and 13 / 21 in a release build (mixed /
-uniform; those three are counted, not measured at their limit).
+**The margin is small: 3 cycles, not 4** (corrected by the follow-up hunts, 2026-10-01, below).
+With Y on a badline, the latest last store found is cycle **51 of line Y − 1** (DEBUG, mixed
+multicolour; the first hunt found 50), and cycle 54 is the last on which a store can be made
+before line Y + 1: **3 cycles**. All four modes are now **measured** by a hunt: 17 in DEBUG
+uniform, 19 in release mixed, 39 in release uniform. The count of the closest path (below) said
+50 / 42 / 41 / 33: it is an explanation, **not a bound** (DEBUG mixed went 1 past it), and the
+other three modes never got near it.
 
-**The constraint that follows:** the zone blocks and their next-slot test can't grow. Five more
+**The constraint that follows:** the zone blocks and their next-slot test can't grow. Four more
 cycles in a DEBUG mixed block, or in the test, and the last store of the closest case leaves line
-Y − 1 for line Y + 1. v1 as built has no bug here; it has a lock that nothing in the build
-enforces. The Technical Director's reading of these results, the conditions for M4 and the
+Y − 1 for line Y + 1. v1 as built has no bug here. Since F4 the build enforces the lock by size
+(see [the size lock](#follow-up-hunts-and-the-size-lock-f1-f2-f4-raster-engineer-2026-10-01)); it
+doesn't enforce the timing. The Technical Director's reading of these results, the conditions for M4 and the
 measurement still wanted are in the [verdict](#verdict-safe-for-m4-with-the-zone-code-frozen) above.
 
 **How it was checked** (all from outside: checkpoints, memory reads and VICE's frame buffer; the
@@ -725,7 +729,7 @@ engine and the probe program carry no instrumentation):
 | Pictures compared, wrong | 1,868, **0** | 1,868, **0** |
 | Slots whose last write is on their own Y line | 71,594 (8.5%) | 23,307 (2.8%) |
 | Least slack of a last write to Y:53, any Y | **4 cycles** (Y ≡ 4 mod 8, mixed: the `$D01C` write on Y:49; 26 cycles inside its own deadline) | 28 |
-| Closest call with Y on a badline: the last write | **Y − 1, cycle 46** in the main run; **cycle 50** in the hunt (1,855 layouts, the same 50 from many of them) | Y − 1, cycle 33; 35 in the hunt |
+| Closest call with Y on a badline: the last write | **Y − 1, cycle 46** in the main run; **cycle 50** in the first hunt (1,855 layouts, the same 50 from many of them); **cycle 51** in the wide hunt (F1, below) | Y − 1, cycle 33; 35 in the hunt |
 | The Y write's closest approach to the end of line Y − 1, Y on a badline | 80 cycles before it (line Y − 2, cycle 45, in the hunt; 83 in the main run) | 86 |
 | Least slack of each register to its own deadline, any Y | Y 77, X low 58, pointer 35, colour 42, `$D010` 34, `$D01C` 26 | 86 / 100 / 75 / 84 / 58 / 50 |
 | `mux_late_count`, `irq_late_count`, overruns, drops in the static layouts | 0 | (no counters; overruns 0) |
@@ -774,17 +778,29 @@ flowchart LR
   The hunt **measured** exactly that (5 of its first 1,500 layouts, and 6 of the 10 hill climbs
   ended on it) and nothing later. By build and mode:
 
-| Build, mode | Cycles from the test's raster read to the last store (*counted*: 28 + the block) | Last store of this path lands on, at the latest (*counted*) | Margin to cycle 54 | Latest **measured**, Y on a badline |
-|---|---|---|---|---|
-| DEBUG, mixed | 85 | Y − 1, cycle 50 | **4** | cycle 50 (hunt) |
-| DEBUG, uniform | 77 | cycle 42 | 12 | not hunted |
-| Release, mixed | 76 | cycle 41 | 13 | cycle 35 (hunt) |
-| Release, uniform | 68 | cycle 33 | 21 | not hunted |
+| Build, mode | Cycles from the test's raster read to the last store (*counted*: 28 + the block) | Last store of this path, *counted* (it assumes the read is on cycle 53 and 44 CPU cycles a line) | Latest **measured**, Y on a badline (hunt) | **Measured** margin to cycle 54 | Hunt size (layouts) |
+|---|---|---|---|---|---|
+| DEBUG, mixed | 85 | Y − 1, cycle 50 | **cycle 51** (wide staircases; 50 in the narrow ones; 46 in flicker layouts) | **3** | 1,855 narrow + 3,603 wide + 3,786 flicker |
+| DEBUG, uniform | 77 | cycle 42 | cycle 37 | 17 | 2,223 narrow |
+| Release, mixed | 76 | cycle 41 | cycle 35 (narrow; 30 in the wide ones; 23 in flicker layouts) | 19 | 1,857 narrow + 2,294 wide + 3,813 flicker |
+| Release, uniform | 68 | cycle 33 | cycle 15 | 39 | 2,219 narrow |
 
-- **This is the worst case of the path found, not a proven worst case of the engine.** The count
-  covers one mechanism (the slow exit of the next-slot test on the sprite's free line); the hunt
-  found nothing later in 1,855 DEBUG and 1,857 release layouts, all mixed staircases. Whether
-  another path can end later is *unverified*.
+- **The count is not a bound** (**measured**, F1). The DEBUG mixed wide hunt ended one cycle
+  past it: slot 11 (hardware sprite 3) at Y = 123 in the staircase Y = 89, 94, 96, 98, 102, 104,
+  106, 108, 114, 119, 121, 123, 129, 131, 134, 139, 141, 145, 147, 151, 155, 157, 161, 164
+  (middle row multicolour) has its Y write on 121:46 and its `$D01C` write on **122:51**, in every
+  one of 1,000 frames. The count assumed sprites 0 and 7 among those displayed (CPU cycles 10–53
+  of a line); with a different set of sprites in DMA on lines Y − 3 to Y − 1 the CPU's cycles fall
+  differently. Which set gives the latest store was not worked out: *unverified*. Two climbs of
+  450 steps from that layout (1,261 neighbours) found nothing later than 51.
+- **Why the other three modes stay far inside their counts** (*derived*, consistent with the
+  hunts, not proven): the path needs slot k − 1 to finish late on line Y − 3, and a run of slots
+  only drifts later when a slot's slow path costs more CPU cycles than two lines give with 8
+  sprites displayed (88). DEBUG mixed costs 95 and falls behind 7 a slot; DEBUG uniform costs 87,
+  release mixed 86, release uniform 78, so their runs don't drift and the phase stays where the
+  zone IRQ's entry put it.
+- **This is the worst case found, not a proven worst case of the engine.** Whether another path
+  or layout family can end later is *unverified*.
 - If the last store did fall off line Y − 1, it would land on line Y + 1 at cycle 10 or later
   (line Y, the badline, gives the CPU 0–2 cycles with sprites around it, **measured**). What
   follows is *derived from the measured deadlines, not provoked*: the stores affected would be
@@ -795,10 +811,48 @@ flowchart LR
   outright, but only once the block is some 24 cycles over. So 4 cycles is the margin to leaving
   line Y − 1, and the margin to a visible fault is larger by an amount nobody has measured.
 
-**What wasn't covered.** Layouts were static (the engine's selection is the same every frame, the
-main loop's phase varies through the probe's jitter loop); the random layouts flicker but weren't
-hunted, and the hunt tried mixed staircases only. `$D017`/`$D01D` expansion is unsupported in v1
-and wasn't tried.
+**What wasn't covered.** In the main run the hunt tried mixed staircases only and the random
+layouts that flicker weren't hunted: both are covered by the follow-up hunts below. Still not
+covered: layouts that move (every hunted layout is static; the main loop's phase varies through
+the probe's jitter loop), layout families other than staircases and dense random ones, and
+`$D017`/`$D01D` expansion (unsupported in v1).
+
+#### Follow-up hunts and the size lock (F1, F2, F4; raster-engineer, 2026-10-01)
+
+All **measured** (VICE 3.10 x64sc PAL, both builds; `edge.py --hunt`, run in pieces by
+`tests/engine/multiplexer_edge/hunt_piece.sh`, whose header lists every piece; outputs in
+`results-hunt-{debug,release}-{uniform,mixed-wide,flicker}.txt`). No write past a deadline, no
+wrong picture, `mux_late_count` and `irq_late_count` 0 in every hunt.
+
+| Hunt | Layouts (random + climbed) | DEBUG: latest last store, Y on a badline | DEBUG: least slack of a last write to Y:53, any Y | Release: badline | Release: any Y |
+|---|---|---|---|---|---|
+| F1 uniform staircases (no multicolour flag), 2 × 750, seeds 1–2 | 2,223 / 2,219 | Y − 1, **cycle 37** (count: 42) | 20 (Y:33) | **cycle 15** (count: 33) | 39 (Y:14) |
+| F1 mixed staircases, wide (steps 2–6, base 32–110), 2 × 750, + 2 climbs of 450 from the closest (DEBUG) | 3,603 / 2,294 | **cycle 51** (count: 50) | 4 (Y:49) | cycle 30 (narrow hunt: 35; count: 41) | 24 (Y:29) |
+| F2 flicker: dense layouts that overflow, 3 × 400, seeds 1–3, 40 frames each | 3,786 (3,248 overflowing) / 3,813 (3,276) | cycle 46 | 9 (Y:44) | cycle 23 | 31 (Y:22) |
+
+- **F1, uniform:** both builds are well inside the count. Release uniform is flat: every climb
+  ended on cycle 15 or 14.
+- **F1, release mixed, can it be pushed to its counted 41?** Not by widening the search: the wide
+  space did worse (30) than the narrow one (35). The reason is *derived* above (a release run
+  doesn't drift later), so 41 looks unreachable rather than unfound. A search that could settle it
+  would vary what the count holds fixed: which hardware sprites are in DMA on lines Y − 3 to Y − 1
+  (partial rows, hidden sprites) and the zone IRQ's entry phase. Not done.
+- **F2, flicker frames are no later than the staircases** in either build: Y − 1 cycle 46 against
+  51 (DEBUG) and 23 against 35 (release) on a badline, and 9 cycles of slack to Y:53 against 4
+  (DEBUG), 31 against 24 (release) at any Y. 863,658 zone slots scored in DEBUG and 861,616 in
+  release, about 86% of the layouts overflowing. Least slack of each register to its own
+  deadline in the detail reruns (Y, X low, pointer, colour, `$D010`, `$D01C`): DEBUG 86 / 91 / 49 /
+  56 / 48 / 40, release 90 / 104 / 75 / 88 / 61 / 53. The reruns don't revisit the fast tier's
+  closest frame (a flicker layout's slots depend on its age history): for that frame the last
+  write (`$D01C` or `$D010`, deadline Y + 1:12) has 9 + 22 = 31 cycles in DEBUG, *derived*.
+- **F4, the size lock:** `engine/multiplexer.asm` stops the build if a zone block isn't 81 / 87
+  bytes (DEBUG uniform / mixed) or 66 / 72 (release), if the next-slot test isn't 36, or if the
+  `mux_irq_zone` dispatch isn't 17 (`MUX_ZONE_*_BYTES`). The message names this section and
+  `edge.py`. It assembles to nothing: the `multiplexer` and `multiplexer_edge` PRGs are
+  md5-identical to f913ad0 in both builds, and a `nop` in a block, the test or the dispatch stops
+  both builds (`tests/engine/multiplexer_edge/size_guard_check.sh`, `results-size-guard.txt`). A
+  same-size change gets past it: it is a tripwire, not a timing check.
+- Screenshot: [the cycle-51 layout](../screenshots/multiplexer-edge-closest-call-cycle51-wide-staircase-debug-mixed.png).
 
 **What `make test` covers, and what it doesn't.** `make test` runs the probe's counters
 (`tests/engine/multiplexer_edge/budget.json`: nothing dropped, both late counters 0, no overrun,
@@ -814,6 +868,10 @@ make GAME=multiplexer_edge SRC_DIR=tests/engine/multiplexer_edge
 uv run --package budget-runner python tests/engine/multiplexer_edge/edge.py               # all tiers and layouts
 uv run --package budget-runner python tests/engine/multiplexer_edge/edge.py --hunt 1500   # the closest call
 # then the same three with BUILD=release on the make line, and rebuild without it for make test
+# The follow-up hunts, both builds side by side (4 to 6 minutes a piece; the script's header lists them all):
+sh tests/engine/multiplexer_edge/hunt_piece.sh uniform    750 1 --hunt-mode uniform
+sh tests/engine/multiplexer_edge/hunt_piece.sh mixed-wide 750 1 --hunt-mode mixed --hunt-space wide
+sh tests/engine/multiplexer_edge/hunt_piece.sh flicker    400 1 --hunt-mode flicker
 ```
 
 The IRQ side doesn't need a plan: `mux_irq_zone` writes slot k, then carries on with slot k+1

@@ -1,0 +1,272 @@
+==== hunt_piece.sh flicker 400 1 --hunt-mode flicker
+hunt: multiplexer_edge.prg, DEBUG build, mode flicker, seed 1: 400 random layouts, 40 frames each, then hill climbs of 60 steps.
+Objective: Y on a badline. Closest 10 of the random layouts (slack of the last write to Y:53; 63 + 53 - slack = its cycle on line Y - 1):
+   slack   85  slot 12 Y 219 last write 218:31  Y = [157, 157, 255, 255, 194, 255, 255, 219, 209, 210, 211, 224, 255, 215, 255, 196, 208, 224, 166, 255, 207, 158, 255, 255]  flags = [129, 128, 129, 128, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1]
+   slack   85  slot 13 Y 155 last write 154:31  Y = [255, 132, 122, 155, 255, 157, 118, 137, 153, 255, 255, 115, 154, 255, 130, 161, 149, 153, 255, 128, 147, 142, 112, 255]  flags = [128, 129, 129, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0]
+   slack   87  slot 13 Y 131 last write 130:29  Y = [121, 106, 109, 116, 134, 126, 96, 113, 131, 111, 134, 127, 129, 101, 133, 132, 126, 108, 100, 98, 113, 115, 104, 109]  flags = [129, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1]
+   slack   88  slot 11 Y 147 last write 146:28  Y = [158, 166, 145, 130, 131, 110, 129, 204, 190, 255, 123, 103, 122, 255, 196, 163, 182, 129, 172, 125, 136, 170, 147, 113]  flags = [129, 128, 128, 128, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0]
+   slack   92  slot  8 Y 171 last write 170:24  Y = [177, 181, 155, 182, 255, 146, 255, 185, 255, 255, 147, 155, 255, 162, 255, 167, 155, 150, 149, 174, 255, 166, 171, 166]  flags = [129, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0]
+   slack   97  slot  8 Y 163 last write 162:19  Y = [147, 139, 144, 163, 160, 164, 146, 142, 133, 161, 157, 146, 158, 145, 165, 134, 138, 138, 165, 138, 165, 141, 161, 164]  flags = [128, 128, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0]
+   slack   97  slot 13 Y 123 last write 122:19  Y = [255, 88, 123, 122, 78, 104, 99, 87, 123, 110, 95, 83, 108, 112, 98, 126, 105, 90, 109, 95, 87, 114, 116, 112]  flags = [129, 128, 128, 128, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0]
+   slack   99  slot 13 Y 107 last write 106:17  Y = [99, 97, 69, 98, 90, 69, 82, 255, 255, 105, 255, 255, 101, 107, 255, 107, 255, 255, 71, 255, 255, 74, 114, 69]  flags = [128, 128, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+   slack  101  slot 15 Y 147 last write 146:15  Y = [111, 158, 133, 105, 145, 142, 106, 114, 131, 154, 145, 144, 92, 122, 159, 147, 157, 136, 133, 92, 255, 128, 109, 155]  flags = [128, 128, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+   slack  103  slot  8 Y 107 last write 106:13  Y = [102, 106, 255, 111, 141, 148, 132, 156, 106, 111, 156, 133, 83, 130, 84, 121, 134, 82, 98, 91, 106, 144, 97, 107]  flags = [129, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+   climbed from 85 to 84: slack   84  slot 12 Y 219 last write 218:32  Y = [159, 168, 255, 255, 194, 255, 255, 219, 207, 209, 211, 218, 255, 216, 255, 199, 212, 228, 166, 255, 209, 159, 255, 255]  flags = [129, 128, 129, 128, 0, 1, 128, 129, 129, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1]
+   climbed from 85 to 79: slack   79  slot 12 Y 155 last write 154:37  Y = [137, 132, 121, 155, 255, 255, 120, 137, 153, 255, 255, 115, 154, 255, 130, 161, 147, 153, 255, 128, 149, 142, 255, 255]  flags = [128, 129, 1, 0, 128, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1]
+   climbed from 87 to 70: slack   70  slot 12 Y 131 last write 130:46  Y = [119, 104, 107, 114, 132, 124, 93, 111, 129, 109, 132, 125, 127, 99, 131, 130, 124, 106, 98, 96, 111, 113, 102, 107]  flags = [129, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 128, 0, 0, 0, 0, 0, 1]
+   climbed from 88 to 86: slack   86  slot 10 Y 147 last write 146:30  Y = [162, 166, 145, 128, 126, 255, 131, 204, 190, 255, 124, 105, 122, 255, 193, 161, 185, 126, 255, 125, 139, 170, 147, 113]  flags = [129, 128, 129, 129, 1, 1, 1, 0, 129, 1, 1, 0, 1, 0, 128, 1, 129, 0, 129, 129, 1, 0, 0, 1]
+   climbed from 92 to 88: slack   88  slot  8 Y 171 last write 170:28  Y = [255, 184, 152, 162, 255, 146, 255, 154, 255, 255, 178, 155, 255, 162, 255, 157, 153, 150, 149, 174, 255, 172, 171, 167]  flags = [129, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 129, 128, 0, 0, 0, 1, 128, 1, 1, 0, 0, 0]
+   climbed from 97 to 86: slack   86  slot  9 Y 163 last write 162:30  Y = [147, 139, 144, 160, 160, 166, 146, 142, 131, 163, 157, 146, 158, 145, 167, 162, 137, 137, 165, 138, 165, 141, 161, 164]  flags = [128, 128, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0]
+   climbed from 97 to 91: slack   91  slot 14 Y 123 last write 122:25  Y = [255, 88, 123, 122, 78, 104, 98, 89, 123, 109, 95, 83, 108, 112, 95, 126, 105, 90, 108, 95, 87, 114, 116, 112]  flags = [129, 128, 128, 128, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0]
+   climbed from 99 to 87: slack   87  slot 12 Y 107 last write 106:29  Y = [100, 97, 72, 99, 90, 69, 82, 255, 255, 105, 255, 255, 101, 107, 255, 104, 255, 255, 74, 255, 255, 255, 114, 69]  flags = [128, 128, 128, 0, 1, 0, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+   climbed from 101 to 84: slack   84  slot 14 Y 147 last write 146:32  Y = [110, 158, 255, 108, 146, 141, 106, 137, 131, 153, 143, 255, 92, 122, 159, 147, 161, 138, 131, 90, 255, 126, 113, 159]  flags = [128, 128, 128, 0, 0, 0, 129, 0, 0, 128, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]
+   climbed from 103 to 96: slack   96  slot  9 Y 107 last write 106:20  Y = [102, 255, 255, 97, 143, 255, 132, 159, 106, 117, 158, 136, 80, 129, 86, 119, 134, 82, 97, 93, 106, 144, 98, 107]  flags = [1, 0, 0, 1, 1, 1, 0, 0, 128, 1, 128, 1, 0, 1, 0, 129, 129, 1, 1, 1, 1, 1, 1, 1]
+Objective: any Y. Closest 5 of the random layouts (slack of the last write to Y:53):
+   slack   18  slot 14 Y 157 last write 157:35  Y = [255, 132, 122, 155, 255, 157, 118, 137, 153, 255, 255, 115, 154, 255, 130, 161, 149, 153, 255, 128, 147, 142, 112, 255]  flags = [128, 129, 129, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0]
+   slack   20  slot 14 Y 133 last write 133:33  Y = [121, 106, 109, 116, 134, 126, 96, 113, 131, 111, 134, 127, 129, 101, 133, 132, 126, 108, 100, 98, 113, 115, 104, 109]  flags = [129, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1]
+   slack   22  slot  9 Y 164 last write 164:31  Y = [134, 255, 139, 139, 162, 130, 164, 148, 170, 166, 145, 255, 143, 255, 255, 144, 150, 169, 150, 151, 134, 141, 161, 132]  flags = [128, 128, 128, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0]
+   slack   23  slot  9 Y 118 last write 118:30  Y = [255, 132, 109, 255, 255, 124, 122, 111, 96, 102, 99, 255, 255, 105, 106, 82, 255, 93, 118, 125, 104, 116, 125, 128]  flags = [129, 128, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0]
+   slack   26  slot  9 Y 108 last write 108:27  Y = [255, 88, 123, 122, 78, 104, 99, 87, 123, 110, 95, 83, 108, 112, 98, 126, 105, 90, 109, 95, 87, 114, 116, 112]  flags = [129, 128, 128, 128, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0]
+   climbed from 18 to 12: slack   12  slot 13 Y 156 last write 156:41  Y = [255, 131, 120, 154, 255, 156, 117, 136, 152, 255, 160, 156, 150, 255, 129, 160, 145, 255, 255, 127, 146, 144, 111, 255]  flags = [128, 129, 129, 0, 1, 1, 0, 1, 0, 129, 1, 1, 1, 0, 128, 1, 0, 0, 0, 0, 1, 0, 0, 128]
+   climbed from 20 to 18: slack   18  slot 14 Y 133 last write 133:35  Y = [121, 106, 109, 116, 137, 126, 96, 116, 131, 111, 134, 127, 129, 101, 133, 132, 126, 108, 100, 98, 113, 115, 104, 109]  flags = [129, 0, 1, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1]
+   climbed from 22 to 9: slack    9  slot 12 Y 172 last write 172:44  Y = [136, 255, 143, 141, 167, 135, 166, 150, 172, 168, 147, 255, 145, 255, 255, 146, 152, 171, 152, 153, 136, 142, 157, 134]  flags = [128, 128, 128, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 128, 1, 1, 1, 1, 0, 0]
+   climbed from 23 to 22: slack   22  slot  9 Y 118 last write 118:31  Y = [255, 131, 109, 255, 255, 124, 122, 111, 97, 102, 99, 255, 255, 105, 107, 82, 255, 93, 118, 125, 106, 255, 122, 128]  flags = [129, 128, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 129, 1, 0, 1, 0, 1, 1, 0, 0]
+   climbed from 26 to 24: slack   24  slot  9 Y 108 last write 108:29  Y = [255, 88, 123, 122, 78, 104, 99, 87, 123, 110, 95, 83, 108, 112, 98, 126, 105, 90, 109, 95, 87, 114, 116, 114]  flags = [129, 128, 128, 128, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0]
+hunt: 1256 layouts tried, 1082 of them overflowing (flicker); 304152 zone slots scored, 0 past Y:53. Least slack of any slot, any Y: slack    9  slot 12 Y 172 last write 172:44
+hunt: closest found, Y on a badline: slack   70  slot 12 Y 131 last write 130:46 = cycle 46 of line Y - 1
+   Y = [119, 104, 107, 114, 132, 124, 93, 111, 129, 109, 132, 125, 127, 99, 131, 130, 124, 106, 98, 96, 111, 113, 102, 107]
+   flags = [129, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 128, 0, 0, 0, 0, 0, 1]
+   Again, 1000 frames, with every register write:
+hunt best (Y on a badline)          1000 fr   4306 zone slots | least slack    68 ( 1.08 lines; slot 12, Y 127, last write 126:48) | Y on a badline:    330, least    89 ( 1.41 lines; slot 10, Y 131, last write 130:27) | last write on line Y: 0 | past Y:53: 0 | pictures 10/10
+hunt best (Y on a badline, detail)  200 fr   5184 writes | least slack to its own deadline: Y 136, XLO 122, PTR 99, COL 106, D010 98, D01C 90
+climb 0 end (Y on a badline, detail)  100 fr   3600 writes | least slack to its own deadline: Y 152, XLO 157, PTR 134, COL 122, D010 114, D01C 106
+climb 1 end (Y on a badline, detail)  100 fr   3600 writes | least slack to its own deadline: Y 146, XLO 151, PTR 112, COL 119, D010 111, D01C 103
+climb 3 end (Y on a badline, detail)  100 fr   6600 writes | least slack to its own deadline: Y 153, XLO 158, PTR 129, COL 124, D010 116, D01C 108
+climb 4 end (Y on a badline, detail)  100 fr   2400 writes | least slack to its own deadline: Y 151, XLO 156, PTR 127, COL 122, D010 114, D01C 106
+climb 5 end (Y on a badline, detail)  100 fr   1992 writes | least slack to its own deadline: Y 153, XLO 158, PTR 129, COL 76, D010 58, D01C 50
+climb 6 end (Y on a badline, detail)  100 fr   4500 writes | least slack to its own deadline: Y 159, XLO 164, PTR 135, COL 126, D010 82, D01C 59
+climb 7 end (Y on a badline, detail)  100 fr   3000 writes | least slack to its own deadline: Y 157, XLO 162, PTR 139, COL 127, D010 119, D01C 111
+climb 8 end (Y on a badline, detail)  100 fr   6000 writes | least slack to its own deadline: Y 152, XLO 157, PTR 134, COL 122, D010 114, D01C 106
+climb 9 end (Y on a badline, detail)  100 fr   7200 writes | least slack to its own deadline: Y 159, XLO 164, PTR 136, COL 148, D010 121, D01C 113
+   Least slack of each register to its own deadline, over those 44076 writes:
+      Y on a badline  Y     slack to its own deadline  146  (slot 12, hardware sprite 4, Y 155, written at 153:33)
+      Y on a badline  XLO   slack to its own deadline  151  (slot 12, hardware sprite 4, Y 155, written at 153:50)
+      Y on a badline  PTR   slack to its own deadline  112  (slot 12, hardware sprite 4, Y 155, written at 154:11)
+      Y on a badline  COL   slack to its own deadline  119  (slot 12, hardware sprite 4, Y 155, written at 154:19)
+      Y on a badline  D010  slack to its own deadline  111  (slot 12, hardware sprite 4, Y 155, written at 154:27)
+      Y on a badline  D01C  slack to its own deadline  103  (slot 12, hardware sprite 4, Y 155, written at 154:35)
+      any Y           Y     slack to its own deadline  136  (slot 12, hardware sprite 4, Y 127, written at 125:43)
+      any Y           XLO   slack to its own deadline  122  (slot 12, hardware sprite 4, Y 127, written at 126:16)
+      any Y           PTR   slack to its own deadline   99  (slot 12, hardware sprite 4, Y 127, written at 126:24)
+      any Y           COL   slack to its own deadline   76  (slot 9, hardware sprite 1, Y 164, written at 163:62)
+      any Y           D010  slack to its own deadline   58  (slot 9, hardware sprite 1, Y 164, written at 164:17)
+      any Y           D01C  slack to its own deadline   50  (slot 9, hardware sprite 1, Y 164, written at 164:25)
+hunt: closest found, any Y: slack    9  slot 12 Y 172 last write 172:44 (on its own Y line)
+   Y = [136, 255, 143, 141, 167, 135, 166, 150, 172, 168, 147, 255, 145, 255, 255, 146, 152, 171, 152, 153, 136, 142, 157, 134]
+   flags = [128, 128, 128, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 128, 1, 1, 1, 1, 0, 0]
+   Again, 1000 frames, with every register write:
+hunt best (any Y)                   1000 fr   4464 zone slots | least slack    89 ( 1.41 lines; slot 9, Y 168, last write 167:27) | Y on a badline:    991, least   150 ( 2.38 lines; slot 10, Y 171, last write 169:29) | last write on line Y: 0 | past Y:53: 0 | pictures 10/10
+hunt best (any Y, detail)           200 fr   5376 writes | least slack to its own deadline: Y 156, XLO 161, PTR 132, COL 127, D010 119, D01C 111
+climb 0 end (any Y, detail)         100 fr   3600 writes | least slack to its own deadline: Y 146, XLO 151, PTR 49, COL 56, D010 48, D01C 40
+climb 1 end (any Y, detail)         100 fr   3300 writes | least slack to its own deadline: Y 86, XLO 91, PTR 49, COL 56, D010 48, D01C 40
+climb 3 end (any Y, detail)         100 fr   3600 writes | least slack to its own deadline: Y 90, XLO 95, PTR 66, COL 60, D010 52, D01C 44
+climb 4 end (any Y, detail)         100 fr   4500 writes | least slack to its own deadline: Y 156, XLO 161, PTR 132, COL 64, D010 56, D01C 48
+   Least slack of each register to its own deadline, over those 20376 writes:
+      Y on a badline  Y     slack to its own deadline  154  (slot 13, hardware sprite 5, Y 131, written at 129:25)
+      Y on a badline  XLO   slack to its own deadline  159  (slot 13, hardware sprite 5, Y 131, written at 129:42)
+      Y on a badline  PTR   slack to its own deadline  136  (slot 13, hardware sprite 5, Y 131, written at 129:50)
+      Y on a badline  COL   slack to its own deadline  125  (slot 13, hardware sprite 5, Y 131, written at 130:13)
+      Y on a badline  D010  slack to its own deadline  117  (slot 13, hardware sprite 5, Y 131, written at 130:21)
+      Y on a badline  D01C  slack to its own deadline  109  (slot 13, hardware sprite 5, Y 131, written at 130:29)
+      any Y           Y     slack to its own deadline   86  (slot 14, hardware sprite 6, Y 133, written at 132:30)
+      any Y           XLO   slack to its own deadline   91  (slot 14, hardware sprite 6, Y 133, written at 132:47)
+      any Y           PTR   slack to its own deadline   49  (slot 13, hardware sprite 5, Y 156, written at 156:11)
+      any Y           COL   slack to its own deadline   56  (slot 13, hardware sprite 5, Y 156, written at 156:19)
+      any Y           D010  slack to its own deadline   48  (slot 13, hardware sprite 5, Y 156, written at 156:27)
+      any Y           D01C  slack to its own deadline   40  (slot 13, hardware sprite 5, Y 156, written at 156:35)
+   counters (a flicker layout drops sprites by design, and a new layout can overrun a frame): mux_late_count = 0, irq_late_count = 0, edge_overrun_count = 0, edge_drop_total = 5255
+hunt RESULT: no write past a deadline, pictures right
+exit 0
+
+==== hunt_piece.sh flicker 400 2 --hunt-mode flicker
+hunt: multiplexer_edge.prg, DEBUG build, mode flicker, seed 2: 400 random layouts, 40 frames each, then hill climbs of 60 steps.
+Objective: Y on a badline. Closest 10 of the random layouts (slack of the last write to Y:53; 63 + 53 - slack = its cycle on line Y - 1):
+   slack   85  slot 10 Y 163 last write 162:31  Y = [190, 203, 147, 202, 161, 149, 206, 203, 157, 142, 151, 138, 255, 163, 146, 143, 131, 145, 142, 255, 201, 185, 164, 128]  flags = [128, 129, 0, 1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0]
+   slack   87  slot 14 Y  83 last write 82:29  Y = [255, 75, 58, 85, 51, 36, 83, 76, 72, 79, 39, 76, 65, 75, 71, 255, 73, 255, 48, 72, 59, 39, 73, 52]  flags = [129, 129, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1]
+   slack   88  slot 13 Y 131 last write 130:28  Y = [114, 116, 110, 113, 131, 85, 80, 255, 255, 119, 78, 255, 120, 106, 127, 255, 138, 113, 84, 255, 78, 132, 115, 128]  flags = [128, 129, 0, 1, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1]
+   slack   89  slot  8 Y 163 last write 162:27  Y = [145, 255, 153, 255, 255, 255, 152, 142, 255, 159, 165, 146, 255, 255, 158, 142, 255, 138, 163, 159, 255, 151, 255, 255]  flags = [128, 128, 129, 1, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0]
+   slack   89  slot 12 Y 147 last write 146:27  Y = [155, 137, 158, 135, 160, 128, 155, 125, 161, 147, 138, 108, 137, 135, 122, 106, 114, 161, 106, 152, 155, 130, 145, 137]  flags = [0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 1, 0, 0]
+   slack   91  slot  8 Y 115 last write 114:25  Y = [255, 90, 255, 255, 100, 104, 255, 96, 255, 102, 94, 115, 93, 255, 255, 92, 105, 255, 105, 116, 255, 255, 255, 255]  flags = [128, 0, 1, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1]
+   slack   92  slot  9 Y  75 last write 74:24  Y = [43, 62, 85, 79, 50, 75, 71, 51, 75, 71, 63, 255, 255, 89, 84, 82, 69, 88, 255, 58, 255, 77, 65, 69]  flags = [129, 129, 129, 0, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+   slack   93  slot  8 Y 155 last write 154:23  Y = [167, 137, 148, 132, 180, 155, 136, 167, 255, 255, 132, 255, 255, 255, 255, 195, 255, 145, 171, 170, 139, 255, 133, 130]  flags = [1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1]
+   slack   93  slot 15 Y 123 last write 122:23  Y = [79, 66, 103, 123, 255, 70, 255, 106, 77, 106, 255, 255, 66, 255, 116, 116, 105, 105, 91, 111, 116, 255, 87, 98]  flags = [129, 128, 129, 129, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0]
+   slack   94  slot  8 Y  99 last write 98:22  Y = [99, 255, 101, 80, 76, 93, 255, 255, 74, 82, 83, 80, 77, 87, 92, 83, 89, 78, 76, 90, 92, 99, 78, 255]  flags = [128, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0]
+   climbed from 85 to 85: slack   85  slot 10 Y 163 last write 162:31  Y = [154, 201, 147, 194, 161, 147, 206, 203, 255, 142, 152, 138, 255, 163, 150, 143, 131, 145, 145, 255, 201, 185, 161, 125]  flags = [128, 0, 128, 0, 1, 1, 1, 0, 1, 1, 129, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 0]
+   climbed from 87 to 85: slack   85  slot 13 Y  83 last write 82:31  Y = [255, 75, 58, 83, 51, 35, 83, 75, 76, 79, 39, 73, 68, 78, 71, 255, 71, 255, 48, 72, 59, 63, 71, 52]  flags = [129, 129, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1]
+   climbed from 88 to 84: slack   84  slot 12 Y 131 last write 130:32  Y = [114, 117, 110, 113, 131, 85, 81, 255, 255, 119, 80, 255, 120, 106, 127, 255, 138, 110, 84, 255, 255, 132, 115, 128]  flags = [129, 129, 0, 1, 0, 0, 0, 1, 1, 0, 129, 1, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1]
+   climbed from 89 to 88: slack   88  slot  8 Y 163 last write 162:28  Y = [146, 255, 152, 255, 255, 255, 150, 145, 255, 156, 163, 147, 255, 255, 158, 142, 255, 138, 153, 159, 255, 153, 255, 255]  flags = [128, 0, 128, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 129, 1, 0, 0, 1, 1, 0, 0]
+   climbed from 89 to 84: slack   84  slot 11 Y 147 last write 146:32  Y = [155, 255, 143, 139, 163, 128, 155, 125, 161, 147, 136, 108, 137, 135, 122, 255, 114, 161, 110, 152, 158, 138, 145, 137]  flags = [0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 129, 1, 0, 1, 0, 0]
+   climbed from 91 to 88: slack   88  slot  8 Y 115 last write 114:28  Y = [255, 90, 255, 255, 101, 110, 255, 97, 255, 97, 109, 115, 106, 255, 255, 93, 106, 255, 106, 118, 255, 255, 255, 255]  flags = [0, 128, 1, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 128, 1, 0, 1, 1, 1, 1, 0, 0, 129, 1]
+   climbed from 92 to 88: slack   88  slot  9 Y  75 last write 74:28  Y = [43, 64, 87, 255, 50, 75, 72, 51, 75, 71, 62, 56, 255, 76, 79, 255, 69, 255, 255, 61, 255, 77, 66, 64]  flags = [129, 129, 129, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 129, 0, 0, 1, 0, 0, 0, 0, 0]
+   climbed from 93 to 91: slack   91  slot  8 Y 155 last write 154:25  Y = [165, 140, 147, 132, 180, 155, 135, 169, 255, 159, 135, 173, 255, 255, 255, 193, 255, 145, 168, 169, 140, 255, 134, 130]  flags = [1, 0, 1, 0, 1, 129, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1]
+   climbed from 93 to 91: slack   91  slot 16 Y 123 last write 122:25  Y = [79, 66, 106, 123, 255, 70, 255, 106, 79, 110, 255, 255, 65, 104, 119, 114, 103, 101, 88, 84, 114, 255, 87, 98]  flags = [129, 128, 129, 129, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 128, 129, 0, 0]
+   climbed from 94 to 89: slack   89  slot  8 Y  99 last write 98:27  Y = [99, 255, 101, 80, 77, 92, 255, 255, 74, 82, 83, 83, 77, 88, 89, 83, 255, 78, 76, 90, 92, 99, 79, 255]  flags = [128, 0, 1, 1, 1, 0, 1, 128, 0, 0, 1, 1, 128, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0]
+Objective: any Y. Closest 5 of the random layouts (slack of the last write to Y:53):
+   slack   22  slot 17 Y 197 last write 197:31  Y = [132, 255, 200, 161, 255, 172, 188, 143, 151, 255, 162, 179, 143, 255, 149, 255, 139, 180, 192, 177, 143, 192, 197, 188]  flags = [0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1]
+   slack   24  slot  9 Y 149 last write 149:29  Y = [255, 140, 156, 110, 255, 129, 168, 124, 168, 255, 145, 255, 255, 127, 255, 160, 136, 149, 136, 255, 141, 172, 154, 165]  flags = [128, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1]
+   slack   25  slot 12 Y 125 last write 125:28  Y = [90, 102, 140, 137, 112, 98, 146, 84, 109, 125, 115, 132, 137, 125, 255, 255, 105, 112, 111, 86, 111, 100, 144, 135]  flags = [128, 129, 129, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 0, 0]
+   slack   28  slot 11 Y 100 last write 100:25  Y = [255, 99, 95, 78, 83, 75, 65, 92, 100, 103, 109, 97, 105, 63, 100, 70, 111, 255, 100, 82, 89, 89, 96, 106]  flags = [128, 128, 129, 128, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 1]
+   slack   28  slot 12 Y 142 last write 142:25  Y = [112, 127, 117, 128, 129, 111, 124, 111, 126, 114, 141, 123, 104, 101, 138, 101, 108, 114, 132, 109, 108, 142, 102, 122]  flags = [128, 129, 128, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1]
+   climbed from 22 to 22: slack   22  slot 17 Y 197 last write 197:31  Y = [137, 255, 255, 160, 184, 172, 143, 143, 151, 255, 162, 179, 143, 255, 149, 255, 139, 179, 193, 180, 157, 189, 197, 188]  flags = [1, 128, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 129, 129, 1, 1, 0, 1, 0, 0, 1]
+   climbed from 24 to 23: slack   23  slot  9 Y 148 last write 148:30  Y = [255, 139, 255, 111, 255, 128, 164, 123, 169, 255, 144, 255, 255, 126, 255, 156, 131, 148, 134, 255, 139, 142, 255, 164]  flags = [128, 0, 0, 0, 1, 0, 128, 1, 0, 0, 1, 0, 1, 128, 1, 128, 0, 0, 1, 0, 1, 1, 128, 1]
+   climbed from 25 to 22: slack   22  slot 13 Y 125 last write 125:31  Y = [90, 102, 139, 137, 255, 98, 148, 84, 109, 125, 112, 89, 137, 124, 255, 255, 119, 114, 145, 86, 111, 100, 131, 143]  flags = [128, 129, 129, 1, 0, 1, 129, 1, 0, 0, 1, 1, 129, 0, 1, 0, 0, 1, 129, 1, 1, 0, 0, 0]
+   climbed from 28 to 25: slack   25  slot 13 Y 110 last write 110:28  Y = [255, 100, 95, 79, 84, 76, 66, 93, 101, 104, 110, 98, 106, 64, 101, 71, 112, 255, 101, 83, 90, 85, 97, 107]  flags = [128, 128, 128, 128, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1]
+   climbed from 28 to 23: slack   23  slot 14 Y 140 last write 140:30  Y = [110, 125, 115, 126, 127, 134, 122, 109, 122, 112, 139, 121, 102, 100, 136, 99, 106, 111, 130, 104, 108, 140, 100, 120]  flags = [128, 129, 128, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 128, 0, 1]
+hunt: 1269 layouts tried, 1084 of them overflowing (flicker); 278384 zone slots scored, 0 past Y:53. Least slack of any slot, any Y: slack   22  slot 12 Y 125 last write 125:31
+hunt: closest found, Y on a badline: slack   84  slot 12 Y 131 last write 130:32 = cycle 32 of line Y - 1
+   Y = [114, 117, 110, 113, 131, 85, 81, 255, 255, 119, 80, 255, 120, 106, 127, 255, 138, 110, 84, 255, 255, 132, 115, 128]
+   flags = [129, 129, 0, 1, 0, 0, 0, 1, 1, 0, 129, 1, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1]
+   Again, 1000 frames, with every register write:
+hunt best (Y on a badline)          1000 fr   5946 zone slots | least slack    87 ( 1.38 lines; slot 12, Y 131, last write 130:29) | Y on a badline:   1000, least    87 ( 1.38 lines; slot 12, Y 131, last write 130:29) | last write on line Y: 0 | past Y:53: 0 | pictures 10/10
+hunt best (Y on a badline, detail)  200 fr   7164 writes | least slack to its own deadline: Y 155, XLO 160, PTR 137, COL 125, D010 117, D01C 109
+climb 0 end (Y on a badline, detail)  100 fr   5400 writes | least slack to its own deadline: Y 153, XLO 158, PTR 129, COL 123, D010 115, D01C 107
+climb 1 end (Y on a badline, detail)  100 fr   3300 writes | least slack to its own deadline: Y 151, XLO 156, PTR 133, COL 121, D010 113, D01C 105
+climb 3 end (Y on a badline, detail)  100 fr    600 writes | least slack to its own deadline: Y 154, XLO 159, PTR 130, COL 126, D010 118, D01C 110
+climb 4 end (Y on a badline, detail)  100 fr   4800 writes | least slack to its own deadline: Y 152, XLO 157, PTR 134, COL 122, D010 114, D01C 106
+climb 5 end (Y on a badline, detail)  100 fr   1200 writes | least slack to its own deadline: Y 150, XLO 155, PTR 126, COL 121, D010 113, D01C 105
+climb 6 end (Y on a badline, detail)  100 fr   2400 writes | least slack to its own deadline: Y 164, XLO 169, PTR 140, COL 122, D010 114, D01C 106
+climb 7 end (Y on a badline, detail)  100 fr   5400 writes | least slack to its own deadline: Y 154, XLO 159, PTR 130, COL 143, D010 121, D01C 113
+climb 8 end (Y on a badline, detail)  100 fr   5400 writes | least slack to its own deadline: Y 157, XLO 162, PTR 133, COL 146, D010 121, D01C 113
+climb 9 end (Y on a badline, detail)  100 fr    600 writes | least slack to its own deadline: Y 105, XLO 110, PTR 81, COL 94, D010 86, D01C 64
+   Least slack of each register to its own deadline, over those 36264 writes:
+      Y on a badline  Y     slack to its own deadline  152  (slot 11, hardware sprite 3, Y 147, written at 145:27)
+      Y on a badline  XLO   slack to its own deadline  157  (slot 11, hardware sprite 3, Y 147, written at 145:44)
+      Y on a badline  PTR   slack to its own deadline  129  (slot 10, hardware sprite 2, Y 163, written at 161:51)
+      Y on a badline  COL   slack to its own deadline  122  (slot 11, hardware sprite 3, Y 147, written at 146:16)
+      Y on a badline  D010  slack to its own deadline  114  (slot 11, hardware sprite 3, Y 147, written at 146:24)
+      Y on a badline  D01C  slack to its own deadline  106  (slot 11, hardware sprite 3, Y 147, written at 146:32)
+      any Y           Y     slack to its own deadline  105  (slot 9, hardware sprite 1, Y 101, written at 100:11)
+      any Y           XLO   slack to its own deadline  110  (slot 9, hardware sprite 1, Y 101, written at 100:28)
+      any Y           PTR   slack to its own deadline   81  (slot 9, hardware sprite 1, Y 101, written at 100:36)
+      any Y           COL   slack to its own deadline   94  (slot 9, hardware sprite 1, Y 101, written at 100:44)
+      any Y           D010  slack to its own deadline   86  (slot 9, hardware sprite 1, Y 101, written at 100:52)
+      any Y           D01C  slack to its own deadline   64  (slot 9, hardware sprite 1, Y 101, written at 101:11)
+hunt: closest found, any Y: slack   22  slot 17 Y 197 last write 197:31 (on its own Y line)
+   Y = [132, 255, 200, 161, 255, 172, 188, 143, 151, 255, 162, 179, 143, 255, 149, 255, 139, 180, 192, 177, 143, 192, 197, 188]
+   flags = [0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1]
+   Again, 1000 frames, with every register write:
+hunt best (any Y)                   1000 fr   9910 zone slots | least slack    22 ( 0.35 lines; slot 17, Y 197, last write 197:31) | Y on a badline:    991, least   760 (12.06 lines; slot 11, Y 179, last write 167:49) | last write on line Y: 500 | past Y:53: 0 | pictures 10/10
+hunt best (any Y, detail)           200 fr  11940 writes | least slack to its own deadline: Y 91, XLO 96, PTR 67, COL 61, D010 53, D01C 45
+climb 0 end (any Y, detail)         100 fr   6000 writes | least slack to its own deadline: Y 90, XLO 95, PTR 66, COL 60, D010 52, D01C 44
+climb 1 end (any Y, detail)         100 fr   3600 writes | least slack to its own deadline: Y 152, XLO 157, PTR 128, COL 61, D010 53, D01C 45
+climb 2 end (any Y, detail)         100 fr   7200 writes | least slack to its own deadline: Y 91, XLO 96, PTR 73, COL 62, D010 54, D01C 46
+climb 3 end (any Y, detail)         100 fr   3600 writes | least slack to its own deadline: Y 100, XLO 105, PTR 82, COL 89, D010 74, D01C 58
+climb 4 end (any Y, detail)         100 fr   3696 writes | least slack to its own deadline: Y 101, XLO 106, PTR 77, COL 63, D010 55, D01C 47
+   Least slack of each register to its own deadline, over those 36036 writes:
+      Y on a badline  Y     slack to its own deadline  249  (slot 17, hardware sprite 1, Y 139, written at 135:56)
+      Y on a badline  XLO   slack to its own deadline  243  (slot 17, hardware sprite 1, Y 139, written at 136:21)
+      Y on a badline  PTR   slack to its own deadline  214  (slot 17, hardware sprite 1, Y 139, written at 136:29)
+      Y on a badline  COL   slack to its own deadline  227  (slot 17, hardware sprite 1, Y 139, written at 136:37)
+      Y on a badline  D010  slack to its own deadline  219  (slot 17, hardware sprite 1, Y 139, written at 136:45)
+      Y on a badline  D01C  slack to its own deadline  211  (slot 17, hardware sprite 1, Y 139, written at 136:53)
+      any Y           Y     slack to its own deadline   90  (slot 17, hardware sprite 1, Y 197, written at 196:26)
+      any Y           XLO   slack to its own deadline   95  (slot 17, hardware sprite 1, Y 197, written at 196:43)
+      any Y           PTR   slack to its own deadline   66  (slot 17, hardware sprite 1, Y 197, written at 196:51)
+      any Y           COL   slack to its own deadline   60  (slot 17, hardware sprite 1, Y 197, written at 197:15)
+      any Y           D010  slack to its own deadline   52  (slot 17, hardware sprite 1, Y 197, written at 197:23)
+      any Y           D01C  slack to its own deadline   44  (slot 17, hardware sprite 1, Y 197, written at 197:31)
+   counters (a flicker layout drops sprites by design, and a new layout can overrun a frame): mux_late_count = 0, irq_late_count = 0, edge_overrun_count = 0, edge_drop_total = 44053
+hunt RESULT: no write past a deadline, pictures right
+exit 0
+
+==== hunt_piece.sh flicker 400 3 --hunt-mode flicker
+hunt: multiplexer_edge.prg, DEBUG build, mode flicker, seed 3: 400 random layouts, 40 frames each, then hill climbs of 60 steps.
+Objective: Y on a badline. Closest 10 of the random layouts (slack of the last write to Y:53; 63 + 53 - slack = its cycle on line Y - 1):
+   slack   89  slot  8 Y 171 last write 170:27  Y = [255, 160, 146, 255, 255, 164, 155, 156, 162, 171, 176, 255, 255, 255, 255, 166, 255, 166, 158, 255, 255, 162, 255, 255]  flags = [128, 128, 128, 128, 1, 0, 1, 1, 0, 1, 0, 0, 0, 1, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1]
+   slack   89  slot 16 Y 187 last write 186:27  Y = [123, 172, 126, 184, 126, 180, 206, 255, 208, 129, 177, 142, 153, 255, 170, 145, 177, 171, 176, 150, 181, 187, 162, 255]  flags = [128, 129, 128, 0, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0]
+   slack   97  slot  8 Y  99 last write 98:19  Y = [255, 104, 99, 255, 94, 255, 255, 255, 255, 74, 77, 105, 91, 80, 255, 255, 98, 84, 255, 255, 86, 79, 255, 102]  flags = [128, 128, 128, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+   slack   97  slot  8 Y 155 last write 154:19  Y = [130, 171, 165, 155, 165, 142, 138, 134, 159, 255, 152, 143, 157, 255, 169, 158, 168, 130, 138, 132, 169, 255, 170, 152]  flags = [129, 129, 129, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0]
+   slack   98  slot 16 Y 147 last write 146:18  Y = [96, 127, 104, 142, 147, 150, 102, 134, 112, 112, 122, 154, 136, 103, 102, 108, 111, 131, 107, 147, 156, 132, 152, 126]  flags = [1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0, 1]
+   slack   99  slot  8 Y 163 last write 162:17  Y = [152, 145, 141, 143, 139, 169, 159, 138, 169, 145, 139, 155, 138, 172, 149, 163, 147, 159, 158, 166, 171, 134, 255, 172]  flags = [128, 128, 128, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+   slack   99  slot 16 Y 131 last write 130:17  Y = [127, 255, 120, 77, 106, 94, 123, 120, 131, 128, 127, 111, 98, 91, 99, 91, 137, 115, 83, 255, 100, 255, 76, 79]  flags = [128, 128, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+   slack  103  slot 15 Y 155 last write 154:13  Y = [255, 255, 112, 133, 255, 148, 146, 153, 119, 255, 255, 142, 255, 113, 130, 112, 255, 119, 154, 120, 114, 138, 155, 152]  flags = [1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0]
+   slack  121  slot  8 Y 123 last write 121:58  Y = [123, 255, 115, 127, 255, 98, 127, 102, 255, 99, 114, 104, 108, 118, 110, 106, 128, 120, 114, 129, 98, 99, 110, 109]  flags = [128, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+   slack  122  slot  8 Y  99 last write 97:57  Y = [75, 96, 255, 79, 75, 99, 68, 94, 78, 97, 83, 82, 79, 73, 87, 255, 255, 78, 255, 95, 74, 83, 79, 73]  flags = [128, 128, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+   climbed from 89 to 88: slack   88  slot  8 Y 171 last write 170:28  Y = [255, 161, 146, 255, 255, 162, 155, 156, 153, 171, 172, 255, 255, 255, 255, 166, 255, 255, 255, 255, 255, 157, 255, 255]  flags = [128, 0, 129, 129, 0, 0, 129, 129, 1, 0, 129, 0, 0, 128, 1, 128, 0, 129, 1, 0, 1, 1, 1, 0]
+   climbed from 89 to 84: slack   84  slot 17 Y 187 last write 186:32  Y = [143, 172, 126, 186, 126, 137, 206, 255, 208, 131, 176, 141, 155, 255, 170, 144, 178, 168, 173, 150, 181, 187, 162, 255]  flags = [128, 129, 128, 0, 0, 1, 129, 1, 0, 0, 1, 0, 129, 0, 1, 1, 0, 0, 1, 1, 0, 128, 0, 0]
+   climbed from 97 to 88: slack   88  slot  8 Y  99 last write 98:28  Y = [255, 104, 99, 255, 92, 255, 255, 255, 255, 74, 79, 105, 89, 92, 255, 255, 77, 86, 255, 255, 78, 107, 255, 107]  flags = [128, 128, 128, 129, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0]
+   climbed from 97 to 92: slack   92  slot  8 Y 155 last write 154:24  Y = [130, 171, 164, 155, 152, 145, 138, 134, 255, 255, 151, 143, 160, 255, 169, 163, 168, 130, 157, 255, 154, 149, 167, 255]  flags = [129, 129, 129, 1, 1, 0, 0, 0, 128, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0]
+   climbed from 98 to 94: slack   94  slot 16 Y 147 last write 146:22  Y = [96, 255, 117, 142, 147, 150, 103, 134, 112, 255, 122, 152, 136, 113, 102, 108, 111, 129, 107, 147, 255, 132, 152, 127]  flags = [1, 1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1]
+   climbed from 99 to 88: slack   88  slot  8 Y 163 last write 162:28  Y = [152, 142, 142, 143, 139, 169, 159, 138, 169, 146, 142, 155, 138, 172, 149, 163, 147, 157, 158, 166, 171, 134, 255, 172]  flags = [128, 128, 128, 128, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+   climbed from 99 to 89: slack   89  slot 13 Y 123 last write 122:27  Y = [127, 255, 120, 77, 106, 108, 123, 115, 131, 132, 135, 111, 98, 91, 255, 90, 137, 115, 76, 255, 100, 255, 74, 255]  flags = [129, 128, 128, 0, 0, 128, 1, 0, 0, 0, 1, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+   climbed from 103 to 84: slack   84  slot 14 Y 155 last write 154:32  Y = [255, 255, 115, 133, 255, 146, 145, 147, 119, 255, 255, 141, 255, 113, 130, 113, 255, 122, 113, 123, 255, 138, 155, 151]  flags = [1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 128, 0, 1, 129, 1, 129, 129, 0, 0, 0]
+   climbed from 121 to 88: slack   88  slot  8 Y 123 last write 122:28  Y = [123, 255, 115, 127, 255, 98, 127, 102, 255, 101, 115, 103, 101, 105, 104, 109, 255, 255, 118, 128, 98, 98, 110, 109]  flags = [129, 0, 0, 1, 1, 0, 0, 0, 129, 0, 1, 0, 1, 0, 0, 0, 0, 128, 0, 0, 0, 1, 0, 1]
+   climbed from 122 to 85: slack   85  slot  9 Y  99 last write 98:31  Y = [78, 96, 255, 81, 80, 99, 68, 96, 78, 97, 83, 82, 77, 73, 87, 255, 255, 77, 255, 95, 74, 88, 79, 82]  flags = [128, 129, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+Objective: any Y. Closest 5 of the random layouts (slack of the last write to Y:53):
+   slack   22  slot 12 Y 165 last write 165:31  Y = [165, 115, 150, 156, 148, 255, 144, 158, 127, 165, 153, 255, 255, 255, 158, 255, 255, 140, 129, 123, 255, 159, 255, 168]  flags = [0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1]
+   slack   28  slot  8 Y 173 last write 173:25  Y = [255, 177, 156, 185, 192, 183, 161, 165, 255, 171, 183, 170, 183, 148, 168, 152, 156, 169, 197, 199, 176, 171, 199, 173]  flags = [129, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1]
+   slack   28  slot  9 Y 156 last write 156:25  Y = [170, 174, 170, 140, 142, 176, 134, 152, 136, 131, 153, 141, 140, 175, 164, 135, 255, 167, 170, 161, 160, 124, 150, 156]  flags = [129, 129, 128, 129, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+   slack   30  slot  8 Y 156 last write 156:23  Y = [173, 137, 160, 178, 169, 255, 175, 131, 171, 139, 171, 157, 137, 166, 255, 134, 255, 138, 158, 167, 156, 137, 170, 142]  flags = [0, 0, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0]
+   slack   32  slot  8 Y 166 last write 166:21  Y = [154, 189, 148, 146, 164, 161, 182, 145, 174, 186, 167, 186, 150, 188, 164, 162, 166, 141, 160, 151, 187, 143, 183, 255]  flags = [128, 128, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1]
+   climbed from 22 to 22: slack   22  slot 11 Y 165 last write 165:31  Y = [165, 115, 152, 155, 148, 255, 146, 153, 130, 162, 151, 255, 255, 255, 159, 255, 255, 140, 129, 255, 255, 160, 255, 170]  flags = [0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 129, 0, 1, 0, 0]
+   climbed from 28 to 28: slack   28  slot  8 Y 173 last write 173:25  Y = [255, 177, 156, 185, 192, 183, 161, 165, 255, 171, 183, 170, 183, 148, 168, 152, 156, 169, 197, 199, 176, 171, 199, 173]  flags = [129, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1]
+   climbed from 28 to 23: slack   23  slot 10 Y 158 last write 158:30  Y = [255, 178, 171, 142, 146, 255, 136, 154, 141, 133, 155, 141, 142, 180, 166, 137, 255, 169, 171, 163, 163, 126, 129, 158]  flags = [129, 129, 128, 129, 128, 129, 0, 129, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0]
+   climbed from 30 to 30: slack   30  slot  8 Y 156 last write 156:23  Y = [173, 137, 160, 165, 169, 255, 174, 131, 171, 139, 173, 157, 137, 166, 255, 134, 255, 138, 255, 167, 156, 137, 170, 142]  flags = [0, 0, 1, 0, 1, 0, 128, 1, 1, 0, 0, 0, 0, 1, 0, 128, 0, 1, 0, 0, 1, 0, 0, 0]
+   climbed from 32 to 30: slack   30  slot  8 Y 166 last write 166:23  Y = [157, 255, 149, 149, 165, 161, 184, 145, 173, 186, 167, 180, 255, 184, 255, 255, 166, 141, 160, 255, 187, 144, 183, 255]  flags = [0, 129, 1, 1, 1, 129, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1]
+hunt: 1261 layouts tried, 1082 of them overflowing (flicker); 281122 zone slots scored, 0 past Y:53. Least slack of any slot, any Y: slack   18  slot 19 Y 156 last write 156:35
+hunt: closest found, Y on a badline: slack   84  slot 17 Y 187 last write 186:32 = cycle 32 of line Y - 1
+   Y = [143, 172, 126, 186, 126, 137, 206, 255, 208, 131, 176, 141, 155, 255, 170, 144, 178, 168, 173, 150, 181, 187, 162, 255]
+   flags = [128, 129, 128, 0, 0, 1, 129, 1, 0, 0, 1, 0, 129, 0, 1, 1, 0, 0, 1, 1, 0, 128, 0, 0]
+   Again, 1000 frames, with every register write:
+hunt best (Y on a badline)          1000 fr  11892 zone slots | least slack    84 ( 1.33 lines; slot 17, Y 187, last write 186:32) | Y on a badline:   1982, least    84 ( 1.33 lines; slot 17, Y 187, last write 186:32) | last write on line Y: 0 | past Y:53: 0 | pictures 10/10
+hunt best (Y on a badline, detail)  200 fr  14328 writes | least slack to its own deadline: Y 152, XLO 157, PTR 128, COL 122, D010 114, D01C 106
+climb 0 end (Y on a badline, detail)  100 fr    600 writes | least slack to its own deadline: Y 154, XLO 159, PTR 130, COL 126, D010 118, D01C 110
+climb 2 end (Y on a badline, detail)  100 fr   2400 writes | least slack to its own deadline: Y 154, XLO 159, PTR 130, COL 126, D010 118, D01C 110
+climb 3 end (Y on a badline, detail)  100 fr   3600 writes | least slack to its own deadline: Y 154, XLO 126, PTR 97, COL 110, D010 102, D01C 94
+climb 4 end (Y on a badline, detail)  100 fr   6000 writes | least slack to its own deadline: Y 143, XLO 148, PTR 107, COL 114, D010 106, D01C 98
+climb 5 end (Y on a badline, detail)  100 fr   2706 writes | least slack to its own deadline: Y 154, XLO 159, PTR 130, COL 126, D010 118, D01C 110
+climb 6 end (Y on a badline, detail)  100 fr   6000 writes | least slack to its own deadline: Y 156, XLO 161, PTR 138, COL 127, D010 119, D01C 111
+climb 7 end (Y on a badline, detail)  100 fr   4200 writes | least slack to its own deadline: Y 153, XLO 158, PTR 135, COL 123, D010 115, D01C 107
+climb 8 end (Y on a badline, detail)  100 fr   1494 writes | least slack to its own deadline: Y 156, XLO 161, PTR 132, COL 145, D010 122, D01C 114
+climb 9 end (Y on a badline, detail)  100 fr    600 writes | least slack to its own deadline: Y 279, XLO 284, PTR 255, COL 268, D010 247, D01C 239
+   Least slack of each register to its own deadline, over those 41928 writes:
+      Y on a badline  Y     slack to its own deadline  152  (slot 17, hardware sprite 1, Y 187, written at 185:27)
+      Y on a badline  XLO   slack to its own deadline  157  (slot 17, hardware sprite 1, Y 187, written at 185:44)
+      Y on a badline  PTR   slack to its own deadline  128  (slot 17, hardware sprite 1, Y 187, written at 185:52)
+      Y on a badline  COL   slack to its own deadline  122  (slot 17, hardware sprite 1, Y 187, written at 186:16)
+      Y on a badline  D010  slack to its own deadline  114  (slot 17, hardware sprite 1, Y 187, written at 186:24)
+      Y on a badline  D01C  slack to its own deadline  106  (slot 17, hardware sprite 1, Y 187, written at 186:32)
+      any Y           Y     slack to its own deadline  143  (slot 13, hardware sprite 5, Y 136, written at 134:36)
+      any Y           XLO   slack to its own deadline  126  (slot 9, hardware sprite 1, Y 157, written at 156:12)
+      any Y           PTR   slack to its own deadline   97  (slot 9, hardware sprite 1, Y 157, written at 156:20)
+      any Y           COL   slack to its own deadline  110  (slot 9, hardware sprite 1, Y 157, written at 156:28)
+      any Y           D010  slack to its own deadline  102  (slot 9, hardware sprite 1, Y 157, written at 156:36)
+      any Y           D01C  slack to its own deadline   94  (slot 9, hardware sprite 1, Y 157, written at 156:44)
+hunt: closest found, any Y: slack   22  slot 12 Y 165 last write 165:31 (on its own Y line)
+   Y = [165, 115, 150, 156, 148, 255, 144, 158, 127, 165, 153, 255, 255, 255, 158, 255, 255, 140, 129, 123, 255, 159, 255, 168]
+   flags = [0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1]
+   Again, 1000 frames, with every register write:
+hunt best (any Y)                   1000 fr   4955 zone slots | least slack    25 ( 0.40 lines; slot 12, Y 165, last write 165:28) | Y on a badline:      0, least - | last write on line Y: 491 | past Y:53: 0 | pictures 10/10
+hunt best (any Y, detail)           200 fr   5970 writes | least slack to its own deadline: Y 92, XLO 97, PTR 74, COL 63, D010 55, D01C 47
+climb 0 end (any Y, detail)         100 fr   2400 writes | least slack to its own deadline: Y 91, XLO 96, PTR 73, COL 61, D010 53, D01C 45
+climb 1 end (any Y, detail)         100 fr   4800 writes | least slack to its own deadline: Y 96, XLO 101, PTR 72, COL 85, D010 60, D01C 52
+climb 2 end (any Y, detail)         100 fr   5400 writes | least slack to its own deadline: Y 90, XLO 95, PTR 66, COL 61, D010 53, D01C 45
+climb 3 end (any Y, detail)         100 fr   4800 writes | least slack to its own deadline: Y 154, XLO 159, PTR 130, COL 83, D010 60, D01C 52
+climb 4 end (any Y, detail)         100 fr   4500 writes | least slack to its own deadline: Y 123, XLO 114, PTR 85, COL 98, D010 90, D01C 82
+   Least slack of each register to its own deadline, over those 27870 writes:
+      Y on a badline  Y     slack to its own deadline  167  (slot 12, hardware sprite 4, Y 163, written at 161:12)
+      Y on a badline  XLO   slack to its own deadline  172  (slot 12, hardware sprite 4, Y 163, written at 161:29)
+      Y on a badline  PTR   slack to its own deadline  149  (slot 12, hardware sprite 4, Y 163, written at 161:37)
+      Y on a badline  COL   slack to its own deadline  156  (slot 12, hardware sprite 4, Y 163, written at 161:45)
+      Y on a badline  D010  slack to its own deadline  148  (slot 12, hardware sprite 4, Y 163, written at 161:53)
+      Y on a badline  D01C  slack to its own deadline  122  (slot 12, hardware sprite 4, Y 163, written at 162:16)
+      any Y           Y     slack to its own deadline   90  (slot 10, hardware sprite 2, Y 158, written at 157:26)
+      any Y           XLO   slack to its own deadline   95  (slot 10, hardware sprite 2, Y 158, written at 157:43)
+      any Y           PTR   slack to its own deadline   66  (slot 10, hardware sprite 2, Y 158, written at 157:51)
+      any Y           COL   slack to its own deadline   61  (slot 11, hardware sprite 3, Y 165, written at 165:14)
+      any Y           D010  slack to its own deadline   53  (slot 11, hardware sprite 3, Y 165, written at 165:22)
+      any Y           D01C  slack to its own deadline   45  (slot 11, hardware sprite 3, Y 165, written at 165:30)
+   counters (a flicker layout drops sprites by design, and a new layout can overrun a frame): mux_late_count = 0, irq_late_count = 0, edge_overrun_count = 0, edge_drop_total = 36784
+hunt RESULT: no write past a deadline, pictures right
+exit 0
+
