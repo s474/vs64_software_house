@@ -141,7 +141,7 @@ stateDiagram-v2
     Parked --> WindUp: chosen to dive
     WindUp --> Dive: wind-up frames done
     Dive --> Return: path ends ("return")
-    Dive --> Return: X reaches 0 or 344 ("wrap": jump to Y 30 above home)
+    Dive --> Return: X reaches 0 or 344 ("wrap": jump to home X, Y 30)
     Return --> Parked: reaches its home position
     Parked --> Exploding: hit
     WindUp --> Exploding: hit
@@ -319,7 +319,9 @@ rate, 6,000 frames per row; "window" is the README's Y − 38 … Y + 25 around 
 | Pattern 3, loop 3 (the worst) | 17 | 10.5% | 1 frame |
 | Player and enemy shots, every case | – | **never dropped** | 0 |
 
-Sprites in the shown range: up to **24** (pattern 2 from loop 1). A window of 14–17 is a diver
+Sprites in the shown range: up to **24**, every slot in use at once, first when all 3 enemy shots
+are in flight together: pattern 2 from loop 1, where a dive has 3 shots (the model's "sprites in
+range" column; divers don't add to it, being enemies that are already counted). A window of 14–17 is a diver
 between two rows, seeing both; what matters is the dropped column. A real game is lighter: enemies
 die, and shots stop at the first thing they hit.
 
