@@ -50,6 +50,17 @@ Run from the repo root (build first: make GAME=multiplexer SRC_DIR=tests/engine/
 
 Exit code 0 = all checks pass, 1 = a mismatch, 2 = jam/hang. About 700 frames takes several minutes
 (35 monitor stops per frame).
+
+Slack mode (--slack N): stops only at the `inx` that ends each zone slot's writes, for N consecutive zone
+slots (default 60000), and reports where the slot's LAST register write lands relative to line Y,
+cycle 55 (DMA_CYCLE: the measured earliest cycle sprite DMA takes the bus). slack = (Y - line) * 63 +
+(55 - cycle); it fails (exit 1) if any slot has slack <= 0, i.e. a write at or after the deadline. The
+CYC read at the checkpoint is the cycle at which the `inx` starts, i.e. just after the last write. Run:
+
+    uv run --package budget-runner python tests/engine/multiplexer/positions.py --slack 60000 \
+        [--prg build/multiplexer/multiplexer.prg]
+
+(about 60,000 slots takes a few minutes; one stop per slot, spike as shipped, no input perturbation).
 """
 
 import argparse
@@ -286,8 +297,70 @@ class Checker:
         self.slots_done.add(k)
 
 
+def slack_main(a) -> int:
+    """--slack mode: histogram of where each zone slot's last write lands relative to (line Y, cycle 55)."""
+    v = Vice(Path(a.prg), 100)
+    try:
+        sym, mon = v.symbols, v.mon
+        inxs = {}
+        for base, (_, off, size) in ((sym["mux_zone_0"], ZONE_UNI), (sym["mux_zone_m0"], ZONE_MIX)):
+            for j in range(8):
+                ad = base + size * j + off
+                if mon.mem_get(ad, ad)[0] != 0xE8:
+                    raise MeasureError(f"no inx at ${ad:04x}: zone block layout changed, update positions.py")
+                inxs[ad] = j
+        for ad in inxs:
+            mon.checkpoint_set(ad, ad, CPU_OP_EXEC)
+        sy = sym["mux_s_y"]
+        # categories: all, Y is a badline, Y is 1..3 lines below a badline
+        cats = ("all", "Y badline", "Y 1-3 below badline", "other")
+        n = Counter(); on_y = Counter(); max_cyc = Counter(); min_slack = {}; lines_before = Counter()
+        worst = []
+        while n["all"] < a.slack:
+            mon.exit()
+            if not mon.wait_stopped(STOP_TIMEOUT):
+                mon.ping()
+                raise MeasureError(f"no checkpoint within {STOP_TIMEOUT}s after {n['all']} slots: jam?")
+            r = mon.registers()
+            lin, cyc, x = r["LIN"], r["CYC"], r["X"]
+            y = mon.mem_get(sy + x, sy + x)[0]
+            slack = (y - lin) * 63 + (DMA_CYCLE - cyc)
+            if 51 <= y <= 243 and y % 8 == 3:
+                cat = "Y badline"
+            elif 51 <= y <= 243 + 3 and y % 8 in (4, 5, 6):
+                cat = "Y 1-3 below badline"
+            else:
+                cat = "other"
+            for c in ("all", cat):
+                n[c] += 1
+                min_slack[c] = min(min_slack.get(c, slack), slack)
+                if lin == y:
+                    on_y[c] += 1
+                    max_cyc[c] = max(max_cyc[c], cyc)
+            lines_before[min(max(y - lin, -1), 6)] += 1
+            if slack <= 0:
+                worst.append((slack, y, lin, cyc, x, cat))
+            if n["all"] % 10000 == 0:
+                print(f"  ...{n['all']} slots", flush=True)
+        late = mon.mem_get(sym["mux_late_count"], sym["mux_late_count"])[0]
+    finally:
+        v.close()
+    print(f"\n{n['all']} consecutive zone slots, deadline line Y cycle {DMA_CYCLE}, mux_late_count {late}")
+    print("lines from the slot's last write to its line Y (-1 = past Y, 6 = 6 or more):", sorted(lines_before.items()))
+    print(f"{'class':<22}{'slots':>8}{'on line Y':>11}{'latest cyc':>12}{'min slack':>11}")
+    for c in cats:
+        if n[c]:
+            print(f"{c:<22}{n[c]:>8}{on_y[c]:>11}{(max_cyc[c] if on_y[c] else '-'):>12}{min_slack[c]:>11}")
+    for w in worst[:20]:
+        print(f"[FAIL] write at/after deadline: slack {w[0]} Y {w[1]} line {w[2]} cycle {w[3]} slot X={w[4]} ({w[5]})")
+    print("\nFAILED: writes at or after the deadline" if worst else "\nALL PASS (every last write before line Y cycle 55)")
+    return 1 if worst else 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--slack", type=int, nargs="?", const=60000, default=0, metavar="N",
+                    help="slack mode: N consecutive zone slots (default 60000), no register checks")
     ap.add_argument("--static", type=int, default=200)
     ap.add_argument("--hires", type=int, default=200)
     ap.add_argument("--mc", type=int, default=100)
@@ -296,6 +369,8 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--prg", default=str(REPO / "build/multiplexer/multiplexer.prg"))
     a = ap.parse_args()
+    if a.slack:
+        return slack_main(a)
     rng = random.Random(a.seed)
     phases = [("static", a.static), ("hires", a.hires), ("mc", a.mc), ("mixed", a.mixed)]
     total = sum(n for _, n in phases)

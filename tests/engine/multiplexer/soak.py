@@ -17,16 +17,20 @@ Checks (exit code 1 on any failure):
      +-39 lines of it (README: 25-line window, 39 for back-to-back full rows). Any uncrowded sprite with
      age > 0 is a violation (stronger than the brief: it must not miss even 1 frame).
      Also reported: the longest missing run containing only uncrowded frames.
-  4. excess phase: pin_excess_count grows, sprites 0-3 never dropped, sprite 4 (unpinned then)
-     missing run <= 4, no jam; after clearing, pin_excess_count stops growing
+  4. excess phase: pin_excess_count grows, sprites 0-3 never dropped, no jam; sprite 4 (flagged, but
+     unpinned then: only 4 are honoured) must be SEEN to flicker (missing run >= 1, else the check fails as
+     "not exercised") and its missing run must stay <= 4; after clearing (the counter is zeroed first, as it
+     saturates at 255), pin_excess_count must stay 0
   5. spike_idle_min_normal x 16 >= 5,300 and spike_idle_min_stress x 16 >= 4,250
 
 Run from the repo root (build first: make GAME=multiplexer SRC_DIR=tests/engine/multiplexer):
 
     uv run --package budget-runner python tests/engine/multiplexer/soak.py \
-        [--frames 10000] [--excess 100] [--recover 200] [--prg build/multiplexer/multiplexer.prg]
+        [--frames 10000] [--excess 1000] [--recover 200] [--prg build/multiplexer/multiplexer.prg]
 
-About 10,000 frames takes a few minutes (one monitor stop per frame).
+About 11,000 frames takes about 40 s (one monitor stop per frame, measured ~3 ms each).
+The excess phase defaults to 1000 frames because the spike overflows in only ~10-40% of frames, and
+sprite 4 is evicted only occasionally: 100 frames never saw it flicker.
 """
 
 import argparse
@@ -61,11 +65,14 @@ class Tracker:
         self.uncrowded_n = 0
         self.in_range_frames = [0] * N
         self.max_age_seen = [0] * N
+        self.miss_frames = [0] * N       # frames each sprite was missing (age > 0, in range)
+        self.overflow_frames = 0         # frames in which any unpinned in-range sprite was missing
 
     def sample(self, fno, ys, ages, pinned):
         self.frames += 1
         inr = [Y_MIN <= y <= Y_MAX for y in ys]
         ylist = [y for y, i in zip(ys, inr) if i]
+        self.overflow_frames += any(inr[s] and ages[s] > 0 and s not in pinned for s in range(N))
         for s in range(N):
             if not inr[s]:
                 self.run[s] = self.crowd_run[s] = 0
@@ -81,6 +88,7 @@ class Tracker:
                 continue
             self.max_age_seen[s] = max(self.max_age_seen[s], ages[s])
             if missing:
+                self.miss_frames[s] += 1
                 self.run[s] += 1
                 self.max_run[s] = max(self.max_run[s], self.run[s])
                 if crowd <= 8:
@@ -96,7 +104,7 @@ class Tracker:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--frames", type=int, default=10000)
-    ap.add_argument("--excess", type=int, default=100)
+    ap.add_argument("--excess", type=int, default=1000)
     ap.add_argument("--recover", type=int, default=200)
     ap.add_argument("--prg", default=str(REPO / "build/multiplexer/multiplexer.prg"))
     a = ap.parse_args()
@@ -151,6 +159,7 @@ def main() -> int:
         # Phase C: cleared
         C = Tracker("recover")
         v.mon.mem_set(flags4, bytes([flags[4] & 0x7F]))
+        v.mon.mem_set(sym["mux_pin_excess_count"], bytes([0]))  # saturates at 255: restart from 0
         for _ in range(a.recover):
             step(C, set(PINNED))
         cc = counters()
@@ -183,11 +192,13 @@ def main() -> int:
     rep("4b pinned 0-3 never dropped in excess + recovery", not B.pin_miss and not C.pin_miss and
         cb["mux_pin_drop_count"] == 0 and cc["mux_pin_drop_count"] == 0,
         f"misses B {len(B.pin_miss)} C {len(C.pin_miss)}, mux_pin_drop_count {cb['mux_pin_drop_count']}/{cc['mux_pin_drop_count']}")
-    rep("4c sprite 4 flickers within target (B)", B.max_run[4] <= 4,
-        f"sprite 4 longest missing run {B.max_run[4]}, max age {B.max_age_seen[4]}; other unpinned longest {max(B.max_run[s] for s in range(5, N))}")
-    rep("4d no excess growth after clearing (C)", cc["mux_pin_excess_count"] == cb["mux_pin_excess_count"] and not C.pin_miss
+    rep("4c sprite 4 flickers within target (B)", 1 <= B.max_run[4] <= 4,
+        f"sprite 4 longest missing run {B.max_run[4]} (needs 1..4; 0 = NOT EXERCISED), missing in {B.miss_frames[4]} of "
+        f"{B.frames} frames, max age {B.max_age_seen[4]}; frames with any unpinned sprite missing {B.overflow_frames}; "
+        f"other unpinned longest {max(B.max_run[s] for s in range(5, N))}")
+    rep("4d no excess growth after clearing (C)", cc["mux_pin_excess_count"] == 0 and not C.pin_miss
         and max(C.max_run[s] for s in range(4, N)) <= 4 and not B.frame_skips + C.frame_skips,
-        f"excess {cb['mux_pin_excess_count']} -> {cc['mux_pin_excess_count']}, unpinned longest run in C {max(C.max_run[s] for s in range(4, N))}")
+        f"excess (zeroed at start of C) -> {cc['mux_pin_excess_count']}, unpinned longest run in C {max(C.max_run[s] for s in range(4, N))}")
     rep("5a idle normal >= 5,300", cc["idle_normal"] >= 5300, f"{cc['idle_normal']} (after A: {ca['idle_normal']})")
     rep("5b idle stress >= 4,250", cc["idle_stress"] >= 4250, f"{cc['idle_stress']} (after A: {ca['idle_stress']})")
     print("\nFAILED: " + ", ".join(fails) if fails else "\nALL PASS")

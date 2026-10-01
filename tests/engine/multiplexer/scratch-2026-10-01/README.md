@@ -13,7 +13,6 @@ paths and aren't part of `make test`.
 | `soak300k.txt` | Free-CPU minima over 300,000 frames |
 | `split.py`, `split2.py`, `split300k.txt`, `split2.txt` | Stress / non-stress classification trials (amp 2-3 against amp 2-5) |
 | `an.py` | Analysis helper for the traces |
-| `slack.py` | Where each zone slot's last write lands relative to line Y, cycle 55 (final review) |
+| ~~`slack.py`~~ | Deleted: now `tests/engine/multiplexer/positions.py --slack` (reproduced 2026-10-01: 60,000 slots, 139 on line Y, latest cycle 26, min slack 29) |
 
-To do: fold `slack.py` into `tests/engine/multiplexer/positions.py` as a supported mode, and replace
-the long-run scripts with `make test-long`. Then delete this folder.
+To do: replace the long-run scripts with `make test-long`. Then delete this folder.
