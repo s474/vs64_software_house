@@ -77,7 +77,9 @@ Rules this imposes on the rest of the game:
   don't save `$01` (it would cost 12 cycles per IRQ). Anything that needs `$01=$34`
   (writing RAM under I/O) runs with interrupts off, at init time or with no IRQ due.
 - **No long `sei` sections** in the main loop. Every cycle with `I` set delays whichever IRQ
-  is due; the multiplexer's zone IRQs have only a few lines of slack.
+  is due, and the multiplexer's zone IRQs have as little as 4 cycles in hand. With the multiplexer
+  running, the main loop doesn't set `I` at all
+  ([Slot write deadline](#verdict-safe-for-m4-with-the-zone-code-frozen), condition 2).
 - The main loop may use decimal mode (BCD scores): the dispatcher clears `D`.
 
 ### Machine setup: `irq_init`
@@ -349,7 +351,7 @@ when too many share a row. Decisions from the brief: 24 sprites, flicker rather 
 | `MUX_WRAP_Y` | 55 | Engine | Largest Y the VIC-II matches a second time in a PAL frame (on line 256 + Y): 311 − 256. See [Wrap ghosts](#wrap-ghosts) |
 | `MUX_PARK_LINE` | 77 | Engine | `MUX_WRAP_Y` + 22: the first line on which every slot at Y ≤ 55 has finished displaying, so its hardware sprite can be disabled |
 | `MUX_SCREEN` | e.g. `$0400` | **Game** | Screen whose `+$3F8…$3FF` get the sprite pointers |
-| `MUX_FREE_AFTER` | 22 | Engine | A hardware sprite is free to rewrite on line `Y_old + 22`. Display on Y+1 to Y+21 is **measured** (`tests/timing/sprite_wrap`); that a rewrite on `Y_old + 22` never marks the last line is still estimate #8 |
+| `MUX_FREE_AFTER` | 22 | Engine | A hardware sprite is free to rewrite on line `Y_old + 22`. Display on Y+1 to Y+21 is **measured** (`tests/timing/sprite_wrap`), and so is that a rewrite on `Y_old + 22` never marks the last line (`tests/timing/sprite_latch`). **Locked**: see the note below the table |
 | `MUX_IRQ_LINES` | 1 | Engine | Lines from a zone IRQ's trigger to its first write. **Measured** (stage 2, 2,000 zone IRQs): 0 or 1, and 2 once; the slack in `MUX_WRITE_LINES` absorbed it (`mux_late_count` 0) |
 | `MUX_WRITE_LINES` | **2** | Engine | Lines to write one slot, allowing for DMA. **Measured** (stage 2): 1 failed (`mux_late_count` 139 in 3,000 frames); a slot takes 78 cycles block to block with no DMA (DEBUG), up to ~2 lines with DMA. 2 gives 0 late, with ≥ 7 lines of margin on back-to-back full rows |
 | `MUX_MAX_PINNED` | 4 | Engine | Most sprites honoured as pinned in one frame (decision, not a measurement) |
@@ -357,6 +359,11 @@ when too many share a row. Decisions from the brief: 24 sprites, flicker rather 
 
 Sprites with Y outside `MUX_Y_MIN`–`MUX_Y_MAX` (including `MUX_OFF`) are not shown and cost
 nothing.
+
+**`MUX_FREE_AFTER`, `MUX_IRQ_LINES` and `MUX_WRITE_LINES` are locked with the zone blocks.** They
+decide how close to its Y line a slot is written, and the closest case has 4 cycles of margin
+(**measured**). Changing any of them needs `edge.py` rerun in both builds, by hand: nothing in the
+build checks it ([v1 limits](#v1-limits)).
 
 ### Per-frame data the game writes
 
@@ -525,8 +532,8 @@ pinned, 4 with 4 pinned sprites in the crowd (**measured**, `mux_max_age`).
 
 ### Slot write deadline
 
-Added in the M3 review (Technical Director, 2026-10-01), after QA's position check found zone
-slots whose writes finish **on** the sprite's own Y line.
+Current state after the M3 follow-up probes (Technical Director, 2026-10-01). The question came from
+QA's position check, which found zone slots whose writes finish **on** the sprite's own Y line.
 
 **What a zone slot writes, in order:** Y, X low, pointer, colour, `$D010`, and `$D01C` in the mixed
 blocks. Each has its own deadline, set by when the VIC-II uses it:
@@ -538,11 +545,9 @@ blocks. Each has its own deadline, set by when the VIC-II uses it:
 | X low, `$D010` bit, colour, `$D01C` bit | Drawing the sprite, first on line Y + 1 | **Cycle 12 + X ÷ 8 of line Y + 1**: cycle 15 for a sprite at X = 24, 52 at X = 320. Live registers: the same on every hardware sprite | **Measured**, the same probe, at X = 24, 64, 288 and 320. Below X = 24 the rule is extrapolated (cycle 12 at X = 0) |
 
 **The requirement, stated conservatively:** every write of a slot is made **on or before cycle 53
-of line Y** (VICE's cycle numbering; "before cycle 55" in the first version of this section, counted
-at the instruction after the write, as `positions.py` does: the same line). **Measured:** that is
-the earliest deadline of all, the Y register on hardware sprite 0, so a slot that meets it meets
-every one. The other deadlines are later by 1 cycle (pointer, sprite 0) up to 22 or more (the live
-registers).
+of line Y** (VICE's cycle numbering). **Measured:** that is the earliest deadline of all, the Y
+register on hardware sprite 0, so a slot that meets it meets every one. The other deadlines are
+later by 1 cycle (pointer, sprite 0) up to 22 or more (the live registers).
 
 **`MUX_FREE_AFTER` = 22 is confirmed** (estimate #8, **measured**, the same probe): rewriting X,
 the pointer or the colour of a hardware sprite on line Y_old + 22 or later, at any cycle, leaves
@@ -550,79 +555,121 @@ every line of the old occupant untouched (sprites 0, 2, 3 and 7, X = 24 and 320,
 Y_old + 23). Line Y_old + 21 is not safe: the sprite is still drawn on it (X and colour mark it up
 to cycle 55 at X = 320, the pointer up to cycle 5 on sprite 7).
 
-**What the engine enforces is narrower.** The DEBUG check (`mux_late_count`) reads the raster 4
-cycles after the **Y** store and counts a slot as late if the line is already Y or later. So:
+**What the engine itself enforces is narrower than the requirement:**
 
-- The Y write is at least 55 cycles early: about a line more than it needs. That's deliberate
-  margin, and `mux_late_count` = 0 in every run proves it for Y.
-- **The other writes aren't checked by anything in the engine.** They follow the check's raster
-  read by 37 CPU cycles in the uniform blocks (5 for the two branches, then four 8-cycle
-  load-and-store pairs) and 45 in the mixed ones (*counted*); 32 and 40 after the Y store in a
-  release build, which has no check and is therefore always earlier than DEBUG.
-- The selection's own rule allows it: a slot fits when its simulated `done` line is **≤** Y, not
-  < Y.
+- The DEBUG check (`mux_late_count`) reads the raster 4 cycles after the **Y** store and counts a
+  slot as late if the line is already Y or later. `mux_late_count` = 0 therefore proves the Y write
+  was at least 55 cycles early, and nothing about the other five writes. A release build has no
+  check at all.
+- The other writes follow the check's raster read by 37 CPU cycles in the uniform blocks and 45 in
+  the mixed ones (*counted*: 5 for the two branches, then 8 a write); 32 and 40 after the Y store
+  in a release build.
+- The selection keeps a slot when its simulated `done` line is **≤** Y, and charges 2 lines a slot.
+  Neither is a bound on the real writes: a slot costs up to 95 CPU cycles (DEBUG, mixed, *counted*)
+  where two lines with 8 sprites displayed give the CPU 88, and a badline with sprites around it
+  gives 0–2 (**measured**). So the arithmetic alone doesn't forbid a write after its deadline. What
+  keeps v1 inside the deadlines is margin, and the rest of this section is the evidence for how much.
 
-**Measured.** Raster position at the `inx` that follows each block's last write:
+#### Verdict: safe for M4, with the zone code frozen
 
-| Run | Zone slots | Last write on line Y | Latest | Slack to cycle 55 | Of those, Y on a badline |
-|---|---|---|---|---|---|
-| QA `positions.py`, 700 frames, hires, multicolour and mixed phases | 21,714 sprite-frames (top and zone slots) | 28 | cycle 40 | **15 cycles** | not recorded |
-| Technical Director, 60,000 consecutive zone slots after 100 warm-up frames, the spike as shipped (uniform hires) | 60,000 | 139 (0.23%) | cycle 26 | **29 cycles** | **0** (of 7,475 slots with Y on a badline) |
+**v1 may be relied on by M4** (Technical Director, 2026-10-01), on the conditions below. The
+evidence is good and the margin is thin: 4 cycles in the closest case. It is a measured result with
+a counted explanation, **not a proof**.
 
-The second run is a scratch checkpoint script, not kept in the repo: an execution checkpoint on
-the `inx` of each of the 8 uniform blocks (`mux_zone_0` + 81 j + 45, DEBUG), reading `LIN`, `CYC`,
-X and `mux_s_y`,X at every stop. Slack is (Y − `LIN`) × 63 + 55 − `CYC`. Its other results:
-49,520 slots (83%) finished 6 or more lines before Y, 1,204 one line before, and every one of the
-40 closest calls had Y ≡ 4, 5 or 6 (mod 8): one to three lines **below** a badline (badlines are
-lines ≡ 3 with YSCROLL = 3). The badline starves the IRQ, the Y write slips to the end of line
-Y − 1, and the rest lands early on line Y, which is not itself a badline. `mux_late_count` stayed 0.
+| | What | Basis |
+|---|---|---|
+| **Measured** | The hardware deadlines above | `tests/timing/sprite_latch`, 13,590 samples. VICE only; sprites 1 and 4–6 and X < 24 are taken conservatively, not probed |
+| **Measured** | No write past a deadline: 0 of 843,538 zone slots (DEBUG) and 842,738 (release) by their last write, 0 of 375,492 / 374,892 writes checked one by one against their own deadline, 1,868 of 1,868 pictures right in each build. 127,616 / 128,194 of the slots had Y on a badline | `tests/engine/multiplexer_edge/edge.py`, `results-debug.txt`, `results-release.txt` |
+| **Measured** | With Y on a badline, the latest last store is **cycle 50 of line Y − 1** in a DEBUG mixed-multicolour block and cycle 35 in a release mixed block. Cycle 54 is the last on which a store can be made before line Y + 1 | `edge.py --hunt 1500`: 1,855 and 1,857 mixed staircases, `results-hunt-debug.txt`, `results-hunt-release.txt` |
+| **Measured** | With Y not on a badline, a slot may finish on its own Y line (8.5% of DEBUG slots, 2.8% of release ones), the last store no later than Y:49, and each register 26 cycles or more inside its own deadline (the pointer 35) | `results-debug.txt`, detail tier |
+| **Measured** | On the moving `multiplexer` spike: 0 register mismatches in 21,714 sprite-frames (hires, multicolour and mixed), and in 60,000 consecutive zone slots (uniform hires) 139 finish on line Y, the latest on cycle 26 | `tests/engine/multiplexer/positions.py` and `positions.py --slack 60000` |
+| *Counted* | The path behind the closest call, and its latest possible store: Y − 1 cycle **50** DEBUG mixed (margin **4**), **42** DEBUG uniform (12), **41** release mixed (13), **33** release uniform (21). Checked against the source for this review: 28 cycles from the next-slot test's raster read to the next block, then 57 / 49 / 48 / 40 to the block's last store | [Probe results](#probe-results-m3-follow-up-raster-engineer-2026-10-01). Only the first is matched by measurement (the DEBUG hunt reached cycle 50 from 6 of its 10 climbs and nothing later). The release hunt reached 35, not 41 |
+| *Unproven* | That cycle 50 is the worst the engine can do. The count covers one path (the slow exit of the next-slot test on the sprite's free line). No argument shows that no other path ends later | The hunt found nothing later, in mixed staircases only |
+| *Not hunted* | DEBUG uniform and release uniform blocks (their margins, 12 and 21, are counts of the same path, never approached by a search), and layouts that overflow and flicker (300 random ones were run and checked, least slack to Y:53 18 cycles in DEBUG; none was searched for its worst case) | `edge.py --hunt` sets the multicolour flag on the middle row and builds staircases only |
+| *Not covered* | A main loop that runs with `I` set (the probe's never does: its IRQs arrive with 0–7 cycles of jitter only); an NMI inside a zone IRQ (13 cycles: RESTORE); YSCROLL other than 3; real hardware | See the conditions below |
 
-**Is the observed behaviour safe?** Yes, for everything observed: all six writes were in place at
-least 15 cycles before the conservative deadline in every slot of both runs, and the position
-check found 0 register mismatches. **It isn't proven for every layout**, and here is the gap:
+**Review of the probe's method** (it is sound, and its claims don't overreach):
 
-| Line Y is | CPU cycles on line Y before cycle 55 | Needed in the worst phase (the check passes on the last cycle of line Y − 1) | Result |
+- It measures from outside. The engine and the probe program carry no instrumentation, so the
+  timing checked is the timing shipped, in both builds.
+- Its errors are on the safe side. A write's position is taken as the monitor's position at the next
+  instruction minus one; if DMA holds the CPU between the store and that instruction, the write is
+  reported later than it was, never earlier. The pointer deadlines it uses for unprobed sprites are
+  those of the earlier probed sprite (Y:54 for sprites 1 and 2, Y:60 for 4–6), and the live registers
+  are held to cycle 12 of line Y + 1 whatever the X.
+- Three independent checks agree: the last write of every slot, every write against its own
+  deadline, and the picture.
+- The layouts are the right family. The selection's limit is `done` = Y, which a run of slots reaches
+  only with 2-line steps from a slot that had to wait for its sprite: a staircase. Rows and single
+  reuses at the limit finish earlier (a single reuse with 7 sprites across its Y line: by cycle 32
+  of line Y − 1, DEBUG mixed, **measured**).
+- The count and the measurement meet. The DEBUG hunt lands on exactly the cycle the count gives,
+  from many starting layouts, and never past it.
+- Its weaknesses are the ones in the table: the search covers one build mode pair and one layout
+  family, each hunted layout runs 20 frames, and "nothing later was found" is not "nothing later
+  exists". The raster-engineer's text says so itself.
+
+**Conditions for M4.** Each is something the probes relied on:
+
+1. **The zone code is frozen.** `MuxZoneBlock` (the six writes, the DEBUG late check and the
+   next-slot test), `mux_irq_zone`, `MUX_FREE_AFTER`, `MUX_IRQ_LINES` and `MUX_WRITE_LINES` don't
+   change without `edge.py` and `edge.py --hunt 1500` rerun in DEBUG and release, and the Technical
+   Director's review of the result. **Nothing in the build enforces this**: `make test` passes
+   whatever the blocks cost. See [v1 limits](#v1-limits).
+2. **The main loop doesn't set `I` while the multiplexer is running.** Every cycle with `I` set
+   delays a zone IRQ by as much, and the probes measured none. A freshly triggered zone IRQ has 22
+   cycles in hand on a badline (cycle 32 against 54, DEBUG mixed, **measured**); the chained case
+   has 4. Work that needs `sei` or `$01=$34` goes in init, or the gameplay-engineer asks first.
+3. **YSCROLL is the same on every line of the multiplexer's region** (it may change from frame to
+   frame). The reason the feared case doesn't happen is that the badline before a badline is 8 lines
+   up; a YSCROLL change inside the region breaks that. v1 has no play-area splits, so this is
+   already the rule. Values other than 3 are *derived* equivalent (the layouts were swept across 16
+   line offsets against the badlines), not measured.
+4. **No X or Y expansion** (`$D017` = `$D01D` = 0): already a v1 rule; the deadlines and
+   `MUX_FREE_AFTER` are for 21-line sprites.
+5. **Develop and ship in the builds that were measured**: DEBUG and `BUILD=release` as they are.
+
+**The risk that remains** (this replaces the risk accepted at sign-off, "the write-timing margin on
+badlines is unproven"):
+
+- **Then:** nobody had measured the deadlines or driven the engine to its limit on a badline, and
+  the arithmetic said a miss was possible.
+- **Now:** the deadlines are measured, the engine was driven to its limit in about 843,000 slots a
+  build with no miss, and the closest call is explained by a count that the measurement matches. The
+  margin on that path is **4 cycles** (DEBUG mixed), 12 to 21 in the other three modes by count.
+- **What is still open:** the 4 cycles are the worst case *found*, not a proven bound, and three of
+  the four margins are counted only. Nothing stops a later change from spending the margin
+  unnoticed.
+- **If it did go wrong:** the last store of a slot whose Y is a badline would move from line Y − 1
+  to line Y + 1, cycle 10 or later. *Derived from the measured deadlines, not provoked:* the first
+  stores to move are `$D01C` and `$D010`, which are still in time up to cycle 12 + X ÷ 8, so the
+  first few cycles of overrun show nothing on most sprites; the pointer misses only once a block is
+  some 24 cycles over. The visible effect is one wrong first line on one sprite for one frame. No
+  crash, no lost sprite, no lasting state.
+- **Rating:** low likelihood, cosmetic effect. Accepted for v1 and M4. v2 must remove it
+  ([v2 requirements](#multiplexer-v2-requirements), 4 and 10).
+
+**Measurement still wanted.** None of it blocks M4 from starting; F1 and F2 are due before M4's
+sprite code is accepted, F3 when QA tests the M4 build. A result outside its pass line goes to the
+Technical Director before anything is changed.
+
+| # | What | Who | Pass |
 |---|---|---|---|
-| Not a badline, no sprite fetch at its start | 55 | 37 uniform / 45 mixed | Safe |
-| Not a badline, sprites 3–7 active from the line above (CPU halted to cycle 10, **measured**) | 44 | 37 / 45 | Uniform safe by 7. Mixed: the `$D01C` store lands on cycle 55, level with the deadline; its real deadline is line Y + 1, so safe in practice, *unproven* |
-| **A badline** (CPU runs cycles 0–11 and 55/56–62 with no sprites, 0–2 cycles with sprites 0–7 around it, **measured**) | 12, or 0–2 | 37 / 45 | **Not safe in the worst phase**: at most the X low write lands; the pointer, colour and `$D010` writes slip past cycle 55, and past the sprite fetches into line Y + 1 when sprites are active. The sprite's first line (Y + 1) would then show the hardware sprite's previous pointer, colour or X bit 8 for one line, in one frame |
+| F1 | **Hunt the uniform blocks.** Give `edge.py --hunt` a uniform mode (every multicolour flag 0) and run `--hunt 1500` in DEBUG and release. Keep the output beside the others (`results-hunt-debug-uniform.txt`, `results-hunt-release-uniform.txt`). About 20 minutes a build | raster-engineer | No write past a deadline, pictures right, and the latest last store with Y on a badline no later than the count: Y − 1 cycle 42 (DEBUG), 33 (release) |
+| F2 | **Hunt the layouts that flicker.** The same hill climb, started from the random dense layouts (12–24 sprites, random multicolour and pinned flags), scoring the slots the selection's slow path chose. DEBUG and release | raster-engineer | No write past a deadline, pictures right, nothing later than Y − 1 cycle 50 (DEBUG) or 41 (release) with Y on a badline |
+| F3 | **The M4 game itself.** The fast tier (`positions.py --slack` or `edge.py`'s `fast`, pointed at the game's build) over at least 10,000 frames of play, DEBUG and release, with the game's real main loop, sprite mix and YSCROLL | qa-tester | No last write past cycle 53 of line Y; with Y on a badline, none later than Y − 1 cycle 50 |
 
-The worst phase on a badline needs the Y check to pass in the last ~25 cycles of line Y − 1 with
-Y ≡ 3 (mod 8). It was **never observed** (0 of 7,475), and the measured pattern says why it's rare:
-lateness comes from a badline just above Y, and a badline Y has its nearest badline 8 lines up.
-But nothing in the scheduling arithmetic forbids it, and the spike's motion isn't a proof.
-
-**Decision.** Accepted for v1 as an open risk with a probe owed, not a defect: no failure has been
-seen, the effect if it happens is one wrong raster line on one sprite for one frame, and M3's
-acceptance criteria don't depend on it. It must be closed **before a game relies on the
-multiplexer** (M4). Two probes for the raster-engineer, in this order:
-
-1. **`tests/timing/sprite_latch`: the hardware deadlines** (closes estimates #7 and #8, and
-   replaces the *unmeasured* cells above). One sprite on a stable raster, screen off, borders
-   open, as `tests/timing/sprite_wrap` does it. For each of Y, pointer, X low, the `$D010` bit,
-   colour, the `$D01C` bit and the `$D015` bit: change the register at a swept cycle (every cycle
-   from cycle 30 of line Y to cycle 20 of line Y + 1) and read from VICE's frame buffer whether
-   line Y + 1 shows the old or the new value. Repeat for hardware sprites 0, 2, 3 and 7 (both
-   fetch groups, first and last of each), and for X = 24 and X = 320. Also: rewrite X, pointer and
-   colour at a swept cycle on lines Y_old + 21 and Y_old + 22 and check line Y_old + 21 is
-   unmarked. Output: a table in `vic-ii-timing.md` of the last safe cycle per register and sprite,
-   marked measured.
-2. **`tests/engine/multiplexer_edge`: the engine at the scheduler's limit on badlines.** Static
-   layouts (as `multiplexer_ghost` cycles through phases), each built so slots sit exactly at the
-   simulation's limit (`done` = Y) with Y on a badline and 7 other sprites active across it: a
-   full row at Y ≡ 3 (mod 8) directly under a full row at the 39-line limit; the same at 25 lines
-   for a single reused sprite; each repeated with Y ≡ 2 and 4, and in mixed multicolour. The check
-   is on the **last** write, measured from outside so the engine's timing isn't disturbed: the
-   `inx` checkpoint method above (it belongs in `tests/engine/multiplexer/positions.py` as a
-   mode, tools-engineer or QA), or a `memory` check on a counter the *spike* keeps. Pass: every
-   slot's last write is before the earliest deadline probe 1 measured, in 1,000 frames per layout,
-   DEBUG and release, with `mux_late_count` and `irq_late_count` 0.
-
-If probe 2 finds a slot past the deadline, the Technical Director chooses between two fixes and
+If a write is ever found past its deadline, the Technical Director chooses between two fixes and
 re-baselines: a slot fits only when `done` **<** Y (one line of capacity: the minimum gap becomes
 26 and a full row under a full row 40), or the blocks write the pointer straight after Y so the
 write with the earliest deadline comes first. Either changes locked figures, so neither is done
-without the probe's evidence. v2 must make this provable: [v2 requirements](#multiplexer-v2-requirements).
+without evidence.
+
+**A cheap guard worth adding to v1** (recommended to the producer, raster-engineer's file, not
+built): an `.errorif` in `engine/multiplexer.asm` that stops the build if a `MuxZoneBlock`'s size
+isn't the 81 / 87 bytes (DEBUG) or 66 / 72 (release) it is today, with a message naming `edge.py`.
+It wouldn't prove the timing, and a same-size change would get past it, but it turns the commonest
+way of spending the margin from silent into a build error.
 
 #### Probe results (M3 follow-up, raster-engineer, 2026-10-01)
 
@@ -647,7 +694,8 @@ uniform; those three are counted, not measured at their limit).
 **The constraint that follows:** the zone blocks and their next-slot test can't grow. Five more
 cycles in a DEBUG mixed block, or in the test, and the last store of the closest case leaves line
 Y − 1 for line Y + 1. v1 as built has no bug here; it has a lock that nothing in the build
-enforces.
+enforces. The Technical Director's reading of these results, the conditions for M4 and the
+measurement still wanted are in the [verdict](#verdict-safe-for-m4-with-the-zone-code-frozen) above.
 
 **How it was checked** (all from outside: checkpoints, memory reads and VICE's frame buffer; the
 engine and the probe program carry no instrumentation):
@@ -752,20 +800,20 @@ main loop's phase varies through the probe's jitter loop); the random layouts fl
 hunted, and the hunt tried mixed staircases only. `$D017`/`$D01D` expansion is unsupported in v1
 and wasn't tried.
 
-**For the Technical Director:** nothing here asks for either fix above. It does ask for a
-decision on the lock: v1's zone blocks and next-slot test can grow by at most 4 cycles in DEBUG
-mixed mode, and nothing in the build enforces that. `make test` now runs the probe's counters
+**What `make test` covers, and what it doesn't.** `make test` runs the probe's counters
 (`tests/engine/multiplexer_edge/budget.json`: nothing dropped, both late counters 0, no overrun,
-all 18 phases shown; requirement checks only, no cost limits): 39/39 checks with its 5, where it
-was 34/34, and about 3 seconds more (**measured**, 2026-10-01). The timing check itself is
-`edge.py`, by hand: about 15 minutes a build for the full run and 20 for the hunt. A change to the
-zone blocks, the next-slot test, `MUX_FREE_AFTER`, `MUX_IRQ_LINES` or `MUX_WRITE_LINES` needs both
-rerun in DEBUG and release.
+all 18 phases shown; requirement checks only, no cost limits, confirmed by the Technical Director):
+39/39 checks with its 5, where it was 34/34, and about 3 seconds more (**measured**, 2026-10-01).
+It does **not** check the write timing. That is `edge.py`, by hand: about 15 minutes a build for
+the full run and 20 for the hunt. A change to the zone blocks, the next-slot test, `MUX_FREE_AFTER`,
+`MUX_IRQ_LINES` or `MUX_WRITE_LINES` needs both rerun in DEBUG and release (the
+[verdict](#verdict-safe-for-m4-with-the-zone-code-frozen)'s condition 1):
 
 ```
 make GAME=multiplexer_edge SRC_DIR=tests/engine/multiplexer_edge
 uv run --package budget-runner python tests/engine/multiplexer_edge/edge.py               # all tiers and layouts
 uv run --package budget-runner python tests/engine/multiplexer_edge/edge.py --hunt 1500   # the closest call
+# then the same three with BUILD=release on the make line, and rebuild without it for make test
 ```
 
 The IRQ side doesn't need a plan: `mux_irq_zone` writes slot k, then carries on with slot k+1
@@ -973,6 +1021,9 @@ per-slot cost depend on where the linker happened to put them. Since stage 3.5:
   `mux_crosses(next, target)` (the high bytes of the address after the branch and of its target
   differ): the DEBUG late check's three and the next-slot test's five. A layout change that puts
   one across a page is an assembly error, not a silent cycle.
+- **The blocks' cycle counts are locked too, and nothing checks that.** A block or its next-slot
+  test that grows by 5 cycles (DEBUG, mixed) can put a write after its deadline; any change here
+  needs `edge.py` rerun in both builds ([v1 limits](#v1-limits)).
 - `mux_zone_park` and `mux_irq_park` follow the blocks; they aren't per-slot code and have no
   such check (their costs above were measured in this layout).
 - The `multiplexer` spike's zone and per-frame figures in this layout are in
@@ -1892,8 +1943,8 @@ checks read these labels. They are `from_stage: 4` and the file's `"stage"` is 4
     5,300 passes by 28 cycles: 333 iterations where 332 pass and 331 fail. So **any change that
     adds 17 cycles or more to the worst non-stress frame's main loop fails `make test-long`**,
     though not necessarily `make test` (5,712 in its window). That's the promise working as
-    designed: such a change is reported, not absorbed. It is why the review proposes headroom
-    as a v2 requirement ([v2 requirements](#multiplexer-v2-requirements), 5).
+    designed: such a change is reported, not absorbed. It is why headroom is
+    a v2 requirement ([v2 requirements](#multiplexer-v2-requirements), 5).
 
 **QA soak test (10,000 frames)**, in addition to the brief's no-crash / no-jam /
 ≤ 2-missing-frames checks:
@@ -1939,8 +1990,11 @@ Probe 2 of the [slot write deadline](#slot-write-deadline) follow-up: 18 static 
 slots at the selection's limit (`done` = Y) and Y lines on and around a badline, 16 frames each,
 cycling (write `edge_lock` = 0–17 to hold one, `$80` for `edge.py`'s own layouts, `$FF` to cycle).
 `budget.json` holds requirement checks only (nothing dropped, both late counters 0, no overrun,
-all phases shown). The timing check is `edge.py`, run by hand, with its four result files beside
-it; method, figures and limits are in the
+all phases shown; confirmed by the Technical Director, 2026-10-01). They show the probe still runs
+at the limit; they don't check write timing. The timing check is `edge.py`, run by hand, with its
+four result files beside it. **Rerun `edge.py` and `edge.py --hunt 1500` in DEBUG and release
+(about 15 and 20 minutes a build) after any change to the zone blocks, their next-slot test,
+`MUX_FREE_AFTER`, `MUX_IRQ_LINES` or `MUX_WRITE_LINES`**, and replace the result files; method, figures and limits are in the
 [probe results](#probe-results-m3-follow-up-raster-engineer-2026-10-01). The folder also holds
 `irq_costs.py` and `routine_costs.py`, which measure the `multiplexer` spike
 ([Multiplexer costs](#multiplexer-costs)).
@@ -1977,9 +2031,11 @@ records them in the reference docs as measured, and updates this page and the bu
 What multiplexer v2 must achieve. Requirements and measured starting points only: the design is
 v2's own work. v2 is an R&D-track item, due before the first real title (M5) depends on the
 multiplexer; M4 may use v1 ([M3 brief](../docs/milestones/M3-engine-basics.md), rule 3).
-Requirements 1–3 are agreed with Simon. Performance targets are changed only by Simon and the
-producer. Requirements 4–9 come from the Technical Director's M3 review (2026-10-01) and are
-**proposed**, for the producer to confirm when v2 is scheduled.
+**Requirements 1–9 are confirmed by Simon** (1–3 agreed in the brief, 2026-09-29 and 2026-10-01;
+4–9, from the Technical Director's M3 review, **confirmed 2026-10-01**). Requirement 10 was added
+by the Technical Director in the M3 follow-up the same day, from the edge probe's finding; it
+extends 4 and is **not yet confirmed by Simon**. Performance targets are changed only by Simon and
+the producer.
 
 All starting points are **measured** on the stage 4 engine, raster cycles, DEBUG build, in the
 `multiplexer` spike (24 sprites, 4 pinned), unless marked otherwise.
@@ -2005,16 +2061,17 @@ All starting points are **measured** on the stage 4 engine, raster cycles, DEBUG
 - `mux_late_count`, `irq_late_count` and the spike's overrun count 0; no wrap ghosts; the IRQ
   framework's locked figures untouched.
 
-**Proposed by the M3 review:**
+**From the M3 review (4–9, confirmed by Simon, 2026-10-01) and its follow-up (10, added 2026-10-01, to be confirmed):**
 
 | # | Requirement | Why | v1 starting point |
 |---|---|---|---|
-| 4 | **Every slot write provably before its deadline**, not only Y: the selection rule, the constants and a DEBUG or test-harness check all refer to the *last* write and to deadlines measured by `tests/timing/sprite_latch` | v1 checks the Y write only, and its fit rule (`done` ≤ Y) allows the rest to land on line Y | 139 of 60,000 zone slots finish on line Y, slack ≥ 29 cycles (15 in QA's run), none on a badline; the worst phase on a badline is unproven ([Slot write deadline](#slot-write-deadline)) |
+| 4 | **Every slot write provably before its deadline**, not only Y: the selection rule, the constants and a DEBUG or test-harness check all refer to the *last* write and to deadlines measured by `tests/timing/sprite_latch` | v1 checks the Y write only, and its fit rule (`done` ≤ Y) allows the rest to land on line Y | No write past a deadline in about 843,000 zone slots a build at the selection's limit (**measured**, `tests/engine/multiplexer_edge`), but by margin, not by construction: 4 cycles in the closest case found (DEBUG mixed, Y on a badline), not proven to be the worst ([Slot write deadline](#verdict-safe-for-m4-with-the-zone-code-frozen)) |
 | 5 | **Headroom on the promise**: the long-run idle minimum clears 5,300 by at least 5% (≥ 5,565), so an ordinary change doesn't sit one iteration from failing | v1's non-stress margin is 28 cycles in the long run | 5,328 |
 | 6 | **A stated worst case for the sort**, measured: either the full 24-sprite reversal fits the promise, or the engine bounds the work per frame | The full reversal (276 shifts) is still an *estimate*, ~6,000 cycles, and is larger than the spike's three-groups-of-8 reversal | `mux_sort` max 3,252 (the spike's reversal); normal ~600 |
 | 7 | **Source files under about 500 lines, one subsystem each**, every routine header carrying its current measured cost | [Coding standards](../docs/standards/coding-standards.md#files-and-structure). The v1 split was deferred to v2 by the producer | `multiplexer.asm` 746 lines, `multiplexer_flicker.asm` 523; the file header's measured table stops at stage 3.5 |
 | 8 | **A size budget, met and measured in both builds** | The design estimated ~2.3 KB; a game's memory map has to plan for the real figure | 6,045 bytes for the engine block, DEBUG ([Zero page](#zero-page)); release *unmeasured* |
-| 9 | **Release build measured**: the zone IRQ and per-frame IRQ figures taken once with `BUILD=release`, and the write-deadline check run on it | Every budget is a DEBUG figure, and the release zone blocks are different code at a different page offset (53 against 62 per slot) | Only `mux_irq_top` (378 / 381 / 393) and `mux_irq_park` (80) are confirmed equal in release |
+| 9 | **Release build measured**: the zone IRQ and per-frame IRQ figures taken once with `BUILD=release`, and the write-deadline check run on it | Every budget is a DEBUG figure, and the release zone blocks are different code at a different page offset (53 against 62 per slot) | Since the M3 follow-up, **measured**: zone IRQ 53 a slot and per-frame IRQ time 522 / 2,147 / 3,700 in release ([Multiplexer costs](#multiplexer-costs)), `mux_irq_top` (378 / 381 / 393) and `mux_irq_park` (80) equal in both builds, and the write-deadline probe run on release (0 late). v2 repeats all of it on its own code |
+| 10 | **No unenforced timing lock.** Either the design leaves the zone code room to change (the write deadlines hold by construction, requirement 4), or the build enforces the lock: a check in `make test` that fails when a slot's last write gets closer to its deadline than a stated margin, in DEBUG and release | v1's zone blocks, next-slot test and three scheduling constants can't change without a hand-run probe, and nothing stops a change that skips it | Margin 4 cycles (DEBUG mixed, **measured**), 12 / 13 / 21 in the other modes (*counted*). The check is `edge.py` by hand: about 35 minutes a build. `make test` runs only the probe's counters |
 
 **Limits worth reconsidering in the v2 design** (candidates, not requirements; each needs
 Simon's decision or its own proof before it's promised):
@@ -2026,8 +2083,8 @@ Simon's decision or its own proof before it's promised):
   a configurable `MUX_Y_MIN`): excluded from v1 by decision, not designed.
 - **`MUX_Y_MAX` ≥ 80** (from `mux_irq_park` on lines 77–79): a game with a tall bottom panel needs
   a different park scheme.
-- **The estimates M3 left open**, all in [Estimates to measure](#estimates-to-measure-in-m3): #2
-  (`$D012` written with the current line), #7 and #8 (write deadlines, owed before M4), #11
+- **The estimates M3 left open** (#7 and #8, the write deadlines, were measured in the M3 follow-up), all in [Estimates to measure](#estimates-to-measure-in-m3): #2
+  (`$D012` written with the current line), #11
   (badline during IRQ entry), #12 (one eviction, profiled rather than derived), and the rows of
   the flicker table between P = 0 and P = 4.
 
@@ -2037,8 +2094,27 @@ Simon's decision or its own proof before it's promised):
 
 Deliberately out of v1, so they don't get assumed:
 
-- **A proof that every slot write beats its deadline.** v1 checks the Y write only; the rest is
-  measured safe in the spike, with probes owed before M4 ([Slot write deadline](#slot-write-deadline)).
+- **A proof that every slot write beats its deadline.** v1 checks the Y write only. The rest is
+  **measured** safe at the selection's limit (no write past a deadline in about 843,000 zone slots
+  a build, `tests/engine/multiplexer_edge`), by margin and not by construction
+  ([Slot write deadline](#verdict-safe-for-m4-with-the-zone-code-frozen)).
+- **Room to change the zone code.** The zone blocks and their next-slot test can't grow, and
+  `MUX_FREE_AFTER`, `MUX_IRQ_LINES` and `MUX_WRITE_LINES` can't change, without re-measuring:
+
+  | Block | Margin with Y on a badline: cycles before the last store leaves line Y − 1 | Basis |
+  |---|---|---|
+  | DEBUG, mixed multicolour | **4** | *Counted*, and matched by the hunt (**measured**: cycle 50 of 54) |
+  | DEBUG, uniform | 12 | *Counted* only |
+  | Release, mixed | 13 | *Counted* only (the hunt's latest was 19 from the edge) |
+  | Release, uniform | 21 | *Counted* only |
+
+  Any such change needs `tests/engine/multiplexer_edge/edge.py` and `edge.py --hunt 1500` rerun in
+  DEBUG and release (about 15 and 20 minutes a build, by hand), the result files replaced, and the
+  Technical Director's review. **Nothing in the build enforces it**: `make test` passes whatever
+  the blocks cost, because its `multiplexer_edge` checks are counters only. v2 must enforce the
+  lock or remove the need for it ([v2 requirements](#multiplexer-v2-requirements), 10).
+- **A main loop that sets `I`** while the multiplexer runs: not measured, so not allowed
+  ([condition 2](#verdict-safe-for-m4-with-the-zone-code-frozen)).
 - **The free-CPU promise in a mass sort reversal with pinned sprites in a crowd**
   ([the one exception](#the-v1-promise-and-its-one-exception)).
 
