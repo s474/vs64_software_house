@@ -340,6 +340,13 @@ irq_nmi:
 // programs the next line, acknowledges and waits in a NOP slide, so stage 2's IRQ arrives
 // with at most 1 cycle of jitter.
 // ------------------------------------------------------------------------------------------
+// TIMING: starts on line-2 at cycle 26-33 (measured; 34-41 as entry 0) and must reach the cli (22
+// cycles) before line-1 begins, so by about cycle 40 (counted). Stage 2's IRQ, raised at the start
+// of line-1, must then arrive inside the 48-cycle NOP slide: line-2 and line-1 must not be
+// badlines, and the sprite DMA on them must be the same every frame. Budget: irq_stable_begin ->
+// handler 106 (a lock in tests/engine/irq_chain/budget.json).
+// Cost: measured 99-106 raster cycles from irq_stable_begin to the handler's first instruction
+// (tests/engine/irq_chain, 1,000 frames: the spread is stage 1's 0-7 jitter, which stage 2 removes)
 irq_stable_begin:
         lda #<irq_stable_stage2         // 2
         sta IRQ_VEC_IRQ                 // 4  low byte only: same page as irq_dispatch

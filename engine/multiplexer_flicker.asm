@@ -14,6 +14,16 @@
 // Uses: A, X, Y, zp_tmp0-zp_tmp3 (main loop only), mux_ev_* and mux_pin_* scratch.
 // Measured cost: engine/README.md#multiplexer-costs (stages 3 and 4): slow part of a frame
 // (mux_slow -> mux_sel_done), one eviction (mux_ev_remove), and mux_build with the rebuild.
+// Stage 4, raster cycles in tests/engine/multiplexer (4 pinned), DMA included, min / avg / max:
+//   slow frames' mux_update          4,665 / 6,711 / 12,330  (idle_breakdown.py, 20,000 frames)
+//   pinned pass, once a slow frame   282 / 340 / 593         (idle_breakdown.py)
+//   one pinned eviction              ~226 average            (derived: 9,031 in 7,409 frames)
+//   one drop or eviction             ~430 average            (derived, stage 3)
+//   mux_fill_kept, mux_rebuild, mux_mixed_d01c, mux_set_blocks: in their headers below
+//     (tests/engine/multiplexer_edge/routine_costs.py, 600 frames, IRQs excluded, 2026-10-01)
+// Page crossings in here (M3 review): every "mux_s_done - 1,x" read costs 5, not 4 (the operand is
+// in the page before mux_s_done: see the slot arrays in multiplexer.asm), and "mux_pin_save,x" /
+// ",y" reads cost 5 for index >= 4 (mux_pin_save is at page offset $FC in the M3 spikes).
 // ------------------------------------------------------------------------------------------
 // Slow path: the first sprite this frame that doesn't fit. For the rest of the frame the walk
 // fills mux_kept (so slots can be removed), and mux_build rebuilds from the first changed slot.
@@ -105,7 +115,7 @@ mux_sel_ords:
         adc #MUX_FREE_AFTER - 1
         sta mux_s_free,x
         adc #MUX_IRQ_LINES
-        cmp mux_s_done - 1,x
+        cmp mux_s_done - 1,x            // 5  (page crossed)
         bcc !carry+
         adc #MUX_WRITE_LINES - 1
 !ok:    sta mux_s_done,x
@@ -113,7 +123,7 @@ mux_sel_ords:
         sta mux_kept,x
         inx
         jmp mux_slow_loop
-!carry: lda mux_s_done - 1,x
+!carry: lda mux_s_done - 1,x            // 5  (page crossed)
         adc #MUX_WRITE_LINES
         cmp mux_s_y,x
         beq !ok-
@@ -184,7 +194,7 @@ mux_ev_dry:
         bcs !+
         lda mux_ev_b8
 !:      tax
-        lda mux_s_done - 1,x
+        lda mux_s_done - 1,x            // 5  (page crossed)
         sta zp_tmp1                     // d = done[j0 - 1] (0 for base + 7)
 !dry:   cpx mux_ev_k1                   // 4
         bcs !check+                     // 2
@@ -240,7 +250,7 @@ mux_pin_fail:
 !:      inc mux_drop_count
 #endif
         ldy zp_tmp0                     // its saved age + 1, saturating at $FE; not in mux_max_age
-        lda mux_pin_save,y              // (unpinned only)
+        lda mux_pin_save,y              // (unpinned only)  5 for Y >= 4: page crossed
         cmp #$fe
         bcs !+
         adc #1                          // C = 0
@@ -340,7 +350,7 @@ mux_ev_remove:
         ldx mux_ev_b8
 !:      cpx zp_tmp2
         bcs !sd+                        // nothing shifted at or after base + 8
-        lda mux_s_done - 1,x
+        lda mux_s_done - 1,x            // 5  (page crossed)
         sta zp_tmp1
 !sim:   lda mux_s_y - 8,x               // 4
         clc                             // 2
@@ -375,14 +385,15 @@ mux_ev_remove:
         adc #MUX_FREE_AFTER             // 2
         sta mux_s_free,x                // 5
         adc #MUX_IRQ_LINES              // 2  C = 0: start, if a new IRQ
-        cmp mux_s_done - 1,x            // 4
+        cmp mux_s_done - 1,x            // 5  (4 + 1: page crossed)
         bcs !+                          // 3
-        lda mux_s_done - 1,x            //    carry on in slot k-2's IRQ
+        lda mux_s_done - 1,x            // 5  carry on in slot k-2's IRQ (page crossed)
 !:      clc                             // 2
         adc #MUX_WRITE_LINES            // 2
         sta mux_s_done,x                // 5
         inx                             // 2
-        jmp mux_slow_loop               // 3  = 80 from !sd (was ~95 through the slow loop's tests)
+        jmp mux_slow_loop               // 3  = 80 from !sd by these counts, new IRQ (84 carrying on); was ~95
+                                        //    through the slow loop's tests
 !top:   tya                             // slots 0-7 always fit (and done[base + 7] stays 0)
         sta mux_kept,x
         lda mux_y,y
@@ -410,29 +421,38 @@ done:
 
 // mux_kept[base ... X - 1] = the sprites the fast path kept: order[skipped + (j - base)].
 // In: X = end slot (> base), mux_sel_ordm's operand set   Uses: A, X
+// Cost: 5 + 18 per slot kept so far (counted, to the rts: 149 for 8). Measured 149 / 356 / 753 raster cycles
+// min / avg / max, DMA included (tests/engine/multiplexer, 335 calls in 600 frames: once per frame
+// that overflows, from mux_slow, and once per fast frame in mixed multicolour, from mux_mixed_d01c)
 mux_fill_kept:
-        stx zp_tmp0
-!:      dex
+        stx zp_tmp0                     // 3
+!:      dex                             // 2
 mux_sel_ordm:
-        lda mux_order,x                 // self-modified low byte
-        sta mux_kept,x
-        cpx mux_back
-        bne !-
-        ldx zp_tmp0
+        lda mux_order,x                 // 4  self-modified low byte
+        sta mux_kept,x                  // 5
+        cpx mux_back                    // 4
+        bne !-                          // 3  = 18 per slot
+        ldx zp_tmp0                     // 3
         rts
 
 // Slow frame: rebuild X, pointer, colour and cumulative $D010 from mux_slow_from to the end, from
 // mux_kept, and clear the ages of the kept sprites (dropped ones were counted up as they went),
 // after restoring the pinned sprites' ages.
 // In: zp_tmp2 = end   Uses: A, X, Y
+// Cost (counted): 60 for the ages (below), then ~70 per slot rebuilt and 17 per slot kept.
+// Measured, raster cycles in tests/engine/multiplexer (4 pinned), DMA included, IRQs excluded,
+// min / avg / max: 542 / 1,162 / 2,170 to the rts (276 slow frames of 600,
+// tests/engine/multiplexer_edge/routine_costs.py); the age restore alone 60 / 75 / 160 there, and
+// 60 / 74 / 221 over 20,000 frames (idle_breakdown.py). It is inside mux_build's budget (3,100).
 mux_rebuild:
         lda mux_pin_first               // 4  the pinned sprites' real ages back (mux_slow marked them)
         cmp #MUX_MAX_PINNED             // 2
         beq !+                          // 2
         .for (var j = 0; j < MUX_MAX_PINNED; j++) {
             ldx mux_pin_list + j        // 4
-            lda mux_pin_save,x          // 4
-            sta mux_age,x               // 5  = 60 in all
+            lda mux_pin_save,x          // 4  (5 for X >= 4: mux_pin_save,x crosses a page there, so
+                                        //    + 1 per pinned sprite numbered 4-23 and per padded entry, X = 24)
+            sta mux_age,x               // 5  = 60 in all with sprites 0-3 pinned (measured 60), up to 64
         }
 !:      lda #1
         sta mux_dirty
@@ -470,6 +490,10 @@ mux_rebuild:
 
 // Mixed multicolour: cumulative $D01C for every slot, from mux_kept (filled in first in a fast
 // frame). In: zp_tmp2 = end   Uses: A, X, Y
+// Cost (counted): ~36 per slot, + mux_fill_kept (18 per slot) in a fast frame. Measured 444 / 1,161
+// / 1,996 raster cycles min / avg / max, DMA included, IRQs excluded (tests/engine/multiplexer with
+// mux_flags bit 0 set on the odd-numbered sprites, 150 frames, routine_costs.py). Only frames that
+// mix hires and multicolour sprites pay it; it is inside mux_build's budget
 mux_mixed_d01c:
         lda mux_slow_from
         bpl !+                          // slow frame: mux_kept is complete
@@ -498,6 +522,10 @@ mux_mixed_d01c:
 
 // Point the back buffer's 24 zone-block entries at the uniform (A = 0) or mixed (A = 1) set.
 // In: A = mode, Y = buffer number, X = base   Uses: A, X, Y, zp_tmp0, zp_tmp1
+// Cost (counted): 19 + 24 x 43 - 1 = 1,050 to the rts. Measured 1,136 / 1,289 / 1,611 raster cycles
+// min / avg / max, DMA included, IRQs excluded (24 calls, routine_costs.py: it runs through the
+// display, so every call had DMA in it). Runs once per buffer when the frame's multicolour mode
+// changes between uniform and mixed, so twice per change, in consecutive frames
 mux_set_blocks:
         sta mux_blk_mode,y
         asl

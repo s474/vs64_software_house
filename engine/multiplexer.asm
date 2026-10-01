@@ -53,6 +53,19 @@
 // paths, DEBUG and release alike): mux_irq_top -> rti 378 (> 8 slots) / 381 (<= 8, ghosts to park)
 // / 393 (<= 8, none); mux_irq_park -> rti 80; mux_zone_done -> rti 94 (parks at once) / 89
 // (re-arms mux_irq_park); mux_build + 43 counted for the ghost scan.
+// Stage 4 (pinning, 2026-10-01; the overloaded spike with 4 pinned sprites, one trace of 20,000
+// consecutive mux_update passes, make test-long ARGS=multiplexer repeats it; min / avg / max):
+//   mux_sort               446 / 710 / 3,252
+//   mux_select             2,637 / 4,112 / 8,927    (with the whole slow path: flicker and pinning)
+//   mux_build              185 / 1,008 / 2,906      (tail, pinned ages restored, rebuild)
+//   mux_update             3,565 / 5,862 / 12,342   all frames (65% of them overflow)
+//   mux_update, fast       3,563 / 4,261 / 6,783    the 7,016 frames with no overflow (limit: avg <= 5,000)
+//   mux_irq_top -> rti     378 x19,973, 393 x28
+//   mux_irq_zone -> rti    155 / 574 / 2,763        (56,844 IRQs)
+//   all IRQ time per frame 522 / 2,227 / 3,779
+//   zone slot, back to back 62 (DEBUG) / 53 (release), measured: see MuxZoneBlock
+// Release build (BUILD=release, 2026-10-01, tests/engine/multiplexer_edge/irq_costs.py): see
+// MuxZoneBlock and engine/README.md#multiplexer-costs.
 // Overflow frames (fair flicker) and the overloaded spike: engine/README.md#multiplexer-costs.
 //
 // Constraints:
@@ -109,10 +122,15 @@
 // Data
 // ------------------------------------------------------------------------------------------
 
-// Slot arrays: 64 bytes each, in aligned pages, so no indexed read crosses a page.
+// Slot arrays: 64 bytes each, in aligned pages, so an indexed read from an array's own base
+// never crosses a page.
 // mux_s_y sits at page offset $40 so the selection's mux_s_y - 8 + x (x >= 8) stays in the page;
 // mux_s_d010 and mux_s_d01c sit at $40 / $80 so their "previous slot" reads (- 1 + x, x >= 0)
 // stay in the page too (they read mux_s_free + 63 / mux_s_d010 + 63 at x = 0: never written).
+// ONE READ DOES CROSS: mux_s_done is the ninth array, so it starts the second page at offset 0,
+// and "mux_s_done - 1,x" has its operand in the page before (x >= 8 always): every such read
+// (cmp / lda abs,x) costs 5 cycles, not 4. The counts in mux_select and in the slow path include
+// it (M3 review, 2026-10-01). Moving the array would change locked figures: deferred to v2.
 .align $100
 mux_s_xlo:      .fill 64, 0             // X bits 0-7
 mux_s_y:        .fill 64, 0             // Y
@@ -198,6 +216,9 @@ mux_pin_list:   .fill MUX_MAX_PINNED, MUX_COUNT   // entries before first = MUX_
                                         // the slow path can mark and restore all 4 unrolled
 mux_pin_evict:  .byte 0                 // evictions made by pinned sprites in this mux_update
 mux_pin_save:   .fill MUX_COUNT + 1, 0  // pinned sprites' real ages while the slow path marks them $FF
+                                        // (not aligned: at page offset $FC in the M3 spikes, so
+                                        // "mux_pin_save,x" crosses a page for x >= 4 and a read costs
+                                        // 5: see mux_rebuild)
 
 #if DEBUG
 mux_late_count: .byte 0                // slots the zone IRQ reached on or after their Y line (saturating)
@@ -253,7 +274,10 @@ mux_init:
 // Sort, select and build the next frame's sprites into the back buffer.
 // In:  virtual arrays   Out: C=0 queued; C=1 skipped (previous build not shown yet)
 // Uses: A, X, Y, zp_tmp0-zp_tmp3
-// Cost: see mux_sort / mux_select / mux_build, measured in engine/README.md#multiplexer-costs
+// Cost: measured (stage 4, raster cycles in tests/engine/multiplexer, DMA included, IRQs excluded,
+//       20,000 passes, min / avg / max): 3,563 / 4,261 / 6,783 in frames with no overflow (to
+//       mux_update_fast), 3,565 / 5,862 / 12,342 over all frames. Budgets 7,400 (avg 5,000) and
+//       13,000. Its parts: mux_sort / mux_select / mux_build; engine/README.md#multiplexer-costs
 mux_update:
         lda zp_mux_ready
         beq !+
@@ -267,7 +291,9 @@ mux_update:
 // one shift per place a sprite moves. Equal Ys keep their order.
 // zp_tmp0 = key, zp_tmp1 = sprite being inserted, zp_tmp2 = outer index, zp_tmp3 = its key
 // Cost: 23 cycles per in-order pair; an insertion adds ~40 + 29 per place moved.
-// Measured CPU 436-598 normal frames, 2,237 when the spike reverses three groups of 8.
+// Measured CPU (stage 2, no DMA) 436-598 normal frames, 2,237 when the spike reverses three
+// groups of 8. Measured raster (stage 4, 20,000 passes, DMA included): 446 / 710 / 3,252
+// min / avg / max; budget 3,550.
 mux_sort:
         ldx #0
         ldy mux_order
@@ -317,7 +343,19 @@ mux_sort_end:
 //   The first sprite that doesn't fit leaves for the slow path (mux_sel_fail), for the rest of
 //   the frame.
 // X = slot index (base + k), Y = virtual sprite, zp_tmp3 = base + 8
-// Cost (counted): setup ~155; loop 1 68-70 per slot; loop 2 108 (new IRQ) / 124 (carry on) per slot.
+// Cost per slot, counted and measured equal (tests/engine/multiplexer_edge/routine_costs.py: the
+// minimum of every class over 600 frames, 2026-10-01; the lower figure is X bit 8 clear, the
+// higher X bit 8 set):
+//   loop 1                        74 / 76   (the last one, falling into loop 2: 76 / 78)
+//   loop 2, new IRQ               108 / 110
+//   loop 2, carry on, done = y    122 / 124
+//   loop 2, carry on, done < y    124 / 126
+// Loop 2 includes three page crossings: "mux_s_done - 1,x" is read across a page (5, not 4: see
+// the slot arrays), once on the new-IRQ path and twice when carrying on, and the taken "bcc !carry"
+// goes from page $10 to $11 in the M3 spikes (4, not 3). Earlier headers said 68-70 / 108 / 124.
+// Setup ~155 (counted).
+// Measured raster for the whole routine, DMA included (stage 4, 20,000 passes, with the slow path,
+// which returns to mux_sel_done): 2,637 / 4,112 / 8,927 min / avg / max; budget 9,400.
 // Pinning costs nothing here: the pinned set is only evaluated in frames that overflow (mux_slow)
 mux_select:
         lda mux_flags + 0               // multicolour mode: OR of bit 0 over all 24 = 0 -> all hires
@@ -383,8 +421,8 @@ mux_sel_ord1:
 !st:    sta mux_s_d010,x                // 5
         inx                             // 2
         cpx zp_tmp3                     // 3
-        bne mux_sel_l1                  // 3  = 68-70 per slot
-        beq mux_sel_l2                  // 3  always (Z = 1): once per frame
+        bne mux_sel_l1                  // 3  = 74 / 76 per slot (X bit 8 clear / set), measured
+        beq mux_sel_l2                  // 3  always (Z = 1): once per frame (that slot: 76 / 78)
 !end1:  jmp mux_sel_done                // (branch range)
 
 mux_sel_l2:                            // slots 8+
@@ -403,10 +441,11 @@ mux_sel_ord2:
         adc #MUX_FREE_AFTER - 1         // 2  C = 1: free = y[k-8] + FREE_AFTER (<= 227: no overflow)
         sta mux_s_free,x                // 5
         adc #MUX_IRQ_LINES              // 2  C = 0: start, if a new IRQ
-        cmp mux_s_done - 1,x            // 4
-        bcc !carry+                     // 2  slot k-1's IRQ is still writing: carry on in it
+        cmp mux_s_done - 1,x            // 5  (4 + 1: the operand is in the page before mux_s_done)
+        bcc !carry+                     // 2  slot k-1's IRQ is still writing: carry on in it (taken: 4, it
+                                        //    crosses from page $10 to $11 in the M3 spikes)
         adc #MUX_WRITE_LINES - 1        // 2  C = 1: done = start + WRITE (fits: the gap check)
-!ok:    sta mux_s_done,x                // 5  = 55 to here (new IRQ)
+!ok:    sta mux_s_done,x                // 5  = 56 to here (new IRQ)
         lda mux_x_lo,y                  // 4
         sta mux_s_xlo,x                 // 5
         lda mux_ptr,y                   // 4
@@ -422,12 +461,12 @@ mux_sel_ord2:
         and mux_t_nbit,x                // 4
 !st:    sta mux_s_d010,x                // 5
         inx                             // 2
-        jmp mux_sel_l2                  // 3  = 108 per slot (new IRQ)
-!carry: lda mux_s_done - 1,x            // 4  C = 0
+        jmp mux_sel_l2                  // 3  = 108 / 110 per slot (new IRQ; X bit 8 clear / set), measured
+!carry: lda mux_s_done - 1,x            // 5  (4 + 1: page crossed) C = 0
         adc #MUX_WRITE_LINES            // 2  done = done[k-1] + WRITE
         cmp mux_s_y,x                   // 4  done - y
-        beq !ok-                        // 3/2
-        bcc !ok-                        // 3  = 124 per slot (carry on)
+        beq !ok-                        // 3/2  done = y: 122 / 124 per slot
+        bcc !ok-                        // 3  done < y: 124 / 126 per slot (carry on), measured
 mux_sel_fail:
         jmp mux_slow                    // X = slot, Y = virtual sprite, mux_s_y,x = its Y
 
@@ -436,9 +475,11 @@ mux_select_end:
 
 // Per-buffer values and anything the slow path, the mixed multicolour mode or the ages need.
 // In: X = end index (base + count)
-// Cost (counted): fast frame, uniform multicolour, ~110; the slow path adds the rebuild
-// (~70 per slot from the first change) and the age pass (~17 per slot); mixed multicolour adds
-// ~40 per slot
+// Cost (counted): fast frame, uniform multicolour, ~110 (+ 43 for the wrap-ghost scan since stage
+// 3.5); the slow path adds the rebuild (~70 per slot from the first change) and the age pass (~17
+// per slot); mixed multicolour adds ~40 per slot.
+// Measured raster, DMA included (stage 4, 20,000 passes, mux_build -> mux_build_end): 185 / 1,008 /
+// 2,906 min / avg / max; 185 is a fast frame, the rest is mux_rebuild. Budget 3,100.
 mux_build:
         lda #$ff                        // sentinel: the zone IRQ's "next slot free?" check fails after the last
         sta mux_s_free,x
@@ -719,16 +760,29 @@ mux_zone_blocks_end:
 // ------------------------------------------------------------------------------------------
 // Wrap ghosts, from mux_zone_done: park now if every ghost slot has finished displaying, else
 // re-arm mux_irq_park.
+// TIMING: the tail of the last zone IRQ. No budget of its own (it is inside mux_irq_zone's raster
+// span and the per-frame IRQ total), but irq_rearm's late check must not see the line it asks
+// for: it asks for raster + 3 or later, and the check reads the raster 42-43 CPU cycles after the
+// read below, which is under 2 lines even with a badline and 8 sprites in between (81 cycles
+// stolen, measured: docs/reference/vic-ii-timing.md).
+// Cost, from mux_zone_done (12 to here) to irq_exit_rti:
+//   park now (raster >= 77)        12 + 9 + 13 + irq_exit 60 = 94   counted, and measured 94 every
+//                                  pass (tests/engine/multiplexer_ghost phase 4, no DMA on line 80)
+//   re-arm at raster + 3 (>= 77)   12 + 17 + 7 + irq_rearm 41 = 77  counted
+//   re-arm at line 77              12 + 18 + 7 + irq_rearm 41 = 78  counted; measured 89 every pass
+//                                  in tests/engine/multiplexer_ghost phase 1 = 78 + 11 of sprite DMA
+//                                  (line 62 cycle 30 to line 63 cycle 56, vice_run_until: across
+//                                  the fetch of sprites 4-7, which are still displayed there)
 mux_zone_park:                          // A = mask, X = front base
         ldy MUX_VIC_RASTER              // 4  (the last slot is at Y <= MUX_Y_MAX: raster bit 8 is 0)
         cpy #MUX_PARK_LINE              // 2
-        bcs mux_park_now                // 3  every ghost slot has finished displaying: clear now
-        tya                             //    else re-arm at max(MUX_PARK_LINE, raster + 3): 3 lines
-        adc #3                          //    of margin for irq_rearm's late check (C = 0)
-        cmp #MUX_PARK_LINE
-        bcs !+
-        lda #MUX_PARK_LINE
-!:      IrqRearm(mux_irq_park)
+        bcs mux_park_now                // 3 / 2  every ghost slot has finished displaying: clear now (= 9)
+        tya                             // 2  else re-arm at max(MUX_PARK_LINE, raster + 3): 3 lines
+        adc #3                          // 2  of margin for irq_rearm's late check (C = 0)
+        cmp #MUX_PARK_LINE              // 2
+        bcs !+                          // 3 / 2  raster + 3 >= 77: = 17 to the macro
+        lda #MUX_PARK_LINE              // 2  = 18 to the macro
+!:      IrqRearm(mux_irq_park)          // 7 + irq_rearm 41
 
 // TIMING: re-armed IRQ on line MUX_PARK_LINE (77) to 79, only in frames with wrap ghosts: clear
 // the $D015 bits of the hardware sprites whose last slot is at Y <= MUX_WRAP_Y, so they don't
@@ -738,7 +792,7 @@ mux_zone_park:                          // A = mask, X = front base
 mux_irq_park:
         ldx zp_mux_front                // 3
         lda mux_b_park,x                // 4
-mux_park_now:                           // A = mask, X = front base
+mux_park_now:                           // A = mask, X = front base (13 from here to irq_exit)
         eor #$ff                        // 2
         and mux_b_d015,x                // 4  $D015 as mux_irq_top wrote it (zone IRQs don't write it)
         sta MUX_VIC_ENABLE              // 4
