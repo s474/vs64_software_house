@@ -125,10 +125,31 @@ The long-run scripts behind these figures were not kept in the repo, so the 300,
 919,800-frame figures can't be reproduced as they stand. `make test-long` at ×34 covers about
 800,000 frames for the free-CPU checks.
 
+## Sign-off long run (2026-10-01): `make test-long`, ×34
+
+The reproducible long run, on the committed stage 4 engine (2b7aed5 plus the README tidy-up):
+**34/34 checks pass** across all four spikes.
+
+| Check | Reading | Requirement |
+|---|---|---|
+| Free CPU, non-stress frames (`spike_idle_min_normal` × 16) | **5,328** | ≥ 5,300 (margin 28) |
+| Free CPU, stress frames (`spike_idle_min_stress` × 16) | **4,448** | ≥ 4,250 (the Technical Director expected ≥ 4,464: one idle iteration lower) |
+| `mux_update`, all frames | max 12,339 | ≤ 13,000 |
+| `mux_update` fast path, frames with no overflow | max 6,945, average 4,281 | ≤ 7,400, average ≤ 5,000 |
+| `mux_select` / `mux_build` / `mux_sort` | max 8,281 / 2,567 / 2,957 | ≤ 9,400 / 3,100 / 3,550 |
+| All IRQ time per frame | max 3,725 | ≤ 4,000 |
+| `mux_max_age` | 4 | ≤ 4 |
+| `mux_pin_drop_count`, `mux_pin_excess_count`, `mux_late_count`, `irq_late_count`, `spike_overrun_count` | 0 | 0 |
+| IRQ framework locks (`irq_chain`), `mux_irq_top` 381 and 393, `mux_irq_park` 80 | unchanged | locked |
+
+QA (2026-10-01): the 10,000-frame soak (`tests/engine/multiplexer/soak.py`) and the position and
+attribute check (`tests/engine/multiplexer/positions.py`: 21,714 sprite-frames, 0 mismatches,
+4,908 of them at X > 255) both pass.
+
 ## A debug counter changed meaning
 
 `mux_pin_excess_count` now counts only frames that overflowed with more than 4 sprites flagged as
 pinned. Frames where everything fits never count. Counting in every frame would cost about 170
 cycles in DEBUG builds and move the fast-path figures. It's documented in `engine/README.md`
 ("Pinned sprites", "Debug counters") and in the counter's comment. The QA soak step still works,
-because 64% of the spike's frames overflow.
+because about 65% of the spike's frames overflow (12,984 of 20,000).
