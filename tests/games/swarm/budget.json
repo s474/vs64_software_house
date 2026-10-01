@@ -1,0 +1,309 @@
+{
+  "spike": "swarm_budget",
+  "src_dir": "tests/games/swarm",
+  "warmup_frames": 400,
+  "stage": 1,
+  "notes": "Swarm's budget checks (M4). Written by the Technical Director at stage 0, before the game exists: until tests/games/swarm/main.asm does, the runner reports SKIP. That file is the gameplay-engineer's, two lines: '#define AUTOPLAY' then '#import \"games/swarm/src/main.asm\"'. AUTOPLAY makes the game play the designer's worst case by itself (wave 12, scripted stick, nothing dies): docs/games/swarm/memory-map.md#labels-the-game-must-provide lists what it does and every label these checks read. 'stage' is the M4 stage the game's code has reached (docs/milestones/M4-training-game.md, stages 1-5): the gameplay-engineer sets it at the start of each stage and changes nothing else here. Checks with a higher from_stage print PENDING. Units: raster cycles, DMA included, IRQs excluded for main-loop routines (engine/README.md#budget-units). Every game limit is an estimate until its stage measures it; a failing check is reported with the measured figure, and the Technical Director re-baselines. The per-routine limits add up to 5,800 for game_update, + 500 for the sound tick = 6,300 against the engine's 7,200: 900 of headroom, which the idle check enforces. warmup_frames 400: boot, the wave intro (100 frames) and the first launches; the game's own GAME_IDLE_WARMUP is 200 frames. The first memory check runs 3,000 more frames and the others read at that same moment (after_frames 0), except the stage 5 soak.",
+  "checks": [
+    {
+      "name": "game_update: all game logic in the main loop",
+      "kind": "profile_excl_irq",
+      "routine": [
+        "game_update",
+        "game_update_end"
+      ],
+      "max_cycles": 5800,
+      "samples": 600,
+      "basis": "estimate",
+      "from_stage": 1,
+      "source": "docs/games/swarm/memory-map.md#frame-budget, row 'Main loop, game_update in all'. Estimate (CPU cycles counted from the intended code x 1.27 for DMA); raster cycles, IRQs excluded. Replace with max over the run + ~5% once measured (Technical Director)"
+    },
+    {
+      "name": "player_update",
+      "kind": "profile_excl_irq",
+      "routine": [
+        "player_update",
+        "player_update_end"
+      ],
+      "max_cycles": 200,
+      "samples": 300,
+      "basis": "estimate",
+      "from_stage": 1,
+      "source": "docs/games/swarm/memory-map.md#frame-budget, row 3. Estimate (CPU cycles counted from the intended code x 1.27 for DMA); raster cycles, IRQs excluded. Replace with max over the run + ~5% once measured (Technical Director)"
+    },
+    {
+      "name": "pshot_update (2 player shots)",
+      "kind": "profile_excl_irq",
+      "routine": [
+        "pshot_update",
+        "pshot_update_end"
+      ],
+      "max_cycles": 150,
+      "samples": 300,
+      "basis": "estimate",
+      "from_stage": 1,
+      "source": "docs/games/swarm/memory-map.md#frame-budget, row 4. Estimate (CPU cycles counted from the intended code x 1.27 for DMA); raster cycles, IRQs excluded. Replace with max over the run + ~5% once measured (Technical Director)"
+    },
+    {
+      "name": "panel_update",
+      "kind": "profile_excl_irq",
+      "routine": [
+        "panel_update",
+        "panel_update_end"
+      ],
+      "max_cycles": 250,
+      "samples": 300,
+      "basis": "estimate",
+      "from_stage": 1,
+      "source": "docs/games/swarm/memory-map.md#frame-budget, row 9. Estimate (CPU cycles counted from the intended code x 1.27 for DMA); raster cycles, IRQs excluded. Replace with max over the run + ~5% once measured (Technical Director)"
+    },
+    {
+      "name": "stars_update",
+      "kind": "profile_excl_irq",
+      "routine": [
+        "stars_update",
+        "stars_update_end"
+      ],
+      "max_cycles": 100,
+      "samples": 300,
+      "basis": "estimate",
+      "from_stage": 1,
+      "source": "docs/games/swarm/memory-map.md#frame-budget, row 10. Estimate (CPU cycles counted from the intended code x 1.27 for DMA); raster cycles, IRQs excluded. Replace with max over the run + ~5% once measured (Technical Director)"
+    },
+    {
+      "name": "formation_update (18 enemies)",
+      "kind": "profile_excl_irq",
+      "routine": [
+        "formation_update",
+        "formation_update_end"
+      ],
+      "max_cycles": 750,
+      "samples": 300,
+      "basis": "estimate",
+      "from_stage": 2,
+      "source": "docs/games/swarm/memory-map.md#frame-budget, row 5. Estimate (CPU cycles counted from the intended code x 1.27 for DMA); raster cycles, IRQs excluded. Replace with max over the run + ~5% once measured (Technical Director)"
+    },
+    {
+      "name": "collide_update (42 box tests and their responses)",
+      "kind": "profile_excl_irq",
+      "routine": [
+        "collide_update",
+        "collide_update_end"
+      ],
+      "max_cycles": 2475,
+      "samples": 600,
+      "basis": "estimate",
+      "from_stage": 2,
+      "source": "docs/games/swarm/memory-map.md#frame-budget, row 8; method and per-test counts in engine/collision.md. Estimate (CPU cycles counted from the intended code x 1.27 for DMA); raster cycles, IRQs excluded. Replace with max over the run + ~5% once measured (Technical Director)"
+    },
+    {
+      "name": "diver_update (3 divers, launcher)",
+      "kind": "profile_excl_irq",
+      "routine": [
+        "diver_update",
+        "diver_update_end"
+      ],
+      "max_cycles": 1350,
+      "samples": 600,
+      "basis": "estimate",
+      "from_stage": 3,
+      "source": "docs/games/swarm/memory-map.md#frame-budget, row 6. Estimate (CPU cycles counted from the intended code x 1.27 for DMA); raster cycles, IRQs excluded. Replace with max over the run + ~5% once measured (Technical Director)"
+    },
+    {
+      "name": "eshot_update (3 enemy shots)",
+      "kind": "profile_excl_irq",
+      "routine": [
+        "eshot_update",
+        "eshot_update_end"
+      ],
+      "max_cycles": 200,
+      "samples": 300,
+      "basis": "estimate",
+      "from_stage": 3,
+      "source": "docs/games/swarm/memory-map.md#frame-budget, row 7. Estimate (CPU cycles counted from the intended code x 1.27 for DMA); raster cycles, IRQs excluded. Replace with max over the run + ~5% once measured (Technical Director)"
+    },
+    {
+      "name": "sound tick IRQ (game_irq_bottom, sfx_update)",
+      "kind": "profile",
+      "routine": [
+        "game_irq_bottom",
+        "irq_exit_rti"
+      ],
+      "max_cycles": 570,
+      "samples": 600,
+      "basis": "estimate",
+      "from_stage": 4,
+      "source": "docs/games/swarm/memory-map.md#frame-budget, row 12, and engine/sfx.md: sfx_update <= 500 (estimate: three effects starting in one frame) + jsr 6 + jmp irq_exit 3 + irq_exit 60 (measured, engine/README.md#irq-framework-costs), rounded up to 570. Line 251: no DMA, so raster = CPU"
+    },
+    {
+      "name": "mux_update in the game, frames with no overflow (rule 3)",
+      "kind": "profile_excl_irq",
+      "routine": [
+        "mux_update",
+        "mux_update_fast"
+      ],
+      "max_cycles": 7400,
+      "max_avg_cycles": 5000,
+      "samples": 600,
+      "basis": "requirement",
+      "from_stage": 2,
+      "source": "engine/README.md#multiplexer-costs: the engine's own limits (average <= 5,000, max 7,400; measured 4,261 average in the multiplexer spike), here on the game's real sprite motion. Not a new limit"
+    },
+    {
+      "name": "mux_update in the game, all frames (flicker included)",
+      "kind": "profile_excl_irq",
+      "routine": [
+        "mux_update",
+        "mux_update_end"
+      ],
+      "max_cycles": 13000,
+      "samples": 600,
+      "basis": "measured",
+      "from_stage": 2,
+      "source": "engine/README.md#multiplexer-costs: the engine's own limit (measured max 12,342 in the multiplexer spike + ~5%). Swarm's overflow frames are expected far below it (about 5,400-6,500, estimate: docs/games/swarm/memory-map.md#does-it-fit-yes); report the measured max to the Technical Director at stage 3"
+    },
+    {
+      "name": "all IRQ time per frame (multiplexer + sound tick)",
+      "kind": "irq_time_per_frame",
+      "frames": 300,
+      "max_cycles": 4500,
+      "basis": "estimate",
+      "from_stage": 1,
+      "source": "engine/README.md#frame-budget: measured max 3,779 for all multiplexer IRQs with a do-nothing fixed entry, + the sound tick's work (<= 509, estimate, engine/sfx.md) = 4,288, + ~5%. Before stage 4 the tick does nothing and the figure should be under the engine's 4,000"
+    },
+    {
+      "name": "no late chain entries",
+      "kind": "memory",
+      "address": "irq_late_count",
+      "size": 1,
+      "after_frames": 3000,
+      "basis": "requirement",
+      "from_stage": 1,
+      "source": "engine/README.md#handler-conventions",
+      "equals": 0
+    },
+    {
+      "name": "no late sprite writes",
+      "kind": "memory",
+      "address": "mux_late_count",
+      "size": 1,
+      "after_frames": 0,
+      "basis": "requirement",
+      "from_stage": 1,
+      "source": "engine/README.md#scheduling-and-the-minimum-vertical-separation",
+      "equals": 0
+    },
+    {
+      "name": "no frame overran (no repeated frame)",
+      "kind": "memory",
+      "address": "game_overrun_count",
+      "size": 1,
+      "after_frames": 0,
+      "basis": "requirement",
+      "from_stage": 1,
+      "source": "docs/games/swarm/memory-map.md#labels-the-game-must-provide: frames whose game_update + mux_update finished after the next tick. The design is budgeted to fit every frame",
+      "equals": 0
+    },
+    {
+      "name": "headroom: idle cycles in the worst frame",
+      "kind": "memory",
+      "address": "game_idle_min",
+      "size": 2,
+      "after_frames": 0,
+      "basis": "requirement",
+      "from_stage": 1,
+      "source": "docs/games/swarm/memory-map.md#frame-budget: the engine promises 7,200, the game is budgeted 6,300, so at least 900 must be left idle in every frame. game_idle_min is idle-loop iterations of 16 cycles; expected about 3,000 or more (estimate)",
+      "scale": 16,
+      "min": 900
+    },
+    {
+      "name": "pinned sprites (player, enemy shots) never dropped",
+      "kind": "memory",
+      "address": "mux_pin_drop_count",
+      "size": 1,
+      "after_frames": 0,
+      "basis": "requirement",
+      "from_stage": 3,
+      "source": "engine/README.md#pinned-sprites; design.md feel target 5",
+      "equals": 0
+    },
+    {
+      "name": "no more than 4 pinned",
+      "kind": "memory",
+      "address": "mux_pin_excess_count",
+      "size": 1,
+      "after_frames": 0,
+      "basis": "requirement",
+      "from_stage": 3,
+      "source": "engine/README.md#pinned-sprites: the design pins exactly 4 (virtual sprites 0-3)",
+      "equals": 0
+    },
+    {
+      "name": "nothing missing 2 frames running",
+      "kind": "memory",
+      "address": "mux_max_age",
+      "size": 1,
+      "after_frames": 0,
+      "basis": "requirement",
+      "from_stage": 3,
+      "source": "docs/games/swarm/design.md feel target 5 (nothing is missing for 2 frames running) and its model (longest run 1 frame, tests/games/swarm/check_design_results.txt). mux_max_age covers unpinned sprites. A 2 goes to the designer and the Technical Director, not into this limit",
+      "max": 1
+    },
+    {
+      "name": "the worst case is being exercised: some frames flicker",
+      "kind": "memory",
+      "address": "game_flicker_frames",
+      "size": 2,
+      "after_frames": 0,
+      "basis": "requirement",
+      "from_stage": 3,
+      "source": "docs/games/swarm/memory-map.md#labels-the-game-must-provide: AUTOPLAY runs wave 12 with nothing dying, where the model has 10.5% of frames dropping a sprite (tests/games/swarm/mux_load_results.txt). 0 would mean the budget run isn't the worst case",
+      "min": 1
+    },
+    {
+      "name": "soak: no frame overran in 10,000 more frames",
+      "kind": "memory",
+      "address": "game_overrun_count",
+      "size": 1,
+      "after_frames": 10000,
+      "basis": "requirement",
+      "from_stage": 5,
+      "source": "M4 stage 5 sign-off: as the stage 1 check, over a longer run",
+      "equals": 0
+    },
+    {
+      "name": "soak: headroom after 10,000 more frames",
+      "kind": "memory",
+      "address": "game_idle_min",
+      "size": 2,
+      "after_frames": 0,
+      "basis": "requirement",
+      "from_stage": 5,
+      "source": "M4 stage 5 sign-off: as the stage 1 check, over a longer run",
+      "scale": 16,
+      "min": 900
+    },
+    {
+      "name": "soak: no late chain entries or sprite writes (chain)",
+      "kind": "memory",
+      "address": "irq_late_count",
+      "size": 1,
+      "after_frames": 0,
+      "basis": "requirement",
+      "from_stage": 5,
+      "source": "M4 stage 5 sign-off",
+      "equals": 0
+    },
+    {
+      "name": "soak: no late sprite writes",
+      "kind": "memory",
+      "address": "mux_late_count",
+      "size": 1,
+      "after_frames": 0,
+      "basis": "requirement",
+      "from_stage": 5,
+      "source": "M4 stage 5 sign-off",
+      "equals": 0
+    }
+  ]
+}

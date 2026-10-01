@@ -37,6 +37,10 @@ BasicUpstart2(start)                    // BASIC "SYS" line at $0801, then code
 #if DEBUG
         inc $d020                       // debug-only code
 #endif
+#define AUTOPLAY                        // a symbol defined here is seen by every file imported after it
+                                        // (checked with 5.25, 2026-10-01: a main.asm of "#define X" then
+                                        // "#import" of a file testing "#if X"). So a test build can wrap
+                                        // a game: tests/games/<title>/main.asm defines, then imports the game
 
 * = $1000 "Music"                       // set the program counter; the name shows in -showmem
 .align $100                             // next byte on a page boundary (constant-time table reads)

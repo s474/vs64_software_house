@@ -96,3 +96,17 @@ Example: `$D018 = $18` in bank 0 = screen at `$0400`, charset at `$2000`.
 
 Each game records its actual layout in `docs/games/<title>/memory-map.md`, using the
 [template](../standards/memory-map-template.md).
+
+### Extended colour mode (ECM, `$D011` bit 6)
+
+**Measured** (`tests/timing/ecm_panel`, VICE 3.10 x64sc PAL, 2026-10-01, by screenshot):
+
+- With ECM on, bits 6–7 of a screen code choose the cell's background from `$D021`–`$D024`, and
+  only bits 0–5 choose the glyph: **64 glyphs** (codes 0–63) for the whole screen. The foreground is
+  the colour RAM colour as usual. Code `$40 + c` with `$D022` = blue and white in colour RAM shows
+  glyph c in white on blue, next to cells on a black `$D021`: a coloured text bar with no raster split.
+- A **reverse-video** character (code `$80 + c`, ECM off) is drawn the other way round: the cell
+  is filled with the colour RAM colour and the glyph is the background colour (`$D021`). A blue
+  reverse-video bar on a black screen has black text, not white.
+- Not measured: ECM's effect on badline or sprite timing (none is expected: it changes how pixels
+  are coloured, not what is fetched).
