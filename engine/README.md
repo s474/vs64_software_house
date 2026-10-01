@@ -818,7 +818,7 @@ them:
 | `mux_irq_zone` → `irq_exit_rti`, one IRQ | 702 / 909 / 1,448 | 744 / 962 / 1,500 (2,000 IRQs) | **1,600** | 550. Every zone IRQ in the spike writes 8 slots, including in-IRQ waits of up to 2 lines per slot |
 | One zone slot, block to block | 78 (67 release) | 78 to ~190 (DMA, waits) | (none) | ~60. 48 writes + 11 DEBUG late check + 19 next-slot check |
 | All IRQ time in one frame | 1,982–3,452 | 2,067–3,562 (600 frames) | **3,750** | 3,300 |
-| Free per frame (`spike_idle_min` × 16) | 5,888 | (none) | **≥ 5,300** (the game promise, see [Frame budget](#frame-budget)) | ≥ 5,000 |
+| Free per frame (fewest idle iterations in any frame × 16: `spike_idle_min`, the single minimum up to stage 3.5, [retired in stage 4](#multiplexer-spike-free-cpu-labels)) | 5,888 | (none) | **≥ 5,300** (the game promise, see [Frame budget](#frame-budget)) | ≥ 5,000 |
 
 **Measured in stage 3** (VICE 3.10 x64sc PAL, DEBUG, 2026-09-29/30). Raster cycles in the spike,
 DMA included, min / avg / max, all through the budget runner (`profile_excl_irq`, the same method
@@ -840,7 +840,7 @@ record exactly):
 | `mux_irq_zone` → `irq_exit_rti` (1,000 IRQs) | 744 / 968 / 1,482 | 631 / 897 / 1,484 | −71 avg |
 | One zone slot, block to block, DEBUG (min over 4,800 slots) | 78 | **62** | −16 (release 67 → 53, counted) |
 | All IRQ time per frame (600 frames) | 2,067–3,555 | 1,831–3,549 | the max is waits and DMA |
-| Free per frame (`spike_idle_min` × 16) | 5,888 | **8,352** | +2,464 |
+| Free per frame (single idle minimum × 16, every frame) | 5,888 | **8,352** | +2,464 |
 
 **Zone IRQ per-slot review.** The stage 2 "~190 per slot" was block to block *including waits and
 DMA*. The code's own cost is the minimum: 78 cycles in stage 2, 62 now (DEBUG, uniform
@@ -870,7 +870,7 @@ slot-to-Y margin is 8 lines (stage 2: 7).
 | All IRQ time per frame (600) | 736–3,577 | 3,750 | (as is) |
 | `mux_max_age` (pinning off) | **2** (P = 0 target: 2) | ≤ 4 (stage 4's target) | (as is) |
 | `irq_late_count`, `mux_late_count`, `spike_overrun_count` | 0, 0, 0 | 0 | (as is) |
-| Free per frame (`spike_idle_min` × 16) | **5,808–5,824** | ≥ 5,300 | (as is) |
+| Free per frame (single idle minimum × 16, every frame) | **5,808–5,824** | ≥ 5,300 | (as is) |
 
 Flicker frames were 2,955 of the ~6,000 frames in that run, with 24,253 sprites dropped or evicted,
 about 8 per flicker frame. The slow part averages 3,552, so a drop or eviction costs about 430
@@ -898,12 +898,16 @@ raster cycles, DEBUG:
 | `mux_irq_zone` → `irq_exit_rti` | 154 / 804 / 2,693 | 164 / 809 / 2,701 | 164 / 812 / 2,703 | 2,850 (as is) |
 | All IRQ time per frame | 516 / 2,084 / 3,631 | 522 / 2,086 / 3,595 | 522 / 2,097 / 3,613 | 3,850 (as is) |
 | `mux_max_age`, late counters, overruns | 2, 0, 0, 0 | 2, 0, 0, 0 | 2, 0, 0, 0 | (as is) |
-| Free per frame (`spike_idle_min` × 16) | 5,808 | 5,776 | **5,760** | ≥ 5,300 |
+| Free per frame (single idle minimum × 16, every frame) | 5,808 | 5,776 | **5,760** | ≥ 5,300 |
 
 Budgets moved only where the new 20,000-pass max + ~5% was over the old limit, which the added
 code explains (`mux_build` +43 counted per frame). The `multiplexer_ghost` probe's figures are in
 [Wrap ghosts](#wrap-ghosts). `make test` on the final build: 28/28 checks pass (2 stage 4 checks
 pending).
+
+(In the tables above, "single idle minimum" is the stage 2–3.5 spike's `spike_idle_min`: one minimum
+over every frame. Stage 4 replaced it with a pair, one per frame class:
+[Multiplexer spike: free-CPU labels](#multiplexer-spike-free-cpu-labels).)
 
 **Measured in stage 4** (pinning; VICE 3.10 x64sc PAL, DEBUG, 2026-10-01, Technical Director, on the
 stage 4 engine with the spike's 4 pinned sprites). One trace of 20,000 consecutive `mux_update`
@@ -922,8 +926,8 @@ passes after 100 warm-up frames, with the budget runner's own `Vice.trace` / `pr
 | All IRQ time per frame | 522 / 2,097 / 3,613 | 535 / 2,230 / 3,691 | 522 / 2,227 / 3,779 | **4,000** (was 3,850) |
 | `mux_max_age` | 2 (nothing pinned) | 4 | **4** (and after 919,800 frames) | ≤ 4 (as is: the target for 4 pinned + 20 unpinned) |
 | `mux_pin_drop_count`, `mux_pin_excess_count`, late counters, overruns | (no pinning), 0, 0, 0 | all 0 | all 0 (and after 919,800 frames) | 0 |
-| Free per frame, non-stress frames | 5,760 (every frame) | 5,728 | 5,728; **5,344** over 919,800 | **≥ 5,300** (the promise, scoped: [Frame budget](#frame-budget)) |
-| Free per frame, stress frames | (every frame ≥ 5,760) | 4,736 | 4,496; **4,480** over 919,800 | **≥ 4,250** (a floor for the excluded case) |
+| Free per frame, non-stress frames (`spike_idle_min_normal` × 16) | 5,760 (every frame) | 5,728 | 5,728; **5,344** over 919,800 | **≥ 5,300** (the promise, scoped: [Frame budget](#frame-budget)) |
+| Free per frame, stress frames (`spike_idle_min_stress` × 16) | (every frame ≥ 5,760) | 4,736 | 4,496; **4,480** over 919,800 | **≥ 4,250** (a floor for the excluded case) |
 
 What pinning costs, and where:
 
@@ -942,6 +946,11 @@ What pinning costs, and where:
 
 Limits moved only where the 20,000-pass max + ~5% was over the old one. The fast-frame maximum
 wasn't lowered: stage 4's run holds fewer fast frames (7,016) than the run its limit came from.
+
+The two free-CPU rows were measured from outside, by a checkpoint, before the spike had the labels.
+With the labels built ([as built](#multiplexer-spike-free-cpu-labels)), `make test` passes 34/34, also
+under `--strict`, and reads 5,712 (non-stress) and 4,480 (stress) in its window (raster-engineer,
+commit 2b7aed5): one idle iteration under the 20,000-frame figures, which is the classification's cost.
 
 ### Budget units
 
@@ -974,7 +983,7 @@ So:
 Moving `mux_update` into the lower border is **not** a fast path. DMA is a fixed tax on the
 frame, about 3,500 cycles with 24 sprites. Running the multiplexer in the border only moves its
 share onto game logic, which would then run through the display, and the free time per frame
-(`spike_idle_min`) wouldn't change.
+(the spike's idle minima, `spike_idle_min_normal` and `spike_idle_min_stress`) wouldn't change.
 
 ### Fast path
 
@@ -995,9 +1004,11 @@ stage 2:
 | **Run `mux_update` in the lower border** | **No** | Not a saving: see [Budget units](#budget-units) |
 
 **Target:** `mux_update` **average ≤ 5,000 raster cycles** over 600 passes of the spike (from 6,240,
-about −20%; ≈ 4,000 CPU), max unchanged (≤ 9,050: the sort stress), and `spike_idle_min` × 16 ≥
-5,300 throughout. Checked by `mux_update fast path (rule 3 target)` in `budget.json` from stage 3
-on (all frames), and by `mux_update fast path, frames with no overflow` (to `mux_update_fast`, added in stage 3), and it stays met through stage 4 (frames without overflow must not pay for flicker or pinning,
+about −20%; ≈ 4,000 CPU), max unchanged (≤ 9,050: the sort stress), and free CPU (idle minimum × 16) ≥
+5,300 throughout (in every frame up to stage 3.5; from stage 4 in every non-stress frame, as
+`spike_idle_min_normal`: [the v1 promise](#the-v1-promise-and-its-one-exception)). The max limit has since been re-baselined
+(13,000 all frames, 7,400 fast frames: [Multiplexer costs](#multiplexer-costs)). Checked at first by `mux_update fast path (rule 3 target)` in `budget.json` (all frames; retired
+2026-09-30, since it counted flicker frames), and now by `mux_update fast path, frames with no overflow` (to `mux_update_fast`, added in stage 3), and it stays met through stage 4 (frames without overflow must not pay for flicker or pinning,
 beyond the pinned pre-pass).
 
 The estimates the stage 2 budgets replace (design, before stage 2), kept for the record:
@@ -1021,7 +1032,7 @@ The estimates the stage 2 budgets replace (design, before stage 2), kept for the
 | `mux_max_age` | Highest `mux_age` ever reached by an **unpinned** sprite (stages 2–3: by any sprite; no pinning yet) | ≤ 4 (the target for 4 pinned + 20 unpinned; see the flicker table). Stage 3 measured 2 with pinning off, meeting the P = 0 target; stage 4 measured **4** with 4 pinned (reached within 4,000 frames, still 4 after 920,000), so the limit is met with nothing to spare: a 5 is a fairness bug, not noise |
 | `mux_drop_count` | Sprites dropped **or evicted** in the last `mux_update` | (reported only) |
 | `mux_pin_drop_count` | Times a pinned sprite in the shown range was dropped (saturating). **Stage 4**: not in the stage 2 build | 0 |
-| `mux_pin_excess_count` | Frames that **overflowed** (took the slow path) with more than `MUX_MAX_PINNED` sprites flagged pinned (saturating). As built in stage 4 it is counted in the pinned pass, so frames with no overflow never count, whatever is flagged (the design said every frame). **Stage 4**: not in the stage 2 build | 0 in the budget run; the soak test forces it on purpose (it needs overflow frames in its 100: 64% of the spike's frames are) |
+| `mux_pin_excess_count` | Frames that **overflowed** (took the slow path) with more than `MUX_MAX_PINNED` sprites flagged pinned (saturating). As built in stage 4 it is counted in the pinned pass, so frames with no overflow never count, whatever is flagged (the design said every frame). **Stage 4**: not in the stage 2 build | 0 in the budget run; the soak test forces it on purpose (it needs overflow frames in its 100: 65% of the spike's frames are, 12,984 of 20,000) |
 
 ---
 
@@ -1085,7 +1096,7 @@ flowchart TB
 | Line | Handler | Job | Budget (cycles) |
 |---|---|---|---|
 | `$10` (16) | `mux_irq_top` (entry 0) | Frame tick, swap, slots 0–7 | 393, a lock: paths 378 / 381 / 393 (**measured**, stage 3.5, [Wrap ghosts](#wrap-ghosts)) + 32 framework before the handler (**measured**: 7 + 17 + 8) + 6 `rti` |
-| ≈ 52–249, dynamic | `mux_irq_zone` | Slots 8–23 as hardware sprites free | 2,850 per IRQ (**measured** max 2,703 over 37,763 IRQs, stage 3.5: up to 14 slots with waits and DMA) + 30 framework (7 + 17 + 6); ≤ 16 IRQs. All IRQs together ≤ 3,850 a frame |
+| ≈ 52–249, dynamic | `mux_irq_zone` | Slots 8–23 as hardware sprites free | 2,950 per IRQ (**measured** max 2,763 over 56,844 IRQs, stage 4; stage 3.5: 2,703, up to 14 slots with waits and DMA) + 30 framework (7 + 17 + 6); ≤ 16 IRQs. All IRQs together ≤ 4,000 a frame |
 | 77–79, only in frames with [wrap ghosts](#wrap-ghosts) | `mux_irq_park` (re-armed by `mux_irq_top` or the last zone IRQ) | Disable the hardware sprites whose last slot is at Y ≤ 55 | 80 (**measured**, a lock) + 30 framework |
 | `$FB` (251) | Game entry 1 (optional) | Anything that must run at a fixed time: music (later), colour splits in the border | Its own; lines 251–311 are free of other IRQs |
 
@@ -1142,11 +1153,14 @@ happen to land. The old table counted them twice.
 | **Left for game logic, music and everything else** | **≥ 7,200 promised, with one exception in v1** (below) | Checked by `spike_idle_min_normal` × 16 ≥ 5,300 in every non-stress frame, and `spike_idle_min_stress` × 16 ≥ 4,250 in the excepted case. Stage 2 measured ≥ 7,795 in the worst frame |
 
 **How the promise is checked.** In the spike, game logic is `spike_move`, **measured** at
-1,907–2,563 raster cycles, IRQs excluded, plus the idle loop. `spike_idle_min` × 16 counts only
+1,907–2,563 raster cycles, IRQs excluded, plus the idle loop. A frame's idle iterations × 16 count only
 cycles the idle loop actually ran (DMA and IRQs take none of its iterations), so it's a lower
-bound. Idle ≥ 7,200 − 1,907 = 5,293 guarantees ≥ 7,200 for the game in that frame, so the check
-is `min: 5300`. Stage 2 measured 5,888 and stage 3.5 5,760 in every frame, the sort stress and
-flicker included. (Stage 4's `spike_move` measures 1,909–2,780, with the pinned sweep added.)
+bound. The spike keeps the fewest seen: one minimum over every frame up to stage 3.5
+(`spike_idle_min`, retired), and from stage 4 one per frame class, `spike_idle_min_normal` and
+`spike_idle_min_stress` ([as built](#multiplexer-spike-free-cpu-labels)). Idle ≥ 7,200 − 1,907 = 5,293 guarantees ≥ 7,200 for the game in that frame, so the check
+is `min: 5300`, from stage 4 on `spike_idle_min_normal` (non-stress frames). Stage 2 measured 5,888 and
+stage 3.5 5,760 in every frame, the sort stress and flicker included; stage 4's figures are in
+[the next section](#the-v1-promise-and-its-one-exception). (Stage 4's `spike_move` measures 1,909–2,780, with the pinned sweep added.)
 
 In a common-case frame the game gets far more than 7,200:
 
@@ -1187,7 +1201,8 @@ in every frame (6,000 frames, the diagnosis), and pinning outside the reversal �
 | Stress, worst | **4,480** (451 frames below 5,300) | 919,800 frames | the same |
 
 All **measured**, by a checkpoint at `spike_main` that reads each frame's idle count and motion
-state (so the spike's code is as it was). A stress frame is defined in
+state (so the spike's code is as it was, before the labels existed). The spike's own labels read
+5,712 and 4,480 in the `make test` window: the classification costs up to one iteration (16). A stress frame is defined in
 [Multiplexer spike: free-CPU labels](#multiplexer-spike-free-cpu-labels).
 
 - **What a miss looks like.** Nothing, unless the game's own logic also needs more than is left in
@@ -1395,7 +1410,7 @@ frames below the free-CPU promise, and a frame-by-frame comparison of two builds
 `tests/engine/multiplexer/measure_pin.py` (each script's header says how to run it).
 
 Stage 2 results: 8,000 frames with `mux_late_count`, `irq_late_count`, `spike_drop_total`,
-`mux_max_age` and `spike_overrun_count` all 0, 24 slots every frame; `spike_idle_min` 368 × 16 =
+`mux_max_age` and `spike_overrun_count` all 0, 24 slots every frame; the idle minimum (`spike_idle_min` in that build, one minimum over every frame) 368 × 16 =
 **5,888** free cycles. The idle loop is 16 cycles per iteration (counted; 21 on the 1-in-256 carry).
 Screenshots: `screenshots/multiplexer-24-sprites.png`, `screenshots/multiplexer-full-rows-dmin.png`
 (three nearly full rows at D = 39), `screenshots/multiplexer-stage2-5000-frames.png`.
@@ -1419,8 +1434,8 @@ The design for stages 3–4:
   proves a fixed entry coexists with the zone IRQs).
 - The main loop is the real pattern: `irq_wait_frame`, move the sprites, `mux_update`, then an
   **idle loop** that counts iterations until the next frame tick. It keeps the fewest
-  iterations seen in a frame, after warm-up (`spike_idle_min` up to stage 3; from stage 4 the two
-  minima specified [below](#multiplexer-spike-free-cpu-labels)) and
+  iterations seen in a frame, after warm-up (`spike_idle_min` up to stage 3.5; from stage 4 the two
+  minima described [below](#multiplexer-spike-free-cpu-labels)) and
   `spike_overrun_count` (frames where the work didn't finish before the next tick). The idle
   loop's cost per iteration is counted and written in its header (budget.json assumes 16).
 - **Pinned sprites: 0–3 are pinned** (the maximum, so capacity is tested at its worst).
@@ -1437,42 +1452,69 @@ The design for stages 3–4:
 
 #### Multiplexer spike: free-CPU labels
 
-Specified by the Technical Director for stage 4 (2026-10-01); the raster-engineer implements it in
-`tests/engine/multiplexer/main.asm`. `budget.json`'s two free-CPU checks read these labels and are
-`from_stage: 4`, so they stay PENDING until the spike has them and `"stage"` is 4.
+Specified by the Technical Director for stage 4 (2026-10-01) and built by the raster-engineer in
+`tests/engine/multiplexer/main.asm` and `zp.asm` (commit 2b7aed5). `budget.json`'s two free-CPU
+checks read these labels. They are `from_stage: 4` and the file's `"stage"` is 4, so both run.
 
-| Label | Size | Initial | Meaning |
-|---|---|---|---|
-| `spike_idle_min_normal` | 2 bytes, little-endian | `$FFFF` | Fewest idle-loop iterations in any **non-stress** frame since the warm-up |
-| `spike_idle_min_stress` | 2 bytes, little-endian | `$FFFF` | Fewest idle-loop iterations in any **stress** frame since the warm-up |
+| Label | Address | Size | Initial | Meaning |
+|---|---|---|---|---|
+| `spike_idle_min_normal` | `$14`–`$15` (`zp_spike_idle_min`) | 2 bytes, little-endian | `$FFFF` | Fewest idle-loop iterations in any **non-stress** frame since the warm-up |
+| `spike_idle_min_stress` | `$16`–`$17` (`zp_spike_idle_min + 2`) | 2 bytes, little-endian | `$FFFF` | Fewest idle-loop iterations in any **stress** frame since the warm-up |
 
+- **They are in zero page, not `.word`s** as first specified: a 4-byte block, `zp_spike_idle_min`,
+  in the spike's own `zp.asm` (the spike's zero page is `$10`–`$17`; the engine's is unaffected).
+  Zero page has no assembled initial value, so `start` writes `$FF` to all four bytes before
+  `mux_init`. The budget runner's `memory` check reads a label wherever it is, so `budget.json`
+  didn't change. **Deviation accepted** (Technical Director, 2026-10-01): see the cost limit below.
 - **Stress frame:** a frame whose `spike_move` left **`spike_damp` = 1 and `spike_amp` = 2, 3, 4
   or 5**. Those are the four frames in every 48 (8.3%) in which the pattern, reversed at amp 0,
   separates again and `mux_sort` re-orders all three groups. **Measured** (20,000 frames):
   `mux_sort` averages 2,398 / 1,764 / 934 / 955 raster cycles in them (758–3,252), against 536–777
   for every other (amp, direction). Every other frame is non-stress, including the reversal frame itself
   (amp 0: each group's 8 tie, so nothing moves) and the frames where pinned sprite 1 jumps as the sweep turns.
-- **When they're updated:** once per frame, where `spike_idle_min` is updated now: after the idle
-  loop sees the frame tick and before `jmp spike_main`. `spike_amp` and `spike_damp` still hold
-  what this frame's `spike_move` left, so the frame is classified there, and its iteration count
-  (`zp_spike_idle_lo/hi`) lowers **only its own class's** minimum. The two are disjoint. The
-  all-frames minimum is the smaller of the two.
-- **Warm-up:** as now (`SPIKE_WARMUP` frames update neither). A frame that overran never reaches
+- **When they're updated:** once per frame, after the idle loop sees the frame tick and before
+  `jmp spike_main`. `spike_amp` and `spike_damp` still hold what this frame's `spike_move` left, so
+  the frame is classified there, and its iteration count (`zp_spike_idle_lo/hi`) lowers **only its
+  own class's** minimum. The two are disjoint. The all-frames minimum is the smaller of the two.
+- **How the class is chosen:** X = 0 (normal) or 2 (stress) indexes the pair. `spike_damp` negative
+  is normal at once (one load and branch); otherwise X comes from `spike_class`, a table indexed by
+  `spike_amp` (2 for amp 2–5, else 0; an `.errorif` keeps it inside one page). Then one 16-bit
+  compare, `cmp zp_spike_idle_min + 1,x` / `cmp zp_spike_idle_min,x`, and the stores on a new minimum.
+- **Warm-up:** `SPIKE_WARMUP` (50) frames update neither. A frame that overran never reaches
   the idle loop and updates neither. `spike_overrun_count` counts it.
 - **`spike_idle_min` is retired.** One compare per frame, not two, keeps the statistics from
-  eating the time they measure. `idle_breakdown.py` and `measure_pin.py` read the old label and need
-  the new pair.
-- **Cost limit:** the classification may add **at most 16 cycles** (one idle iteration) to any
-  frame over today's statistics code. The non-stress long-run margin is two iterations (5,344
-  against 5,312, the smallest multiple of 16 that passes). An index register chosen by the class
-  and one indexed 16-bit compare does it: `spike_damp` negative (half of all frames, including
-  the lowest non-stress one) is decided by one load and branch.
+  eating the time they measure. `idle_breakdown.py` and `measure_pin.py` read the new pair, and
+  fall back to the old label for builds before stage 4.
+- **Cost limit: at most 16 cycles** (one idle iteration) added to any frame over the stage 3.5
+  single-minimum code. The non-stress long-run margin is two iterations (5,344 against 5,312, the
+  smallest multiple of 16 that passes). **As built** the classification adds:
+
+  | Frame | Added cycles | Instructions |
+  |---|---|---|
+  | `spike_damp` negative (half of all frames, including the lowest non-stress one) | **9** | `ldx #0` 2, `lda spike_damp` 4, `bmi` taken 3 |
+  | `spike_damp` positive | **16** | `ldx #0` 2, `lda spike_damp` 4, `bmi` not taken 2, `ldy spike_amp` 4, `ldx spike_class,y` 4 |
+
+  Both are *counted* from the instructions (raster-engineer; re-counted by the Technical Director
+  against [6502-timing.md](../docs/reference/6502-timing.md)), **not profiled**. The compares and
+  stores cost what the old absolute ones did: `cmp zp,x` and `sta zp,x` are 4 cycles, as `cmp abs`
+  and `sta abs` were.
+- **Why zero page.** With the minima as absolute `.word`s the compares stay at 4 (`cmp abs,x`, no
+  page crossing), but `sta abs,x` is 5 cycles always, so the two stores add 2 on a frame that sets
+  a new minimum: 18 on a `spike_damp`-positive frame, over the limit. A new-minimum frame is by
+  definition the one the check reads, so that is the frame that matters. Zero page keeps it at 16.
+  Accepted: it meets the limit that the `.word` form couldn't, it uses 4 bytes of the spike's own
+  zero page (a test program, not a game's or the engine's allocation), and nothing that reads the
+  labels changes. The 16 has no slack: any further instruction on the positive path breaks the limit.
 - **Why amp 2–5 and not just 2–3**, where the sort is over 1,500: with 2–3 alone, two non-stress
   frames in 919,800 fall below 5,300 (5,248 and 5,264, both amp 5 at D = 10), still inside the
   reversal's re-sort. Amp 6–8 adds nothing (the minimum stays 5,344).
-- **Expected readings** on the stage 4 engine, if the classification costs one iteration or
+- **Expected readings** on the stage 4 engine, with the classification costing one iteration or
   less: non-stress 5,712–5,728 in the `make test` window and ≥ 5,328 in a long run; stress
   4,480–4,496 and ≥ 4,464. Anything else is reported to the Technical Director, not tuned away.
+- **Readings as built:** 5,712 (non-stress) and 4,480 (stress) in the `make test` window
+  (raster-engineer, commit 2b7aed5; `make test` 34/34, also under `--strict`): both inside the
+  expected ranges, one iteration below the 20,000-frame checkpoint figures. The long-run readings
+  (`make test-long`, about 800,000 frames for these checks) are *not yet recorded here*.
 
 **QA soak test (10,000 frames)**, in addition to the brief's no-crash / no-jam /
 ≤ 2-missing-frames checks:
