@@ -44,4 +44,6 @@ and run `cd mcp/vice && uv run smoke_test.py` after any change there.
 - **Check that git sees every new file** (`git status --short`) before you report. A folder named
   `build` at any depth is git-ignored, so files under e.g. `tests/build/` silently vanish from commits.
 - Call `vice_stop` when you've finished with the MCP VICE tools.
-- Commit only your own files (`git add <paths>`, never `-A`), and don't push unless the producer says so.
+- Commit only your own files: `git add <paths>` (never `-A`), then `git commit <paths> -m ...` with the
+  paths named again. A bare `git commit` also takes whatever another agent has staged in this shared
+  working tree. Don't push unless the producer says so.

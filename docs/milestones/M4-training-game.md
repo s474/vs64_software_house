@@ -91,9 +91,48 @@ the panel are in. `make test` passes 65/65 with 15 Swarm checks pending for late
 | Holding fire gives 4.77 shots a second, not the design's "steady 5": a missed shot lives 21 frames, so the two slots limit the rate, not the 10-frame cooldown. Plus cases the design left silent (left and right together, the start position, the order of updates, wave counters) | game-designer, with Simon's playtest view |
 | The memory map's main-loop pseudo-code, `panel_update` over budget when all four fields redraw (init and game over only), AUTOPLAY's panel load, the KickAssembler multi-label trap, the rng contract's stale lines and interim checks, and a one-page "what a game needs from the engine" | technical-director |
 
+**Simon's playtest of stage 1 (2026-10-02):**
+
+- **Fire rate: leave it** (option a; the design's decision 9, section "Fire rate: decided"): "fire feels good".
+- **Real hardware:** Simon ran the DEBUG build (`build/swarm/swarm.prg`, copied by FTP) on his C64 Ultimate,
+  for a like-for-like comparison with VICE. It behaved the same: everything working as it should. This is
+  the first run of the engine on real hardware. Stage 1 has only 3 sprites, so it confirms the IRQ
+  framework, extended colour mode and the sprite writes, but not the multiplexer under load: repeat it at
+  stages 2 and 3.
+- No sound yet is expected: sound effects are stage 4.
+
 **Process notes so far** (rule 4): the reading list for a new game engineer is about 4,000 lines; `make test`
 can't drive the joystick, so the key input checks live in scripts outside it; statistical limits
 should be tried on a model before going into a contract; a design model settles questions prose leaves open.
+
+### Stage 2 result: shoot the formation (2026-10-02)
+
+The 18-enemy formation drifts and animates, player shots hit enemies, enemies explode, and the score
+counts. `make test` passes 83/83 with 11 Swarm checks pending for later stages.
+
+| Part | Result |
+|---|---|
+| `engine/collision.asm` | Built to its contract: 148 bytes, a reject 17 cycles, a full test 39. Correct against a model over about 58,000 box tests |
+| Collision budget | Swarm's worst frame of 42 tests measured 2,335 against 2,100 in the module's spike, so the Technical Director raised row 8 to 2,825 and the game's headroom fell from 935 to 585. In the game so far `collide_update` measures 1,189, so the grid-lookup fallback (trigger: over 2,050) was not needed |
+| Formation, hits, explosions, score (`games/swarm/src/`) | `tests/games/swarm/check.py` now has 37 cases and runs inside `make test`. No dropped sprites, late writes or repeated frames. Worst-frame idle 9,488 against a floor of 585 |
+
+**Simon's playtest of stage 2 (2026-10-02), on the C64 Ultimate:** it is clear when something is hit,
+collisions are all good, and he can time a shot to hit a top-row enemy with two enemies still below
+it, "which feels nice and precise". This is the first real-hardware run with the multiplexer under load
+(21 sprites, hardware sprites reused down the screen).
+
+**Found in stage 2, to settle before stage 3:**
+
+| Item | Owner |
+|---|---|
+| `stars_update` reaches 129 against its budget of 100 over 600 passes, when it meets a badline (`make test` samples 300 and sees exactly 100) | technical-director |
+| Up to 4 explosions can be on screen at once, not the 2 the design assumed: about 168 cycles on top of the formation's 437, leaving little of row 5 for stage 3's wobble | technical-director, game-designer |
+| `collide_update` has only been measured near the top of the screen; later in the frame the same work could cost about 1,680 | measured in stage 3 |
+
+**Process notes from stage 2:** a contract's cost formula should count whole calls, not loop bodies; a
+budget build where nothing dies can't measure what dying costs; a 300-pass check can pass at the limit
+while 600 passes fail; each stage's script should say which earlier cases assume a feature is absent;
+`git commit <paths>`, not only `git add <paths>`, in a shared working tree.
 
 ## The game (scope for M4)
 
