@@ -14,6 +14,11 @@ What it does:
      divers and enemy shots follow the design's rules. Each frame goes through a Python model of
      the multiplexer's selection (fit rule, fair flicker, pinned sprites: engine/README.md,
      "Overflow: fair flicker" and "Pinned sprites"), which reports who was dropped.
+  4. How many enemy explosions can run at once (design.md "Explosions at once"): a bound from
+     the shot rules, and a schedule that reaches it, replayed against the two-slot rule.
+     Explosions are NOT in the play simulation, and don't need to be: an explosion is drawn in
+     the dead enemy's own virtual sprite, where it is, and the simulation's enemies never die,
+     so every enemy sprite is already counted in every frame.
 
 The multiplexer model is a transcription of the README's pseudocode, not the engine: its
 figures are design estimates until QA's positions.py runs on the real game (M4 deliverable 6).
@@ -361,6 +366,50 @@ def play_checks(frames=6000):
     assert s["drop_frames"] == 0
 
 
+# ---- Explosions at once ----
+EXPLOSION_FRAMES = 16               # the hit's frame and the 15 after it
+PSHOT_MISS_FRAMES = 21              # a shot that hits nothing: spawn frame + 20, gone in the 21st
+
+
+def hits_bound(flights):
+    """Most player-shot hits in any EXPLOSION_FRAMES frames. Shot i spawns at s_i >= s_1 +
+    10 (i - 1) and hits at s_i + flight, so k hits span at least 10 (k - 1) - (longest flight -
+    shortest flight) frames, and all k explosions overlap only if that span is <= 15."""
+    k = 1
+    while PSHOT_COOLDOWN * k - (max(flights) - min(flights)) <= EXPLOSION_FRAMES - 1:
+        k += 1
+    return k
+
+
+def replay(schedule):
+    """schedule: (spawn frame, flight) per shot. Checks the cooldown and the two slots (a slot
+    freed by a hit in frame h can fire in frame h: Stage 1 rule 3c). Returns the hit frames."""
+    for i, (s, _) in enumerate(schedule):
+        if i:
+            assert s - schedule[i - 1][0] >= PSHOT_COOLDOWN
+        assert sum(1 for s2, f2 in schedule[:i] if s2 <= s < s2 + f2) <= 1, "no free slot"
+    hits = sorted(s + f for s, f in schedule)
+    assert hits[-1] - hits[0] <= EXPLOSION_FRAMES - 1
+    return hits
+
+
+def explosion_checks():
+    print("\n== Explosions at once (16 frames each; shots 10 frames apart, 2 slots) ==")
+    parked = [-(-(PSHOT_SPAWN_Y - y - 17) // PSHOT_SPEED) for y in ROW_Y]      # 18, 13, 8
+    anyf = list(range(1, PSHOT_MISS_FRAMES))                                   # 1 .. 20
+    for label, flights, sched in (
+            ("every target parked", parked, [(0, 18), (10, 13), (20, 8)]),
+            ("divers too (stage 3)", anyf, [(0, 20), (10, 6), (20, 11), (30, 1)])):
+        b = hits_bound(flights)
+        hits = replay(sched)
+        assert len(sched) == b and all(f in flights for _, f in sched)
+        print(f"{label}: flights {min(flights)}-{max(flights)} frames: at most {b} hits in any "
+              f"{EXPLOSION_FRAMES} frames; reached by (spawn, flight) {sched}: hits in frames {hits}")
+    print("plus one enemy ramming the player in the same 16 frames: 5 enemy explosions wanted, "
+          "4 slots: the 5th dies without one")
+
+
 if __name__ == "__main__":
     static_checks()
+    explosion_checks()
     play_checks()

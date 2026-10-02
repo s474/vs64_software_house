@@ -18,7 +18,12 @@ feel target 2 states the measured fire rate (4.76 a second, not 5), the choices 
 made where this document was silent are written down as rules
 ([Stage 1 rules](#stage-1-rules-confirmed-from-the-build)), and the fire-rate options were set out for
 Simon's playtest. **2026-10-02, after Simon's stage 1 playtest, no behaviour change:** the fire rate
-stays as built ([Fire rate: decided](#fire-rate-decided), decision 9).
+stays as built ([Fire rate: decided](#fire-rate-decided), decision 9). **2026-10-02, after stage 2
+and Simon's playtest of it, no change to anything built:** the playtest is recorded (feel targets 9
+and 11), up to 4 enemy explosions run at once, not 2 ([Explosions at once](#explosions-at-once)),
+the choices the stage 2 build made are rules
+([Stage 2 rules](#stage-2-rules-confirmed-from-the-build)), and stage 3 is specified to the frame
+([Stage 3 rules](#stage-3-rules)).
 
 Every number that can be checked without the game is checked by
 [tests/games/swarm/check_design.py](../../../tests/games/swarm/check_design.py)
@@ -177,6 +182,38 @@ behaviour change.** Measured by [check.py](../../../tests/games/swarm/check.py)
 | 7 | **The panel's `WAVE` and the `WAVE nn` message both show n, the running count** from 1: n = loop × 3 + pattern (pattern 1–3, loop from 0). Two digits, **stopping at 99**; the game carries on past it | A pattern number would read 1, 2, 3, 1: the player wants to see how far he got |
 | 8 | **From stage 4, three stores:** the shown wave (BCD, 01–99, sticks at 99), the pattern index (0–2, cycles for ever), the loop (0–3, sticks at 3, first reached at wave 10). Pattern and loop are counted, never derived from the shown number | No divide by 3 in 6502, and the pattern must keep cycling after the display stops at 99 |
 
+### Stage 2 rules (confirmed from the build)
+
+Cases this document left open, which the stage 2 build chose. **All confirmed as built: no
+behaviour change.** Measured by `check.py` (cases hit, exploding, double, clear, score-cap).
+
+| # | Rule | Why |
+|---|---|---|
+| 1 | **An enemy explosion is shown for exactly 16 frames:** the hit's frame and the 15 after it, 4 shapes of 4 frames, where the enemy was when hit. The player's: 32 frames, the hit's frame and the 31 after, 4 shapes of 8 | One count for art, sound (16 frames) and code |
+| 2 | **"Enemies alive" counts every enemy that isn't Dead, an exploding one included.** So the wave is clear when the last explosion ends, and the launcher's "4 or fewer alive" lags a hit by up to 16 frames | The clear must wait for the explosion anyway. The launcher reads the count only when it reloads its timer (every 50 frames or more), so the lag changes at most one interval, once |
+| 3 | **Stages 2 and 3, when the formation is cleared:** the sky is empty for 75 frames (the player still moves and fires), and in the 75th frame after the last explosion ended the same 18 are back at once, `fx` 48 moving right. No bonus; wave, pattern and loop don't change. **Stage 4 replaces this:** + 1,000 in the frame the last explosion ends, whatever the player's state; the same 75 empty frames; then WaveIntro with wave + 1, the next pattern and loop, `WAVE nn`, and the enemies appearing one every 2 frames ([Waves](#waves)) | The 75 frames are the design's pause, so stage 4 changes what follows it, not the timing |
+| 4 | **The score stops at 999,990:** an addition that would pass it leaves 999,990 | Six digits, and every value is a multiple of 10 |
+| 5 | **The high score changes only when GameOver starts** (if score > high score). The panel's `HI` never changes during play | One panel field to redraw in play, not two; the moment is still shown, on the game-over screen |
+| 6 | **An enemy can be hit from the first frame it is shown,** the frame the formation returns included (from stage 4: the frame each enemy appears) | The rule is "what is shown can be hit": no grace period to explain or code |
+| 7 | **An explosion hits nothing and stops nothing:** a shot passes through it and hits what is behind | As the hit box table |
+
+### Explosions at once
+
+**Rule: at most 4 enemy explosions are shown at once. A 5th enemy hit while 4 are running dies
+without one:** it is hidden in the hit's frame and counted out of "alive" at once; its score, its
+sound and (if it rammed) the player's death are unchanged. As built (`EXPLOSION_SLOTS` = 4).
+
+- Why 4 is enough (`check_design.py`, "Explosions at once"): shots spawn 10 frames apart and fly at
+  most 20, so player shots make at most **3** hits in any 16 frames while every target is parked
+  (flights 18, 13, 8) and **4** with divers (it takes flights of 20, 6, 11 and 1 frames in a row).
+  A 5th can only be an enemy ramming the player inside those same 16 frames, and its missing
+  explosion is under the player's own, which is bigger, white and twice as long.
+- Not taken: a 5th slot. No sprite either way (an explosion is drawn in the dead enemy's own
+  sprite); about 42 cycles more in the worst frame (the brief's 168 for 4), from the formation's
+  row, which has none to spare, for a case a player will not see.
+- The flicker model is unchanged: its enemies never die, so every enemy sprite is already counted
+  where it is in every frame, exploding or not.
+
 ## Entities
 
 | Kind | Virtual sprites | Most at once | Pinned | Speed | Notes |
@@ -313,10 +350,12 @@ stateDiagram-v2
 | State | Position each frame | Scores | Fires |
 |---|---|---|---|
 | Parked | Home: (34 + `fx` + 36 × column, row Y) | Parked value | No |
-| WindUp | Home, plus 1 pixel left/right alternating every 2 frames; drawn white on alternate 4-frame periods. Lasts 24 / 20 / 16 / 12 frames (loops 0–3). The dive sound starts here | Diving value | No |
-| Dive | The path table, one step a frame (more on later loops) | Diving value | At the path's fire steps |
-| Return | X moves toward home X by at most 2, Y toward home Y by at most 2, every frame, until both match | Diving value | No |
-| Exploding | Stationary | – | No |
+| WindUp | Home X + 1 (frames t mod 4 = 0, 1) or − 1 (t mod 4 = 2, 3), home Y; white when t mod 8 is 0–3, its own colour when 4–7. t counts from 0 in the launch frame. Lasts W = 24 / 20 / 16 / 12 frames (loops 0–3). The dive sound starts here | Diving value | No |
+| Dive | The path table, one step a frame (more on later loops), from (home X, row Y) as they are in frame W; its own colour | Diving value | At the path's fire steps |
+| Return | X moves toward home X by at most 2, Y toward home Y by at most 2, every frame, until both match: Parked in that frame | Diving value | No |
+| Exploding | Stationary, where it was hit | – | No |
+
+Every state but Exploding can be hit, and animates with the formation (the 16-frame shape swap).
 
 ### Dive paths
 
@@ -324,7 +363,9 @@ One path per row. A path is a list of segments **(dx, dy, steps)**: add (dx, dy)
 once per step. Authored heading right; at the end of the wind-up the diver is **mirrored** (dx
 negated for the whole dive) if the player's X is less than its own, so every dive heads for the
 player's side. X is clamped to 0–344 (both ends are off screen). `steps` = 0 means "repeat until X
-reaches 0 or 344".
+reaches 0 or 344". A segment with a step count runs all its steps even while X is clamped (the diver
+is out of sight, and can't touch the player there: his box stops at least 11 pixels short of the diver's); only a
+`steps` = 0 segment tests for the edge. Steps are numbered from 1 through the whole path.
 
 **Hook** (row 2, type C). Ends in Return (climbs home from below: 32 frames). 58 steps.
 
@@ -375,19 +416,68 @@ edge, so the player is never cornered by something he can't shoot.
 
 ### Firing
 
-- At each of its path's fire steps a diver fires if: it has shots left for this dive (table below),
-  an enemy-shot slot (1–3) is free, its Y ≤ **164**, and its X is 24–320.
-- The shot starts at the diver's position. Its dx is fixed when fired: 0 if the player's X is within
-  16 of the shot's, else 1 toward the player. Its dy is 2 (3 from loop 2).
+- A dive with N shots ([Waves](#waves)) uses the path's **first N fire steps**. Straight after taking
+  a fire step (so a 2-step frame can't skip one), the diver fires if: the game state is Play, an
+  enemy-shot slot (1–3, lowest free first) is free, and its X is 24–320. A fire step that can't
+  fire is lost: the shot is not saved for a later step.
+- Every fire step in the tables is at Y ≤ **164** (asserted by the script): the code doesn't test Y.
+- The shot starts at the diver's position (same X, same Y: its art is at the bottom of the cell).
+  Its dx is fixed when fired, from d = player X − shot X: **0 if |d| ≤ 15, else + 1 if d > 0, − 1 if
+  d < 0**. Its dy is 2 (3 from loop 2). Each frame X + dx (clamped to 0–344), Y + dy; removed when
+  Y > 221. It is shown at its spawn position for one frame before it moves.
 - From Y 164 a shot reaches the player in 22 frames at dy 2, 15 at dy 3: never point blank.
 
 ### Choosing a diver
 
-A launch timer counts down every frame of play while the player is alive. At 0, if fewer than the
-wave's maximum of enemies are in WindUp, Dive or Return: pick at random among the Parked enemies
-in the wave's rows (if there are none, among all Parked enemies), put it in WindUp, and reload the
-timer with the wave's interval, **halved when 4 or fewer enemies are alive**. Otherwise retry next
-frame. An enemy always uses its own row's path.
+**Divers active** = the enemies in WindUp, Dive or Return (0–3): the count the launcher and the
+respawn test.
+
+A launch timer counts down every frame the game state is Play (not in PlayerDying, Respawn or
+GameOver), stopping at 0. At 0, if divers active is less than the wave's maximum: pick among the
+Parked enemies in the wave's rows (if there are none, among all Parked enemies), put it in WindUp,
+and reload the timer with the wave's interval, **halved (rounded down) if 4 or fewer enemies are
+alive at that moment**. If the maximum is reached or nothing is Parked, the timer stays at 0 and
+the launcher tries again next frame. An enemy always uses its own row's path.
+
+**The pick:** draw r in 0–17 and take the first candidate at enemy index r, r + 1, … wrapping at 18.
+This favours an enemy that follows a gap; accepted, it can't be seen. How r is drawn is the
+engineer's, inside the Technical Director's budget.
+
+### Stage 3 rules
+
+What stage 3 builds, to the frame. Where this and the prose above differ, this wins.
+
+**Order of a frame** (the star update may go anywhere):
+
+| # | Step | Notes |
+|---|---|---|
+| 1 | Input, panel, the game state's timer | |
+| 2 | Player shots move | As stage 1 |
+| 3 | Formation: drift, home X, animation, explosion timers | As stage 2 |
+| 4 | Enemy shots move and are removed | Before 5, so a new shot stays at its spawn position for a frame |
+| 5 | Divers: the launcher, then WindUp, Dive (steps, firing), Return | A launch is frame t = 0 of its WindUp |
+| 6 | Collisions: (a) player shots against enemies, (b) the player against enemy shots, (c) the player against enemies | (b) and (c) only in Play with the invulnerability timer at 0. **At most one player hit a frame:** if (b) hits, (c) is skipped |
+| 7 | Player: explosion and invulnerability timers, move, fire | A player hit in 6 doesn't move or fire in 7 |
+
+| # | Rule | Why |
+|---|---|---|
+| 1 | **Stage 3 plays pattern 3 at loop 0 on every formation** (all rows dive, 2 at once, interval 100, 2 shots a dive), read from the pattern and loop stores of Stage 1 rule 8 so that a test can set them. The panel stays at `WAVE 01` | Simon's playtest sees all three paths. Waves are stage 4 |
+| 2 | **Extra path steps:** at loop 1 every diver takes 2 steps in frames whose frame number mod 4 is 0; from loop 2, mod 2 is 0. All divers together | One test a frame, and what the model does |
+| 3 | **Mirror:** decided once, in frame W (the frame of step 1, before the step): mirrored if player X < the diver's home X. It uses the player's X as it stands then, also when the player is dead (where he died) | |
+| 4 | **Wrap:** in the frame X reaches 0 or 344 in a `steps` = 0 segment the diver is put at (this frame's home X, 30), in Return. Return follows the drifting home | |
+| 5 | **A diver that is hit** (WindUp, Dive or Return): the shot is removed, the diving value scored, it explodes where it is (orange, Stage 2 rule 1) and **divers active − 1 in the hit's frame**: its diver slot is free at once. Enemies alive − 1 when the explosion ends. Its shots in flight carry on | The launcher shouldn't wait for an explosion |
+| 6 | **A ram:** in 6c an enemy at Y ≥ 210 whose box overlaps the player's. The player is hit (rule 8) and the enemy is treated as hit by rule 5, scoring its diving value. An enemy hit by a shot in 6a of the same frame is already Exploding and can't ram | The shot wins: the player killed it first |
+| 7 | **Invulnerable or dead player:** steps 6b and 6c are not run, so shots and divers pass through him and a diver that would have rammed flies on | |
+| 8 | **The player is hit** (frame 0 of PlayerDying): lives − 1 and the markers redrawn; all enemy shots removed; the ship becomes the white explosion, stationary, 32 frames, then hidden. Player shots in flight carry on, hit and score. The launch timer stops and **no diver fires**; enemies in WindUp, Dive or Return carry on to Parked; the formation drifts on | Nothing new threatens a player who isn't there |
+| 9 | **PlayerDying ends** in the first frame, 100 or later, with divers active = 0: Respawn if lives > 0. With lives = 0 it ends at frame 100 whatever is diving: GameOver. Longest wait at loop 0: 232 frames (a Sweep launched in the hit's frame: 24 + 175 + 33) | |
+| 10 | **Respawn** (50 frames): `READY` on row 12; the ship appears at X 171 in its first frame and **moves and fires at once**; the invulnerability timer is set to **150** and counts down every frame (the flash: cyan or dark grey by the timer, 4 frames each). After 50 frames `READY` is erased and the state is Play with the launch timer at 50: 100 invulnerable frames of play, as designed | A frozen ship reads as a hang. Nothing is diving or in flight during `READY`, so one timer does both jobs |
+| 11 | **The player moves and fires whenever the ship is shown,** in any game state | As built in stage 1 |
+| 12 | **The formation cleared while the player is dying or respawning:** Stage 2 rule 3 runs on its own timer, whatever the game state. The launch timer is set to 50 when a formation returns and when Play is entered | No special case in stage 3 |
+| 13 | **GameOver** starts in frame 100 of the last PlayerDying: the high score is updated, `GAME OVER` on row 12, columns 15–23, for 200 frames; from its frame 50 a **new press** of fire (not a held button) ends it. The formation, divers and explosions carry on; nothing launches or fires. **Until stage 4's title exists a new game starts in the next frame:** text erased, score 0, lives 3, the formation as at power-on (all 18 Parked, `fx` 48, no diver, shot or explosion), ship at X 171 with no invulnerability, launch timer 50; the high score is kept | Held fire would skip the screen the player died holding it on |
+| 14 | **No sound in stage 3** | `engine/sfx.asm` is stage 4 |
+
+Checked for rule 10: at loop 0 the first thing that can hit a respawned player is a Hook's shot,
+50 + 24 + 8 + 32 = 114 frames into play, after the 100.
 
 ## Waves
 
@@ -447,9 +537,11 @@ stateDiagram-v2
 
 **Losing a life:** on the hit, lives − 1, enemy shots are removed, the player explodes (32 frames) and
 is hidden. No new dives start; enemies already diving finish and return. Player shots in flight
-carry on and score. On respawn the player appears at X 171 and can't be hit for 100 frames (drawn
-in alternating colours every 4 frames, not hidden); the launch timer restarts at 50. If the last
-enemy dies while the player is dying, the wave clear follows the respawn.
+carry on and score. On respawn the player appears at X 171 and can't be hit for the 50 frames of
+`READY` and the first 100 of play (drawn in alternating colours every 4 frames, not hidden); the
+launch timer restarts at 50. The frame-by-frame rules are [Stage 3 rules](#stage-3-rules) 8–13.
+From stage 4, if the last enemy dies while the player is dying or respawning, WaveClear starts when
+Play would have (the bonus is already scored: Stage 2 rule 3).
 
 ## Worst case per frame
 
@@ -462,7 +554,7 @@ Active objects (all bounded by the slot counts):
 | Enemy shots | 3 | Move; box test against the player (3 tests) |
 | Enemies parked or winding up | 18 | Home position from `fx` |
 | Enemies in Dive or Return | 3 (2 until loop 1) | Up to 2 path steps; box test against the player (3 tests) |
-| Explosions | 2 enemy + 1 player (in the dead object's slot) | Animation timer |
+| Explosions | **4** enemy + 1 player (in the dead object's slot: no sprite of their own). A 5th enemy gets none ([Explosions at once](#explosions-at-once)) | Animation timer |
 | Stars | 1 colour write | |
 | Sound | 3 voices | |
 | **Box tests in all** | **42** | |
@@ -544,9 +636,17 @@ A playtester can check each of these.
 7. A new player clears wave 1 on the first or second game, and usually loses the first life in
    wave 2 or 3.
 8. A first game lasts 2 to 4 minutes. A good player reaches loop 2 (wave 7) in about 5 minutes.
-9. Every death has a visible cause: the player can say what hit him.
+9. Every death has a visible cause: the player can say what hit him. (The same for kills, stage 2,
+   Simon on the C64 Ultimate, 2026-10-02: "it is clear when something is hit". The player's own
+   deaths are stage 3's to check.)
 10. Shooting a diver feels better than clearing parked enemies: the scores above make a game spent
     on divers worth about 1.6 times one spent on the formation.
+11. Hits are exact: a shot one pixel outside an enemy's box misses, and a well-timed shot can slip
+    past rows 2 and 1 and take the top-row enemy of the same column (the drift moves the formation
+    5 pixels between the shot passing row 2, 8 frames after firing, and reaching row 0, at 18).
+    **Met, stage 2 playtest (Simon, C64 Ultimate, 2026-10-02):** collisions "all good", and that
+    shot "feels nice and precise". No change requested: the boxes, the shot speed and the drift
+    stay as they are.
 
 ## Fire rate: decided
 
@@ -596,6 +696,9 @@ Simon, 2026-10-02, after playing stage 1 in VICE and on a C64 Ultimate:
 | # | Question | Decision | Why |
 |---|---|---|---|
 | 9 | Held fire gives 4.76 shots a second, not 5. Change it (options a to d)? | **a: leave it.** 4.76 a second held, the two shot slots are the limit | "Fire feels good." Each way to reach exactly 5 costs something the player can see ([Fire rate: decided](#fire-rate-decided)) |
+
+Simon, 2026-10-02, after playing stage 2 on the C64 Ultimate: nothing to decide. Hits are clear,
+collisions are good, the precise shot feels right (feel targets 9 and 11).
 
 Noted, not required: divers leaving through the bottom (see
 [Requests of the engine](#requests-of-the-engine)), a multiplexer v2 candidate.
