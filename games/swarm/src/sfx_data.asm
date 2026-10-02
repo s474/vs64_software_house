@@ -1,6 +1,17 @@
-// Swarm's ten sound effects as data for engine/sfx.asm: FIRST VERSIONS, the design's descriptions
-// (docs/games/swarm/design.md#sound-effects) turned into numbers by the raster-engineer. Nobody
-// has heard them yet: the designer and Simon tune them by ear (tests/engine/sfx is the player).
+// Swarm's sound effect data for engine/sfx.asm: the game's ten effects, the one copy. Owned by
+// the game: the values are the designer's and Simon's to tune by ear. FIRST VERSIONS, the
+// design's descriptions (docs/games/swarm/design.md#sound-effects) turned into numbers by the
+// raster-engineer; nobody has heard them yet.
+//
+// Imported by: games/swarm/src (as "sfx_data.asm") and the engine's sfx spike,
+// tests/engine/sfx/main.asm (as "games/swarm/src/sfx_data.asm": the repo root is on the include
+// path), which is the player for it.
+// Hear a change: make run GAME=sfx SRC_DIR=tests/engine/sfx   (joystick in port 2: choose, fire)
+//
+// The spike relies on: ten effects, numbers 0-9 in this order, with these ten SFX_* labels. An
+// effect added or removed changes the spike's list and probe numbers too: tell the
+// raster-engineer. Changing values never breaks make test ARGS=sfx (engine/sfx.md, "Where a
+// game's effect data lives").
 //
 // Use: after `#import "engine/sfx.asm"`, write SfxBegin(), import this file, add any effects of
 // your own, then SfxEnd() where the tables should stand. The effect numbers are the labels below

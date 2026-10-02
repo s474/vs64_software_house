@@ -76,11 +76,13 @@ MUTANTS = [
 def build(name: str, source: str) -> tuple[Path | None, str]:
     """Assemble the spike against `source` as engine/sfx.asm. The spike's own files are copied
     beside it, so that the import resolves to the copy (a path relative to the importing file
-    wins over the include path, and so does one relative to the working directory)."""
+    wins over the include path, and so does one relative to the working directory). Swarm's
+    effect data is not copied: the spike imports it by its repo path (games/swarm/src/sfx_data.asm),
+    found through -libdir."""
     d = OUT / name
     (d / "engine").mkdir(parents=True, exist_ok=True)
     (d / "engine/sfx.asm").write_text(source)
-    for f in ("main.asm", "zp.asm", "swarm_sfx.asm"):
+    for f in ("main.asm", "zp.asm"):
         shutil.copy(REPO / "tests/engine/sfx" / f, d / f)
     prg = d / "sfx.prg"
     p = subprocess.run([JAVA, "-jar", KICKASS, "main.asm", "-o", str(prg), "-odir", str(d),

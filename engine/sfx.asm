@@ -43,8 +43,10 @@
 //   end 63 (59); start 139 (111); a dropped request 23 on top of whatever the voice then does.
 //   The DEBUG build's idle and slide ticks are 2 and 1 over three times those: a branch of
 //   voice 1 and one of voice 2 cross a page there (fixed by the .align: the same everywhere).
-//   A tick that ends after line 255 (three starts: line 258) costs its chain entry 8 more in
-//   irq_exit (66, not 58: the framework's raster bit-8 test), measured in the spike's IRQ.
+//   A tick that ends after line 255 costs its chain entry 8 more in irq_exit (66, not 58: the
+//   framework's raster bit-8 test), measured in the spike's IRQ. That is any tick whose span is
+//   over about 225, not only three starts (which end on line 258): one start plus two slides is
+//   273, for example. The worst case, three starts, is unchanged.
 //   Size: code 586 bytes DEBUG, 490 release (budget 600); state 21; shadow 25 (DEBUG).
 // Constraints:
 //   - sfx_play: main loop only, never from an IRQ handler. It never disables interrupts.

@@ -11,8 +11,9 @@
 //   Release build: make BUILD=release GAME=sfx SRC_DIR=tests/engine/sfx (no shadow, 4 cycles
 //   less a register write; it sounds the same).
 //
-// Effects: Swarm's ten (swarm_sfx.asm, numbers 0-9), then three probe effects, one a voice: a
-// single step of 40 frames with a slide (numbers 10-12).
+// Effects: Swarm's ten (games/swarm/src/sfx_data.asm, the game's file and the one copy, imported
+// through the repo include path: numbers 0-9), then three probe effects, one a voice: a single
+// step of 40 frames with a slide (numbers 10-12).
 //
 // Chain: entry 0 at line $10 (the frame tick), entry 1 at line $FB: spike_bottom, which calls
 // sfx_update. No multiplexer, no sprites. The main loop does its sfx_play calls straight after
@@ -108,7 +109,7 @@ BasicUpstart2(start)
 
 * = * "Effects"
         SfxBegin()
-#import "swarm_sfx.asm"
+#import "games/swarm/src/sfx_data.asm"
 // The probes: one a voice, a single step of 40 frames with a non-zero slide. Soft triangles.
 .label SFX_PROBE_0 = SfxEffect(0, 1, $00, $40, 8)
         SfxStep(40, $11, $1000, $0010)
