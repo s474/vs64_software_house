@@ -1,0 +1,323 @@
+== 1 HARNESS: does the SID read back under each way of starting VICE? ==
+   live osc = sawtooth at $1000 on voice 3, 256 reads of $D41B 16 cycles apart, all as the accumulator model
+   live env = attack 0, sustain 15, gate on: $D41C is $FF one frame later
+   monitor  = the program writes ($A5 eor n) to register n of $D400-$D418; the monitor then reads them
+   budget runner and MCP server (start_vice, warp)
+      start_vice(warp=True): x64sc -default -pal -sounddev dummy -warp -minimized
+      SidEngine = 1, SidModel = 1, Sound = 1, SoundDeviceName = dummy, SoundSampleRate = 48000, SidResidSampling = 2
+      $D41B: NOT LIVE: every read $55.  $D41C: NOT LIVE: 00 00 00 00
+      monitor read of $D400-$D418: the values written
+   [ok] the monitor returns the last value written to each of $D400-$D418
+   the same without warp
+      start_vice(warp=False): x64sc -default -pal -sounddev dummy -minimized
+      SidEngine = 1, SidModel = 1, Sound = 1, SoundDeviceName = dummy, SoundSampleRate = 48000, SidResidSampling = 2
+      $D41B: NOT LIVE: every read $55.  $D41C: NOT LIVE: 00 00 00 00
+      monitor read of $D400-$D418: the values written
+   [ok] the monitor returns the last value written to each of $D400-$D418
+   this script (-sounddev dump -soundarg /dev/null, warp)
+      x64sc -default -pal -sounddev dump -soundarg /dev/null -warp -minimized
+      SidEngine = 1, SidModel = 1, Sound = 1, SoundDeviceName = dump, SoundSampleRate = 48000, SidResidSampling = 2
+      $D41B: LIVE.  $D41C: LIVE
+      monitor read of $D400-$D418: the values written
+   [ok] this script's settings read $D41B and $D41C live
+   [ok] the monitor returns the last value written to each of $D400-$D418
+   the same without warp
+      x64sc -default -pal -sounddev dump -soundarg /dev/null -minimized
+      SidEngine = 1, SidModel = 1, Sound = 1, SoundDeviceName = dump, SoundSampleRate = 48000, SidResidSampling = 2
+      $D41B: LIVE.  $D41C: LIVE
+      monitor read of $D400-$D418: the values written
+   [ok] this script's settings read $D41B and $D41C live
+   [ok] the monitor returns the last value written to each of $D400-$D418
+   sound switched off (+sound, warp)
+      x64sc -default -pal +sound -warp -minimized
+      SidEngine = 1, SidModel = 1, Sound = 0, SoundDeviceName = coreaudio, SoundSampleRate = 48000, SidResidSampling = 2
+      $D41B: NOT THE OSCILLATOR: 1a 2a 3a 4a 5a 6a 7a 8a ....  $D41C: NOT LIVE: f8 c3 8b 53
+      monitor read of $D400-$D418: the values written
+   [ok] the monitor returns the last value written to each of $D400-$D418
+   VICE's defaults, real sound device, no warp
+      x64sc -default -pal -minimized
+      SidEngine = 1, SidModel = 1, Sound = 1, SoundDeviceName = coreaudio, SoundSampleRate = 48000, SidResidSampling = 2
+      $D41B: LIVE.  $D41C: LIVE
+      monitor read of $D400-$D418: the values written
+   [ok] the monitor returns the last value written to each of $D400-$D418
+   VICE's defaults, real sound device, warp
+      x64sc -default -pal -warp -minimized
+      SidEngine = 1, SidModel = 1, Sound = 1, SoundDeviceName = coreaudio, SoundSampleRate = 48000, SidResidSampling = 2
+      $D41B: LIVE.  $D41C: LIVE
+      monitor read of $D400-$D418: the values written
+   [ok] the monitor returns the last value written to each of $D400-$D418
+   Simon's own settings, as `make run` starts it (no -default)
+      x64sc -minimized
+      SidEngine = 1, SidModel = 1, Sound = 1, SoundDeviceName = coreaudio, SoundSampleRate = 48000, SidResidSampling = 2
+      $D41B: LIVE.  $D41C: LIVE
+      monitor read of $D400-$D418: the values written
+   [ok] the monitor returns the last value written to each of $D400-$D418
+   SidEngine 1 = reSID. SidModel 0 = 6581, 1 = 8580, 2 = 8580 + digi boost (x64sc -help, -sidenginemodel:
+   256 reSID 6581, 257 reSID 8580, 258 reSID 8580 + digiboost).
+
+Sections 2-9: VICE 3.10.0.0, x64sc -default -pal -sounddev dump -soundarg /dev/null -warp -minimized; SidEngine = 1, SidModel = 1, Sound = 1, SoundDeviceName = dump, SoundSampleRate = 48000, SidResidSampling = 2
+
+== 2 READBACK: what the program reads from $D400-$D41C ==
+   written           : a5 a4 a7 a6 a1 a0 a3 a2 ad ac af ae a9 a8 ab aa b5 b4 b7 b6 b1 b0 b3 b2 bd
+   read 4 cycles on  : a5 a4 a7 a6 a1 a0 a3 a2 ad ac af ae a9 a8 ab aa b5 b4 b7 b6 b1 b0 b3 b2 bd
+   read a frame later: bd bd bd bd bd bd bd bd bd bd bd bd bd bd bd bd bd bd bd bd bd bd bd bd bd | $D419-$D41C: ff ff 00 0e
+   after $5A -> $D401: 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a | $D419-$D41C: ff ff 00 0e
+   monitor, no side effects, at the same moment as the first row: a5 a4 a7 a6 a1 a0 a3 a2 ad ac af ae a9 a8 ab aa b5 b4 b7 b6 b1 b0 b3 b2 bd
+   [ok] a read 4 cycles after the write returns the value just written
+   [ok] a frame later every write-only register reads the same: $bd (the last byte written to the chip was $bd)
+   [ok] after a write to one register, every write-only register reads that byte
+   So a read does not return the register: it returns the last byte written to ANY SID register
+   (how long that lasts on a chip is not measured here: the read a frame later still had it).
+
+== 3 OSC: the accumulator (sawtooth, $D41B = bits 23-16) ==
+   spacing, measured at the labels: release write -> first read 4 cycles (instruction starts; the write and the read are each its 4th cycle), read period 16, 16
+   [ok] the reads are 16 cycles apart, the first 4 after the write
+   F = $1000: reads 00 01 02 03 04 05 06 07 08 09 0a 0b ... fc fd fe ff
+   [ok] all 256 reads = floor(F x (d + 16 i) / 65536) mod 256 with d = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] cycles
+   F = $1d45: reads 00 02 04 05 07 09 0b 0d 0e 10 12 14 ... cd cf d0 d2
+   [ok] all 256 reads = floor(F x (d + 16 i) / 65536) mod 256 with d = [3] cycles
+   F = $f123: reads 02 11 20 30 3f 4e 5d 6c 7b 8a 99 a8 ... d8 e7 f6 05
+   [ok] all 256 reads = floor(F x (d + 16 i) / 65536) mod 256 with d = [3] cycles
+   F = $0001: reads 00 00 00 00 00 00 00 00 00 00 00 00 ... 00 00 00 00
+   [ok] F = 1: all 256 reads 0 (4,084 cycles x 1 is below 65,536)
+   So the oscillator is a 24-bit count that adds the frequency value once a cycle, from the cycle the
+   test bit is cleared: Hz = F x clock / 16,777,216. With the PAL clock figure (985,248, unmeasured)
+   F = Hz x 17.0284; A4 (440 Hz) = 7493 = $1d45.
+
+== 4 ENVELOPE: $D41C at each tick (before the tick's write), for Swarm's values ==
+   tick 0 = the start (gate on); G = the tick the gate is cleared. One tick = 19,656 cycles = 19.95 ms.
+   player shot: AD $00 SR $a0, G = 8   (nominal: attack 2 ms, decay 6 ms to sustain $aa, release 6 ms)
+      tick   0: 00 aa aa aa aa aa aa aa aa 00 00 00 00 00 00 00 00 00 00 00
+      tick  20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      tick  40: 00 00 00 00 00 00 00 00
+      highest value seen at a tick $aa; at G $aa; 0 first read 1 ticks after G
+   [ok] the sustain level is the nibble x 17 = $aa
+   enemy shot: AD $00 SR $f0, G = 6   (nominal: attack 2 ms, decay 6 ms to sustain $ff, release 6 ms)
+      tick   0: 00 ff ff ff ff ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00
+      tick  20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      tick  40: 00 00 00 00 00 00
+      highest value seen at a tick $ff; at G $ff; 0 first read 1 ticks after G
+   [ok] the sustain level is the nibble x 17 = $ff
+   dive: AD $10 SR $80, G = 30   (nominal: attack 8 ms, decay 6 ms to sustain $88, release 6 ms)
+      tick   0: 00 88 88 88 88 88 88 88 88 88 88 88 88 88 88 88 88 88 88 88
+      tick  20: 88 88 88 88 88 88 88 88 88 88 88 00 00 00 00 00 00 00 00 00
+      tick  40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      tick  60: 00 00 00 00 00 00 00 00 00 00
+      highest value seen at a tick $88; at G $88; 0 first read 1 ticks after G
+   [ok] the sustain level is the nibble x 17 = $88
+   enemy explosion: AD $08 SR $00, G = 16   (nominal: attack 2 ms, decay 300 ms to sustain $00, release 6 ms)
+      tick   0: 00 d4 a1 6f 4d 35 29 1c 15 0f 0c 08 06 04 03 01 00 00 00 00
+      tick  20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      tick  40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      highest value seen at a tick $d4; at G $00; 0 first read 0 ticks after G
+   player hit (both voices), game over (a note: 15): AD $0a SR $00, G = 60   (nominal: attack 2 ms, decay 1500 ms to sustain $00, release 6 ms)
+      tick   0: 00 f7 ed e3 d9 ce c4 ba b0 a6 9c 92 88 7e 74 6a 60 5a 55 50
+      tick  20: 4b 46 40 3b 36 34 31 2f 2c 2a 27 25 22 20 1d 1b 19 18 17 16
+      tick  40: 14 13 12 11 0f 0e 0e 0d 0c 0c 0b 0b 0a 09 09 08 07 07 06 06
+      tick  60: 06 06 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      tick  80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      highest value seen at a tick $f7; at G $06; 0 first read 2 ticks after G
+   wave start, wave clear (a note), start: AD $09 SR $00, G = 9   (nominal: attack 2 ms, decay 750 ms to sustain $00, release 6 ms)
+      tick   0: 00 ee da c6 b2 9d 89 75 61 55 55 00 00 00 00 00 00 00 00 00
+      tick  20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+      tick  40: 00 00 00 00 00 00 00 00 00
+      highest value seen at a tick $ee; at G $55; 0 first read 2 ticks after G
+   The attack, read finely (period 22 or 42 cycles), gate on from silence (rate counter at rate 0):
+      attack 0: first read 29 cycles after the gate-on write, then every 22: 03 06 08 0b 0d 10 12 14 17 19 ...
+         first non-zero read at 29 cycles; $FF first read at 2295 cycles = 2.33 ms (nominal 2 ms)
+      attack 1: first read 29 cycles after the gate-on write, then every 42: 00 02 03 04 06 07 08 0a 0b 0c ...
+         first non-zero read at 71 cycles; $FF first read at 8177 cycles = 8.30 ms (nominal 8 ms)
+
+== 5 RETRIGGER ==
+   (a) a control write with the gate already set, at tick 5; $D41C then read every 132 cycles for 33,800
+       cycles. A restarted attack would show as a read higher than the one before it.
+       AD $0A SR $00 (falling slowly from $FF), tick 5 writes $41 again: level $ce, reads ce ce ce ce ... bd bd
+   [ok] writing $41 again with the gate set does not restart the attack
+       AD $0A SR $00 (falling slowly from $FF), tick 5 writes $21 (another waveform, gate still set): level $df, reads df df df df ... ce ce
+   [ok] writing $21 (another waveform, gate still set) with the gate set does not restart the attack
+       AD $00 SR $A0 (sustaining at $AA), tick 5 writes $41 again: level $aa, reads aa aa aa aa ... aa aa
+   [ok] writing $41 again with the gate set does not restart the attack
+       AD $00 SR $A0 (sustaining at $AA), tick 5 writes $21 (another waveform, gate still set): level $aa, reads aa aa aa aa ... aa aa
+   [ok] writing $21 (another waveform, gate still set) with the gate set does not restart the attack
+       AD $0A SR $00 tick by tick, no write   : 00 f7 ed e3 d9 ce c4 ba b0 a6 9c 92
+       the same with $41 written at tick 5    : 00 f7 ed e3 d9 ce c4 ba b0 a6 9c 92
+       (two rows that differ by a shift are a start that was late in one of them: section 8)
+   (b) a start on a sounding voice at tick 5: control 0, then the gate again (the module's 7 writes).
+       $D41C read every 132 cycles from the gate-on write.
+       AD $00 SR $A0 (every rate 0; sustaining at $AA)
+          control 0 -> gate 63 cycles (measured): level at tick 5 $aa; first reads a6 b5 c3 d2 e1; first rise 161 cycles after the gate, $F0 or more at 821
+   [ok] the attack restarts from about the level the envelope was at, not from 0, and reaches the top
+          control 0 -> gate 53 cycles (measured): level at tick 5 $aa; first reads a7 b6 c5 d3 e2; first rise 161 cycles after the gate, $F0 or more at 689
+   [ok] the attack restarts from about the level the envelope was at, not from 0, and reaches the top
+          control 0 -> gate 48 cycles (measured): level at tick 5 $aa; first reads a7 b5 c4 d3 e1; first rise 161 cycles after the gate, $F0 or more at 689
+   [ok] the attack restarts from about the level the envelope was at, not from 0, and reaches the top
+       AD $0A SR $00 (decay 10; falling)
+          control 0 -> gate 63 cycles (measured): level at tick 5 $ce; first reads ce ce ce ce ce; first rise 32,633 cycles after the gate, $F0 or more at 32,897
+   [ok] the attack restarts from about the level the envelope was at, not from 0, and reaches the top
+          control 0 -> gate 53 cycles (measured): level at tick 5 $ce; first reads ce ce ce ce ce; first rise 32,633 cycles after the gate, $F0 or more at 32,897
+   [ok] the attack restarts from about the level the envelope was at, not from 0, and reaches the top
+          control 0 -> gate 48 cycles (measured): level at tick 5 $ce; first reads ce ce ce ce ce; first rise 32,633 cycles after the gate, $F0 or more at 32,897
+   [ok] the attack restarts from about the level the envelope was at, not from 0, and reaches the top
+       AD $0A SR $00 tick by tick: 00 f7 ed e3 d9 ce ce fc f2 e8 de d4
+   (c) a gate-off step between notes: AD $09 SR $00 (the note effects), gate off at tick 9.
+       gate off for 1 tick(s), on again at tick 10: 00 ee da c6 b2 9d 89 75 61 55 55 fa e6 d2 bd a9 95 81 6d 5b 51 47
+          level when the gate is set again $55; first reads 6e 6e 6e 6e 6e; first rise at read 99, $F0 or more at read 108 (reads 132 cycles apart, the first a few cycles after the write)
+   [ok] the gate-on starts a new attack: the top is reached again within the tick
+       gate off for 2 tick(s), on again at tick 11: 00 00 fb e7 d3 bf ab 97 83 6e 6e 00 ee da c6 b1 9d 89 75 61 55 4b
+          level when the gate is set again $00; first reads 02 11 20 2e 3d; first rise at read 1, $F0 or more at read 17 (reads 132 cycles apart, the first a few cycles after the write)
+   [ok] the gate-on starts a new attack: the top is reached again within the tick
+
+== 6 PULSE: control $40, F = $1000, 256 reads 16 cycles apart = exactly one period ==
+   n = the high register ($D411), low register 0
+      n= 0: $FF 256, $00   0   n= 1: $FF 240, $00  16   n= 2: $FF 224, $00  32   n= 3: $FF 208, $00  48
+      n= 4: $FF 192, $00  64   n= 5: $FF 176, $00  80   n= 6: $FF 160, $00  96   n= 7: $FF 144, $00 112
+      n= 8: $FF 128, $00 128   n= 9: $FF 112, $00 144   n=10: $FF  96, $00 160   n=11: $FF  80, $00 176
+      n=12: $FF  64, $00 192   n=13: $FF  48, $00 208   n=14: $FF  32, $00 224   n=15: $FF  16, $00 240
+   [ok] every read is $00 or $FF, and the share of $00 reads is exactly n/16 (so $FF is 1 - n/16): the output is low while the top 12 bits of the accumulator are below the width
+   n = 0 is a constant $FF: no sound from that voice. n and 16 - n are the same wave upside down.
+
+== 7 NOISE: control $81 (after the test bit), 256 reads of $D41B 16 cycles apart ==
+   F = $0400:   4 changes in 4,080 cycles; one shift every 2^20 / F = 1024 cycles would be 4.  25 25 25 25 25 25 25 25 25 25 ...
+   F = $1000:  16 changes in 4,080 cycles; one shift every 2^20 / F = 256 cycles would be 16.  8f 8f 8f 8f 8f 8f 8f 8f d5 d5 ...
+   F = $4000:  64 changes in 4,080 cycles; one shift every 2^20 / F = 64 cycles would be 64.  ea ea 40 40 40 40 f1 f1 f1 f1 ...
+   F = $ffff: 254 changes in 4,080 cycles; one shift every 2^20 / F = 16 cycles would be 255.  9d dd 76 f2 a9 ac 7e 50 d0 ed ...
+   the same run twice gives different reads (about 1,300 cycles of the test bit do not reset the noise register)
+   So the noise value changes at a rate that follows the frequency value: once every 2^20 / F cycles.
+
+== 8 LATE: how long after the gate-on write does the envelope first rise? ==
+   `new` is started (the module's 7 writes, DEBUG spacing) at the tick given, on a voice that `previous`
+   was started on at tick 0 (from silence) with its gate cleared at tick G. $D41C is then read every 132
+   cycles; the first read higher than the one before it is the first rise, in cycles after the gate-on
+   write (resolution 132 cycles = 0.13 ms; a tick is 19,656 = 19.95 ms). 'Prompt' = within 2,000 cycles
+   (measured: 154). Every run is made 9 times, the tick's writes moved 5 cycles each time, so that the
+   envelope's rate counter is met in every phase of a 9-cycle period: the game's tick lands on any.
+   From silence (the voice's last gate-off used release 0, long ago), 45 runs each. The count of late
+   runs is a sample: which phase the rate counter is in at the tick is not under the probe's control.
+      player shot, AD $00 SR $a0: level $00: prompt in 45 of 45 phases
+      enemy shot, AD $00 SR $f0: level $00: prompt in 45 of 45 phases
+      dive, AD $10 SR $80: level $00: prompt in 45 of 45 phases
+      enemy explosion, AD $08 SR $00: level $00: prompt in 37 of 45 phases, LATE in 8: first rise 32,897-32,897 cycles (33.4 ms)
+      a note (wave start, wave clear, start), AD $09 SR $00: level $00: prompt in 44 of 45 phases, LATE in 1: first rise 32,897-32,897 cycles (33.4 ms)
+      player hit, game over, AD $0a SR $00: level $00: prompt in 45 of 45 phases
+   player shot after player shot (fire held: 10 or 11 ticks apart): previous AD $00 SR $a0 G = 8; new AD $00 SR $a0
+      new at tick  10: level $00: prompt in 9 of 9 phases
+      new at tick  11: level $00: prompt in 9 of 9 phases
+   player shot cutting an enemy shot short: previous AD $00 SR $f0 G = 6; new AD $00 SR $a0
+      new at tick   1: level $ff: prompt in 0 of 9 phases, no rise in 9 (already at the top, falling to the sustain level)
+      new at tick   3: level $ff: prompt in 2 of 9 phases, no rise in 7 (already at the top, falling to the sustain level)
+      new at tick   5: level $ff: prompt in 1 of 9 phases, no rise in 8 (already at the top, falling to the sustain level)
+      new at tick   6: level $ff: prompt in 1 of 9 phases, no rise in 8 (already at the top, falling to the sustain level)
+      new at tick   7: level $00: prompt in 9 of 9 phases
+   enemy shot cutting a player shot short: previous AD $00 SR $a0 G = 8; new AD $00 SR $f0
+      new at tick   1: level $aa: prompt in 9 of 9 phases
+      new at tick   4: level $aa: prompt in 9 of 9 phases
+      new at tick   8: level $aa: prompt in 9 of 9 phases
+      new at tick   9: level $00: prompt in 9 of 9 phases
+   player shot after the start note (cooldown 25): previous AD $09 SR $00 G = 10; new AD $00 SR $a0
+      new at tick  25: level $00: prompt in 9 of 9 phases
+      new at tick  26: level $00: prompt in 9 of 9 phases
+   player shot cutting the start note (not possible in Swarm: for the rule): previous AD $09 SR $00 G = 10; new AD $00 SR $a0
+      new at tick   3: level $c6/$e7: prompt in 0 of 9 phases, LATE in 9: first rise 31,841-32,369 cycles (32.9 ms)
+      new at tick   9: level $55/$6e: prompt in 0 of 9 phases, LATE in 9: first rise 32,105-32,633 cycles (33.1 ms)
+      new at tick  10: level $4b/$5c: prompt in 0 of 9 phases, LATE in 9: first rise 31,973-32,501 cycles (33.0 ms)
+      new at tick  11: level $4b: prompt in 0 of 9 phases, LATE in 9: first rise 12,305-12,437 cycles (12.6 ms)
+      new at tick  12: level $00: prompt in 9 of 9 phases
+   enemy explosion after enemy explosion: previous AD $08 SR $00 G = 16; new AD $08 SR $00
+      new at tick   1: level $d4: prompt in 0 of 9 phases, LATE in 9: first rise 32,765-32,765 cycles (33.3 ms)
+      new at tick   3: level $6f/$c3: prompt in 0 of 9 phases, LATE in 9: first rise 32,501-32,633 cycles (33.1 ms)
+      new at tick   8: level $15: prompt in 0 of 9 phases, LATE in 9: first rise 32,765-32,765 cycles (33.3 ms)
+      new at tick  12: level $06: prompt in 0 of 9 phases, LATE in 9: first rise 32,501-32,501 cycles (33.0 ms)
+      new at tick  16: level $00/$02: prompt in 0 of 9 phases, LATE in 9: first rise 32,501-32,633 cycles (33.1 ms)
+      new at tick  17: level $00: prompt in 0 of 9 phases, LATE in 9: first rise 12,965-12,965 cycles (13.2 ms)
+      new at tick  18: level $00: prompt in 9 of 9 phases
+      new at tick  30: level $00: prompt in 8 of 9 phases, LATE in 1: first rise 32,897-32,897 cycles (33.4 ms)
+   player hit after an enemy explosion: previous AD $08 SR $00 G = 16; new AD $0a SR $00
+      new at tick   1: level $00/$d4: prompt in 0 of 9 phases, LATE in 9: first rise 13,229-32,765 cycles (33.3 ms)
+      new at tick   5: level $35/$5f: prompt in 0 of 9 phases, LATE in 9: first rise 32,501-32,765 cycles (33.3 ms)
+      new at tick  16: level $00: prompt in 0 of 9 phases, LATE in 9: first rise 32,633-32,633 cycles (33.1 ms)
+      new at tick  18: level $00: prompt in 8 of 9 phases, LATE in 1: first rise 32,897-32,897 cycles (33.4 ms)
+      new at tick  25: level $00: prompt in 9 of 9 phases
+   enemy explosion after the player hit's rumble: previous AD $0a SR $00 G = 60; new AD $08 SR $00
+      new at tick  60: level $06: prompt in 0 of 9 phases, LATE in 9: first rise 32,105-32,105 cycles (32.6 ms)
+      new at tick  61: level $06: prompt in 0 of 9 phases, LATE in 9: first rise 12,437-12,437 cycles (12.6 ms)
+      new at tick  62: level $00: prompt in 9 of 9 phases
+      new at tick 100: level $00: prompt in 9 of 9 phases
+   dive restarted by a new dive: previous AD $10 SR $80 G = 30; new AD $10 SR $80
+      new at tick   1: level $88: prompt in 9 of 9 phases
+      new at tick  12: level $88: prompt in 9 of 9 phases
+      new at tick  24: level $88: prompt in 9 of 9 phases
+      new at tick  30: level $88: prompt in 9 of 9 phases
+      new at tick  31: level $00: prompt in 9 of 9 phases
+      new at tick  40: level $00: prompt in 9 of 9 phases
+   wave start (a note) after a dive: previous AD $10 SR $80 G = 30; new AD $09 SR $00
+      new at tick  15: level $88: prompt in 0 of 9 phases, LATE in 9: first rise 32,765-32,765 cycles (33.3 ms)
+      new at tick  30: level $88: prompt in 0 of 9 phases, LATE in 9: first rise 32,765-32,765 cycles (33.3 ms)
+      new at tick  31: level $00: prompt in 9 of 9 phases
+      new at tick  40: level $00: prompt in 8 of 9 phases, LATE in 1: first rise 32,897-32,897 cycles (33.4 ms)
+   game over after a player shot: previous AD $00 SR $a0 G = 8; new AD $0a SR $00
+      new at tick   3: level $aa: prompt in 0 of 9 phases, LATE in 9: first rise 32,765-32,765 cycles (33.3 ms)
+      new at tick   8: level $aa: prompt in 0 of 9 phases, LATE in 9: first rise 32,765-32,765 cycles (33.3 ms)
+      new at tick   9: level $00: prompt in 9 of 9 phases
+      new at tick  12: level $00: prompt in 9 of 9 phases
+   NOT Swarm's data: a slow release left on an idle voice (SR $85, release 5), then the dive: previous AD $10 SR $85 G = 30; new AD $10 SR $85
+      new at tick  12: level $88: prompt in 0 of 9 phases, LATE in 9: first rise 32,765-32,765 cycles (33.3 ms)
+      new at tick  40: level $00: prompt in 9 of 9 phases
+      new at tick 100: level $00: prompt in 0 of 9 phases, LATE in 9: first rise 32,633-32,633 cycles (33.1 ms)
+      new at tick 150: level $00: prompt in 9 of 9 phases
+   NOT Swarm's data: the same, then a player shot: previous AD $10 SR $85 G = 30; new AD $00 SR $a0
+      new at tick  60: level $00: prompt in 0 of 9 phases, LATE in 9: first rise 32,633-32,633 cycles (33.1 ms)
+      new at tick 100: level $00: prompt in 0 of 9 phases, LATE in 9: first rise 32,633-32,633 cycles (33.1 ms)
+      new at tick 150: level $00: prompt in 0 of 9 phases, LATE in 9: first rise 32,633-32,633 cycles (33.1 ms)
+   A note sequence's own step (AD $09 SR $00): gate off for one or two ticks, then the control write alone.
+      gate off at tick 9, on at 10: level $55: prompt in 0 of 9 phases, LATE in 9: first rise 12,540-12,540 cycles (12.7 ms)
+      gate off at tick 9, on at 11: level $00: prompt in 9 of 9 phases
+      gate off at tick 3, on at 4: level $c6/$e7: prompt in 0 of 9 phases, LATE in 9: first rise 12,276-12,804 cycles (13.0 ms)
+      gate off at tick 3, on at 5: level $00: prompt in 6 of 9 phases, LATE in 3: first rise 32,868-32,868 cycles (33.4 ms)
+   Reading it. The envelope steps when its rate counter (counting up once a cycle) equals the period of
+   the rate in force; if the period in force becomes SMALLER than the count, the counter must run on to
+   32,768 and wrap before it matches again: up to 33.3 ms = 1.67 ticks in which the envelope holds the
+   level it had. That happens to a start (1) always, when the voice was stepping at a slow rate: in a
+   slow decay (the explosion, the notes, the hit) or idle after a release above 0; (2) in some phases
+   even from silence, when the new effect's own decay is slower than its attack (the same three): the
+   gate-on write puts the decay period in force for a moment before the attack period. Effects whose
+   rates are all 0 (the shots) or whose decay is no slower than their attack (the dive) are never late,
+   from silence or on top of each other.
+
+== 9 VARIANT, for the Technical Director: decay 0 until the gate is on ==
+   The start sequence with one more write: attack/decay is written with decay 0 where the module writes
+   it, and whole again 18 cycles after the gate-on write (8 writes; probe actions 5 and 6). Same 9 phases.
+   From silence, 45 runs each:
+      enemy explosion, AD $08 SR $00
+         as the module does it: level $00: prompt in 44 of 45 phases, LATE in 1: first rise 32,897-32,897 cycles (33.4 ms)
+         the variant          : level $00: prompt in 45 of 45 phases
+      a note, AD $09 SR $00
+         as the module does it: level $00: prompt in 45 of 45 phases
+         the variant          : level $00: prompt in 45 of 45 phases
+      player hit, game over, AD $0a SR $00
+         as the module does it: level $00: prompt in 45 of 45 phases
+         the variant          : level $00: prompt in 45 of 45 phases
+      player shot, AD $00 SR $a0
+         as the module does it: level $00: prompt in 45 of 45 phases
+         the variant          : level $00: prompt in 45 of 45 phases
+      dive, AD $10 SR $80
+         as the module does it: level $00: prompt in 45 of 45 phases
+         the variant          : level $00: prompt in 45 of 45 phases
+   The envelope tick by tick, explosion (AD $08 SR $00): the variant must not change the sound. (A row
+   that starts 00 00 is a run that happened to be late.)
+         as the module does it: 00 d4 a1 6f 4d 35 29 1c 15 0f 0c 08
+         the variant          : 00 d4 a1 6f 4d 35 29 1c 15 0f 0c 08
+         as the module does it: 00 d4 a1 6f 4d 35 29 1c 15 0f 0c 08
+         the variant          : 00 d4 a2 6f 4d 35 29 1c 15 0f 0c 08
+         as the module does it: 00 d4 a2 6f 4d 35 29 1c 15 0f 0c 08
+         the variant          : 00 d4 a2 6f 4d 35 29 1c 15 0f 0c 08
+   On top of a sounding effect (enemy explosion after enemy explosion, G = 16):
+      new at tick  3, as the module does it: level $6f/$c3: prompt in 0 of 9 phases, LATE in 9: first rise 32,501-32,633 cycles (33.1 ms)
+      new at tick  3, the variant          : level $6f/$c3: prompt in 0 of 9 phases, LATE in 9: first rise 32,512-32,644 cycles (33.1 ms)
+      new at tick  8, as the module does it: level $15/$25: prompt in 0 of 9 phases, LATE in 9: first rise 32,501-32,765 cycles (33.3 ms)
+      new at tick  8, the variant          : level $15/$25: prompt in 0 of 9 phases, LATE in 9: first rise 32,512-32,776 cycles (33.3 ms)
+      new at tick 16, as the module does it: level $00: prompt in 0 of 9 phases, LATE in 9: first rise 32,633-32,633 cycles (33.1 ms)
+      new at tick 16, the variant          : level $00/$02: prompt in 0 of 9 phases, LATE in 9: first rise 32,512-32,644 cycles (33.1 ms)
+      new at tick 18, as the module does it: level $00: prompt in 9 of 9 phases
+      new at tick 18, the variant          : level $00: prompt in 9 of 9 phases
+
+ALL CHECKS OK
