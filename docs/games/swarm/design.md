@@ -16,8 +16,9 @@ sprite and text colours have a table ([Colours](#colours)), and the hit boxes an
 may occupy are exact ([Hit boxes](#hit-boxes)). **2026-10-02, after stage 1, no behaviour change:**
 feel target 2 states the measured fire rate (4.76 a second, not 5), the choices the stage 1 build
 made where this document was silent are written down as rules
-([Stage 1 rules](#stage-1-rules-confirmed-from-the-build)), and the fire-rate options wait for
-Simon's playtest ([Tuning options awaiting playtest](#tuning-options-awaiting-playtest)).
+([Stage 1 rules](#stage-1-rules-confirmed-from-the-build)), and the fire-rate options were set out for
+Simon's playtest. **2026-10-02, after Simon's stage 1 playtest, no behaviour change:** the fire rate
+stays as built ([Fire rate: decided](#fire-rate-decided), decision 9).
 
 Every number that can be checked without the game is checked by
 [tests/games/swarm/check_design.py](../../../tests/games/swarm/check_design.py)
@@ -531,8 +532,10 @@ A playtester can check each of these.
    5 a second only while each shot hits something within 20 frames. Measured in the game
    (`check.py` fire-hold: 20 shots in 200 frames, printed as 4.77) and the same in the model. (An
    earlier version of this target said a steady 5 with the cooldown as the limit: that was wrong.
-   Tuning: [options below](#tuning-options-awaiting-playtest). If misses should cost more, slow the
-   shot to 6 px/frame: a miss then lives 28 frames, 3.57 shots a second.)
+   **Settled 2026-10-02:** Simon played stage 1 in VICE and on a C64 Ultimate, "fire feels good",
+   and the rate stays as it is ([Fire rate: decided](#fire-rate-decided), decision 9). If a later
+   playtest wants misses to cost more, slow the shot to 6 px/frame: a miss then lives 28 frames,
+   3.57 shots a second.)
 3. A dive is announced: the wind-up (flash and sound) starts **1.2 s** before a Hook can first touch
    the player at loop 0 (24 wind-up frames + 35 path steps), and about 0.7 s at loop 3 (12 + 24).
 4. No enemy shot arrives less than **0.44 s** after it's fired at loops 0–1, 0.3 s later.
@@ -545,22 +548,28 @@ A playtester can check each of these.
 10. Shooting a diver feels better than clearing parked enemies: the scores above make a game spent
     on divers worth about 1.6 times one spent on the formation.
 
-## Tuning options awaiting playtest
+## Fire rate: decided
 
-**Held fire rate.** Not changed until Simon has played stage 1. A miss lives 21 frames (Y 213 to 53
-by 8), so held fire is 100 / 21 = 4.76 a second.
+**Held fire rate: no change (option a).** Simon played stage 1 on 2026-10-02, in VICE and on a real
+C64 Ultimate: "fire feels good". A miss lives 21 frames (Y 213 to 53 by 8), so held fire stays at
+100 / 21 = 4.76 a second, gaps 10, 11, 10, 11 frames, and 5.00 when shots hit within 20 frames. The
+two slots are the limit. The 5% and the 1-frame (20 ms) difference between gaps can't be seen or
+heard.
 
-| | Change | Held rate, all misses | Costs |
-|---|---|---|---|
-| **a** | **None** | 4.76 a second, gaps 10, 11, 10, 11 frames; 5.00 when shots hit within 20 frames | Nothing. The 5% and the 1-frame (20 ms) difference between gaps can't be seen or heard |
-| b | Kill line: removed when Y < **54** (from 46). A miss lives 20 frames, last shown at Y 61 | 5.00, gaps all 10 | The shot vanishes 8 lines lower: its top at raster line 62, 11 lines inside the screen, not 3. Row 0 is still hit (its box is lines 60–74). A diver sliding in from the wrap can first be hit at Y 44, not 36: 4 frames later |
-| c | A third shot slot | 5.00, gaps all 10, up to 3 in flight | **No free sprite: all 24 are allocated and v1 has no 25th.** It takes an enemy shot's slot (3 to 2, which removes the third bomb of pattern 2 from loop 1) or an enemy (17, against the brief's 18). Box tests 36 to 54. A third shot is the third visitor in a row's window, which is where flicker starts ([The formation](#the-formation)) |
-| d | Spawn at Y **205** (from 213). A miss lives 20 frames, kill line and top of screen unchanged | 5.00, gaps all 10 | The shot appears 12 lines above the ship's nose, not 4: it looks less like it left the gun |
+Options not taken, each of which would have given exactly 5.00 with gaps all 10:
 
-**Recommendation: a.** The gap between 4.76 and 5.00 is one frame in 21; b, c and d each trade it
-for something the player can see. If the fire feels too slow or too fast in play, that is a
-different question (shot speed, or how many shots), and it gets its own numbers after the playtest.
-If Simon wants exactly 5, take **b**: one constant, no sprite, no art.
+- **b. Kill line at Y < 54 (from 46).** The shot vanishes 8 lines lower, 11 lines inside the screen
+  instead of 3, and a diver sliding in from the wrap can first be hit 4 frames later (Y 44, not 36).
+  The one to take if exactly 5 is ever wanted: one constant, no sprite, no art.
+- **c. A third shot slot.** No free sprite: all 24 are allocated and v1 has no 25th, so it costs an
+  enemy shot (3 to 2) or an enemy (17, against the brief's 18), takes box tests from 36 to 54, and
+  puts a third visitor in a row's window, which is where flicker starts
+  ([The formation](#the-formation)).
+- **d. Spawn at Y 205 (from 213).** The shot appears 12 lines above the ship's nose, not 4: it looks
+  less like it left the gun.
+
+If fire later feels too slow or too fast, that is a different question (shot speed, or how many
+shots) and gets its own numbers.
 
 ## Decisions
 
@@ -581,6 +590,12 @@ Simon, 2026-10-01, after the technical design:
 | # | Question | Decision | Why |
 |---|---|---|---|
 | 8 | The panel's white text on a blue bar can't be done with reverse video (the text would be black). Extended colour mode, or black text on a lighter bar? | **Extended colour mode for the whole screen** | White on blue as designed, with no raster split. The cost is 64 glyphs for the whole screen; the design uses 35 ([Character set](#character-set-64-glyphs)) |
+
+Simon, 2026-10-02, after playing stage 1 in VICE and on a C64 Ultimate:
+
+| # | Question | Decision | Why |
+|---|---|---|---|
+| 9 | Held fire gives 4.76 shots a second, not 5. Change it (options a to d)? | **a: leave it.** 4.76 a second held, the two shot slots are the limit | "Fire feels good." Each way to reach exactly 5 costs something the player can see ([Fire rate: decided](#fire-rate-decided)) |
 
 Noted, not required: divers leaving through the bottom (see
 [Requests of the engine](#requests-of-the-engine)), a multiplexer v2 candidate.
