@@ -6,6 +6,8 @@ and cycle budgets that the raster-engineer implements and `make test` enforces. 
 Director owns it. If the design can't be met, report with numbers and change this page before
 the code, not after.
 
+**Starting a game? Read [GAME-GUIDE.md](GAME-GUIDE.md) first**: one page of what a game imports, defines and must not break, with links back here.
+
 | Module | File | Status |
 |---|---|---|
 | IRQ framework | `engine/irq.asm` | **Implemented** (M3 stage 1). Costs measured in `tests/engine/irq_chain` |

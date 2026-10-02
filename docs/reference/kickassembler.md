@@ -76,6 +76,31 @@ update: rts
 Built-in constants include the colours (`BLACK`, `WHITE`, `RED`, …, `LIGHT_BLUE`) and the
 opcodes (`NOP`, `RTS`, …) as byte values.
 
+### Traps
+
+**An anonymous label inside a loop steals the loop's branch.** `!-` is the nearest `!:` above,
+whatever it was meant for. Stage 1 of Swarm had this (M4, 2026-10-02):
+
+```
+        ldx #23
+!:      lda #0                  // meant as the loop head
+        cpx #4
+        bcs !+
+        lda #$80
+!:      sta mux_flags,x         // the skip target: also a "!:"
+        dex
+        bpl !-                  // binds to the line above, not to the loop head
+```
+
+It assembles, and loops over the store alone, so A is never reloaded: every flag was left 0 and the
+player wasn't pinned. No build message and no budget check sees it; a behaviour script did.
+**Rule: when a loop's body contains another anonymous label, name the loop's**
+(`!loop:` … `bpl !loop-`). A bare `!:` / `!-` pair is for loops with no label inside.
+
+**An underscore in `.encoding "screencode_upper"` text is a graphic character**, not a space or a
+line at the bottom of the cell (found in the same stage). Screen text takes capitals, digits and
+the punctuation of screen codes 32–63 only.
+
 ## Assets at build time
 
 KickAssembler scripts can import data directly, so converters aren't always needed:
