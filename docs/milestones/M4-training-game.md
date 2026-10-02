@@ -134,6 +134,33 @@ budget build where nothing dies can't measure what dying costs; a 300-pass check
 while 600 passes fail; each stage's script should say which earlier cases assume a feature is absent;
 `git commit <paths>`, not only `git add <paths>`, in a shared working tree.
 
+### Stage 3 result: the game fights back (2026-10-02)
+
+Enemies wind up (a 2-pixel swing and a white flash), dive along the three paths, and fire aimed shots.
+The player can be shot or rammed, has 3 lives, respawns with `READY` and 150 frames of invulnerability,
+and the game ends with `GAME OVER`. `make test` passes 90/90; `tests/games/swarm/check.py` has 85 cases.
+
+| Item | Result |
+|---|---|
+| Collisions | The box scan of all 18 enemies measured 2,833 in a placed worst frame against the 2,825 budget, so the fallback fired: parked enemies now use a row/column grid lookup. The lookup's own worst frame is 2,469 (the Technical Director found and measured it); a typical frame fell from 938 to 434. Row 8 stays 2,825 as a ceiling |
+| Budget | Game logic and sound 6,550 of 7,200: headroom 650 (9%). Worst measured frame leaves 6,288 cycles idle. Every row is now measured or marked an estimate; only sound is unmeasured |
+| Flicker | 9.6% of frames in AUTOPLAY's worst case (the model said 10.5%). Nothing missing two frames running; pinned sprites never dropped |
+| One-off frames | When a cleared formation returns and when a new game starts, `formation_update` ends later than the line-49 rule. Accepted: those frames are lighter than play, and four conditions now define an exempt one-off frame |
+
+**Simon's playtest of stage 3 (2026-10-02), on the C64 Ultimate:** dives are readable and fair; the
+warning flash gives enough time; deaths feel like your fault; "quite easy, but probably about right for
+a first level". The wind-up is to spec (1 pixel either side of home). What he played was pattern 3's
+settings: waves 1 and 2 are gentler still (wave 1 has a third of wave 3's enemy shots).
+
+**Decisions for stage 4 (Simon, 2026-10-02), the designer's decisions 10-13:**
+
+| # | Question | Decision |
+|---|---|---|
+| 10 | `READY`, `GAME OVER` and `WAVE nn` were partly hidden behind the formation's bottom row | Move them to text row 9, between the formation's top and middle rows |
+| 11 | Are waves 1-2 too gentle? | Build stage 4 as designed, and decide after playing it |
+| 12 | Wave-start and wave-clear sounds | On voice 3 (the divers' voice), so they don't silence the player's shots |
+| 13 | A held fire button at the start of a new game | A 25-frame fire hold at a new game |
+
 ## The game (scope for M4)
 
 **In:**
