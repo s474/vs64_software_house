@@ -11,6 +11,24 @@ KickAssembler 5.25 (`/Applications/KickAssembler/KickAss.jar`). Full manual:
 - One entry file per program: `main.asm` imports everything else. KickAssembler takes one
   source file, and VS64 ignores extra ones.
 - Debug builds define `DEBUG` (both the Makefile and VS64). `make BUILD=release` leaves it out.
+- A release build has its **own directory**, `build/<title>-release/`, so it never overwrites the
+  DEBUG build in `build/<title>/` (the budget runner, VICE sessions and `make test` use the latter).
+
+### Shipping: `make release GAME=<title>`
+
+One command: a release build, Exomizer `sfx basic` crunch (it reads the start address from the BASIC
+SYS line, so `RUN` starts the game), and a `.d64` (c1541) with the crunched PRG as its only file.
+`make crunch` and `make d64` are aliases. Output goes to `dist/<title>/`, which is git-ignored and
+**survives `make clean`**:
+
+| File | What it is |
+|---|---|
+| `<title>.d64` | Bootable disk: disk name and file name are `<TITLE>` in upper case; `LOAD"*",8,1` then `RUN` |
+| `<title>-sfx.prg` | The crunched, self-extracting PRG (`LOAD` and `RUN`, or drag onto VICE) |
+| `<title>.prg`, `main.vs` | The raw release PRG and its labels (for `make test-release`, debugging a release) |
+
+`make test-release GAME=<title>` builds that and then runs `tools/release-check/`: the d64 directory,
+then headless VICE boots the d64 and the crunched PRG to the title screen.
 
 Build outputs in `build/<title>/`:
 

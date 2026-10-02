@@ -1,8 +1,10 @@
 # C64 Software House build.
 #   make                 build games/$(GAME) -> build/$(GAME)/$(GAME).prg
 #   make run             build and autostart in VICE
-#   make crunch          Exomizer self-extracting build -> $(GAME)-sfx.prg
-#   make d64             disk image containing the crunched build
+#   make release         SHIP: release build (no DEBUG, own dir build/$(GAME)-release/), Exomizer
+#                        crunch, bootable disk -> dist/$(GAME)/$(GAME).{prg,-sfx.prg,.d64,.vs}
+#                        (dist/ survives make clean). make crunch / make d64 are aliases.
+#   make test-release    release, then boot the d64 and the crunched PRG in headless VICE
 #   make test            budget runner: build + run the engine spikes in VICE, check budget.json
 #   make test-long       the same checks with ~34x the samples and frames (LONG_SCALE=n to change)
 #   make test-tools      pytest for the Python tools
@@ -24,11 +26,15 @@ C1541       ?= c1541
 EXOMIZER    ?= exomizer
 
 SRC_DIR   ?= games/$(GAME)/src
-OUT_DIR   := build/$(GAME)
+# A release build has its own directory, so it and the DEBUG build never overwrite each other.
+OUT_DIR   := build/$(GAME)$(if $(filter release,$(BUILD)),-release)
+DIST_DIR  := dist/$(GAME)
 MAIN      := $(SRC_DIR)/main.asm
 PRG       := $(OUT_DIR)/$(GAME).prg
-SFX       := $(OUT_DIR)/$(GAME)-sfx.prg
-D64       := $(OUT_DIR)/$(GAME).d64
+# Shippable files (release only; dist/ is git-ignored and not touched by make clean)
+SFX       := $(DIST_DIR)/$(GAME)-sfx.prg
+D64       := $(DIST_DIR)/$(GAME).d64
+DISKNAME  := $(shell echo '$(GAME)' | tr 'a-z' 'A-Z')
 # Sprite sheets in SRC_DIR (and in each ASSET_DIR, if given) are converted by tools/png2sprites:
 # NAME.hires.png (24x21 cells) and NAME.mc.png (12x21 multicolour cells) become
 # build/<game>/NAME.{hires,mc}.bin, plus .col (one colour byte per sprite) and .inc (KickAssembler
@@ -67,7 +73,7 @@ DEP      := $(OUT_DIR)/$(GAME).d
 DEPINFO  := $(OUT_DIR)/.asminfo
 DEPAWK   := '/^\[files\]/{f=1;next} /^\[/{f=0} f{sub(/^[0-9]+;/,""); sub(/^\.\//,""); if ($$0 !~ /^KickAss.jar:/) print}'
 
-.PHONY: all run run-sfx crunch d64 clean test test-long test-tools
+.PHONY: all run run-sfx release crunch d64 test-release clean test test-long test-tools
 
 all: $(PRG)
 
@@ -117,20 +123,32 @@ LONG_SCALE ?= 34
 test-long:
 	@uv run --quiet --package budget-runner budget-runner --scale $(LONG_SCALE) $(ARGS)
 
-crunch: $(SFX)
+# Release: always a BUILD=release build of $(GAME) (re-invoked, so `make release` works whatever
+# BUILD is). Crunched with Exomizer's "sfx basic" (start address read from the BASIC SYS line),
+# written to a .d64 as the only file, named after the game in upper case: LOAD"*",8,1 and RUN.
+release crunch d64:
+	@$(MAKE) --no-print-directory BUILD=release GAME=$(GAME) SRC_DIR=$(SRC_DIR) ASSET_DIR="$(ASSET_DIR)" $(D64)
+	@echo "release: $(D64) ($$(wc -c < $(SFX) | tr -d ' ') bytes crunched, $$(wc -c < $(DIST_DIR)/$(GAME).prg | tr -d ' ') raw)"
 
-$(SFX): $(PRG)
+$(DIST_DIR)/$(GAME).prg: $(PRG)
+	@mkdir -p $(DIST_DIR)
+	@cp $(PRG) $@
+	@cp $(OUT_DIR)/main.vs $(DIST_DIR)/main.vs
+
+$(SFX): $(DIST_DIR)/$(GAME).prg
 	$(EXOMIZER) sfx basic -q -o $@ $<
 
-d64: $(D64)
-
 $(D64): $(SFX)
-	$(C1541) -format "$(GAME),01" d64 $@ -write $< "$(GAME)" >/dev/null
+	@rm -f $@
+	$(C1541) -format "$(DISKNAME),01" d64 $@ -write $< "$(DISKNAME)" >/dev/null
+
+test-release: release
+	@uv run --quiet --package release-check release-check $(GAME)
 
 run: $(PRG)
 	$(X64) -moncommands $(OUT_DIR)/main.vs -autostart $(PRG) >/dev/null 2>&1 &
 
-run-sfx: $(SFX)
+run-sfx: release
 	$(X64) -autostart $(SFX) >/dev/null 2>&1 &
 
 clean:

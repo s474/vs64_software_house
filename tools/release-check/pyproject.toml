@@ -1,0 +1,18 @@
+[project]
+name = "release-check"
+version = "0.1.0"
+description = "Verify a release build: the .d64 directory, then boot the disk and the crunched PRG in headless VICE and wait for the title screen"
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+release-check = "release_check.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
