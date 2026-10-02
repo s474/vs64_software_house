@@ -64,7 +64,7 @@ game_new:
 // The frame's timers and state changes. Called after the shots have moved and before
 // formation_update (memory-map.md "Order of the frame").
 // In:  zp_game_state, zp_state_timer, zp_clear_timer, zp_joy_pressed
-// Out: the state, texts on row 12, the ship (Respawn), the high score (GameOver), a new game
+// Out: the state, texts on row 9, the ship (Respawn), the high score (GameOver), a new game
 // Uses: A, X, Y
 // Cost: 12 cycles in Play with no pause running (counted: the usual frame); up to about 60 in the
 //       other states' ordinary frames; a state change up to about 150; the formation's return
@@ -165,7 +165,7 @@ game_state_update:
 game_state_update_end:
         rts
 
-// Erase the message on row 12 (READY or GAME OVER): spaces over the longest text's cells. No star
+// Erase the message on row 9 (READY or GAME OVER): spaces over the longest text's cells. No star
 // is ever in these cells (the band rule), so nothing is looked up.
 // In:  nothing       Out: nothing
 // Uses: A, X

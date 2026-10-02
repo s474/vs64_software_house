@@ -207,7 +207,9 @@
 .const DYING_MIN_FRAMES    = 100        // PlayerDying ends in the first frame, 100 or later, with no diver out
 .const GAMEOVER_FRAMES     = 200
 .const GAMEOVER_SKIP_FRAME = 50         // from this frame of GameOver a new press of fire ends it
-.const MSG_ROW             = 12         // READY, GAME OVER (and stage 4's WAVE nn): row 12, centred
+.const MSG_ROW             = 9          // WAVE nn, READY, GAME OVER: row 9, centred, between formation rows 1
+                                        // and 2 (design "Text cells and the star rule": never row 12, which
+                                        // the formation's bottom row covers)
 .const MSG = SCREEN + MSG_ROW * SCREEN_COLS
 .const GAME_IDLE_WARMUP = 200   // frames before game_idle_min starts counting
 .const HISCORE_START    = $005000       // BCD

@@ -35,14 +35,15 @@ colour_table:
 // ------------------------------------------------------------------------------------------
 // Stars: 48 fixed cells in rows 0-23, generated at assembly time from a fixed seed, so every
 // build has the same sky. The band rule (design.md "Text cells and the star rule"): no star in
-// columns 10-29 of rows 5, 9, 11, 12, 13, 16 and 19, and no two stars in one cell. The generator
+// columns 10-29 of rows 5, 9, 11, 13, 16 and 19 (the six text rows; row 12 left the list when the
+// messages moved to row 9), and no two stars in one cell. The generator
 // rejects such cells and draws again; the checks below run over the finished lists, so an edited
 // generator or a hand-made list can't break the rule silently.
 // Generator: the Lehmer sequence seed = (seed * 75 + 74) mod 65537 (exact in KickAssembler's
 // arithmetic); cell = seed mod 960, glyph = the next value's bit 3.
 .const STAR_SEED = 4711
 .var star_band_rows = Hashtable()
-.for (var r = 0; r < 7; r++) .eval star_band_rows.put(List().add(5, 9, 11, 12, 13, 16, 19).get(r), true)
+.for (var r = 0; r < 6; r++) .eval star_band_rows.put(List().add(5, 9, 11, 13, 16, 19).get(r), true)
 
 .function StarCellAllowed(cell) {
         .var row = floor(cell / SCREEN_COLS)
@@ -270,7 +271,7 @@ panel_template:
         GameText(" SCORE         HI         WAVE          ")
 .errorif * - panel_template != SCREEN_COLS, "panel_template is 40 cells"
 
-// Messages on row 12, centred (design.md "Text cells and the star rule"): first column
+// Messages on row 9 (MSG_ROW), centred (design.md "Text cells and the star rule"): first column
 // (40 - length) div 2, all inside the star-free band (columns 10-29).
 .const TEXT_READY_LEN     = 5
 .const TEXT_READY_COL     = floor((SCREEN_COLS - TEXT_READY_LEN) / 2)   // 17

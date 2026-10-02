@@ -55,8 +55,8 @@ Cases (PASS/FAIL each, exit code 1 on any failure):
                against known ROM bytes, the three custom glyphs against one-pixel / ship shapes)
   panel        all 40 cells of row 24 hold a code in $40-$7F with white colour RAM; SCORE, HI and
                WAVE at the design's columns; 000000, 005000, 01; ships at 35-36, blank at 37
-  stars        exactly 48 star glyphs in rows 0-23, none in columns 10-29 of rows 5, 9, 11, 12,
-               13, 16, 19; every star's colour is one of white / light grey / grey / dark grey
+  stars        exactly 48 star glyphs in rows 0-23, none in columns 10-29 of rows 5, 9, 11, 13,
+               16, 19 (the six text rows); every star's colour is one of white / light grey / grey / dark grey
   twinkle      over 96 frames exactly one colour RAM cell changes each frame, always a star's,
                each star changes every 48 frames, stepping white > light grey > grey > dark grey
   idle         nothing pressed for 10 frames: X stays 171, no shot
@@ -173,7 +173,8 @@ SHOT_Y0, SHOT_SPEED, SHOT_KILL, COOLDOWN = 213, 8, 46, 10
 MUX_OFF = 0xFF
 SCREEN, COLOUR = 0x0400, 0xD800
 STAR_HI, STAR_LO, SHIP, SPACE, PANEL_BG = 27, 28, 29, 32, 0x40
-BAND_ROWS, BAND_COLS = {5, 9, 11, 12, 13, 16, 19}, range(10, 30)
+BAND_ROWS, BAND_COLS = {5, 9, 11, 13, 16, 19}, range(10, 30)
+MSG_ROW = 9                     # WAVE nn, READY, GAME OVER (design "Text cells and the star rule"; row 12 until stage 4)
 ENEMY0, ENEMIES, COLS = 6, 18, 6
 FORM_X0, COL_DX, ROW_Y, FX_MAX, FX_START = 34, 36, [56, 96, 136], 96, 48
 ANIM_FRAMES, SHAPE_ENEMY, ENEMY_PARKED = 16, 0xC3, 1
@@ -942,7 +943,7 @@ def main() -> int:
         GS_PLAY, GS_RESPAWN, GS_DYING, GS_OVER = 0, 1, 2, 3
         ESHOT0, SHAPE_ESHOT, ESHOT_HIT_Y, ESHOT_HIT_DX = 1, 0xC2, 207, 6
         PANEL_DIRTY_LIVES, PANEL_DIRTY_HI = 2, 8
-        MSG = SCREEN + 12 * 40
+        MSG = SCREEN + MSG_ROW * 40
 
         def poke(label, data, off=0):
             mon.mem_set(sym[label] + off, bytes(data))
@@ -972,7 +973,7 @@ def main() -> int:
             return (peek("mux_x_lo") + 256 * peek("mux_x_hi"), peek("mux_y"), peek("mux_ptr"), peek("mux_col") & 15)
 
         def msg():
-            """Row 12 as text, 40 characters; the cells outside the star-free band (columns 10-29) as spaces."""
+            """Row 9 (the message row) as text, 40 characters; the cells outside the star-free band (columns 10-29) as spaces."""
             return "".join(" " if i not in BAND_COLS else chr((c & 63) + 64) if 0 < (c & 63) < 27 else chr(c & 63)
                            for i, c in enumerate(mem(MSG, 40)))
 
@@ -1134,7 +1135,7 @@ def main() -> int:
         x, shots = frame()                                    # frame 100 of PlayerDying = frame 0 of Respawn (R)
         if not (gstate() == (GS_RESPAWN, 0) and x == X_START and ship()[:3] == (X_START, PLAYER_Y, 0xC0)
                 and msg()[17:22] == "READY" and msg().strip() == "READY" and peek("zp_player_invuln") == 149):
-            errs.append(f"frame R: state {gstate()}, ship {ship()}, row 12 '{msg().strip()}', invuln {peek('zp_player_invuln')}")
+            errs.append(f"frame R: state {gstate()}, ship {ship()}, row 9 '{msg().strip()}', invuln {peek('zp_player_invuln')}")
         cols, xs, ready_frames, play_at, launch_at_play, n_shots = [ship()[3]], [x], 1, None, None, 0
         through = []
         for k in range(1, 152):
@@ -1164,7 +1165,7 @@ def main() -> int:
             if gs[0] == GS_PLAY and play_at is None:
                 play_at, launch_at_play = k, peek("zp_launch_timer")
                 if msg().strip():
-                    errs.append(f"frame R + {k}: Play with row 12 '{msg().strip()}'")
+                    errs.append(f"frame R + {k}: Play with row 9 '{msg().strip()}'")
             if 60 < k <= 72:
                 through.append(eshots()[0])
             if k < 150 and gs[0] not in (GS_RESPAWN, GS_PLAY):
@@ -1211,7 +1212,7 @@ def main() -> int:
         if not (gstate() == (GS_OVER, 0) and msg()[15:24] == "GAME OVER" and msg().strip() == "GAME OVER"
                 and hi_before == "005000" and hi_after == "006150" and dirty & PANEL_DIRTY_HI
                 and markers == [SPACE + PANEL_BG] * 3 and ship()[1] == MUX_OFF):
-            errs.append(f"frame G: state {gstate()}, row 12 '{msg().strip()}', high score {hi_before} -> {hi_after}, "
+            errs.append(f"frame G: state {gstate()}, row 9 '{msg().strip()}', high score {hi_before} -> {hi_after}, "
                         f"dirty {dirty}, markers {markers}")
         frame()
         panel_hi = "".join(chr(c - PANEL_BG) for c in mem(SCREEN + 960 + 18, 6))
@@ -1226,12 +1227,12 @@ def main() -> int:
         frame()                                               # G + 82: the new game
         fx, fdir, en = enemies()
         new = dict(state=gstate()[0], score=score(), lives=peek("zp_lives"), hi=mem(sym["game_hiscore"], 3).hex(),
-                   row12=msg().strip(), ship=ship(), invuln=peek("zp_player_invuln"), fx=fx,
+                   row9=msg().strip(), ship=ship(), invuln=peek("zp_player_invuln"), fx=fx,
                    parked=estates() == [ENEMY_PARKED] * ENEMIES, home=[q[:2] for q in en] == home(FX_START),
                    launch=peek("zp_launch_timer"), eshots=eshots(), divers=peek("zp_divers_active"),
                    expl=list(mem(sym["explosion_enemy"], 4)))
         ok_new = (new["state"] == GS_PLAY and new["score"] == 0 and new["lives"] == 3 and new["hi"] == "006150"
-                  and new["row12"] == "" and new["ship"][:3] == (X_START, PLAYER_Y, 0xC0) and new["ship"][3] == ct[3]
+                  and new["row9"] == "" and new["ship"][:3] == (X_START, PLAYER_Y, 0xC0) and new["ship"][3] == ct[3]
                   and new["invuln"] == 0 and new["fx"] == FX_START and new["parked"] and new["home"]
                   and new["launch"] == 49 and new["eshots"] == [None] * 3 and new["divers"] == 0
                   and new["expl"] == [0xFF] * 4)
@@ -1265,7 +1266,7 @@ def main() -> int:
                 stick = 0
             frame(stick)
             if gstate() != (GS_OVER, k) or msg().strip() != "GAME OVER":
-                errs.append(f"frame G + {k}: state {gstate()}, row 12 '{msg().strip()}'")
+                errs.append(f"frame G + {k}: state {gstate()}, row 9 '{msg().strip()}'")
         frame()
         rep("game-over-timeout", not errs and gstate()[0] == GS_PLAY and msg().strip() == "" and peek("zp_lives") == 3
             and score() == 0 and mem(sym["game_hiscore"], 3).hex() == "006150",
