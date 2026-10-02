@@ -8,9 +8,9 @@
 // bit in panel_dirty; panel_update redraws the fields whose bits are set and clears them.
 // panel_update is the first update of the frame (straight after input_read), so it draws what
 // the PREVIOUS frame's updates made dirty, in the frame the sprites that caused it appear.
-// RULE (memory-map.md "The panel's budget"): PANEL_DIRTY_HI is set only by panel_init and by the
-// state machine on entering game over, never by a play-state routine: the four-field redraw
-// (about 325 cycles) is over the 250 budgeted for a frame of play.
+// RULE (memory-map.md "The panel's budget"): PANEL_DIRTY_HI is set only by panel_init, by the
+// state machine on entering game over and by game_new, never by a play-state routine: the
+// four-field redraw (about 325 cycles) is over the 250 budgeted for a frame of play.
 
 .const PANEL_DIRTY_SCORE = $01
 .const PANEL_DIRTY_LIVES = $02
@@ -61,9 +61,9 @@ panel_init:
         sta game_hiscore + 1
         lda #<HISCORE_START
         sta game_hiscore + 2
-        lda #PLAYER_LIVES
-        sta zp_lives
-        lda #$01
+        lda #0                          // power-on: no game yet, so no lives and no ship markers
+        sta zp_lives                    // (design, Stage 4 rule 9); game_new sets 3
+        lda #WAVE_START
         sta zp_wave
         lda #PANEL_DIRTY_ALL
         sta panel_dirty

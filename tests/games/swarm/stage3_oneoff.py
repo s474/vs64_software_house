@@ -24,6 +24,11 @@ Run from the repo root (about 1 minute):
     uv run --package budget-runner python tests/games/swarm/stage3_oneoff.py | tee tests/games/swarm/stage3_oneoff.txt
 
 Results of the last run: tests/games/swarm/stage3_oneoff.txt.
+
+STAGE 4 NOTE: this script is for the stage 3 build (commit d5586da). Its Part 2 starts each case
+with GameOver's last frame giving a new game, and measures the frame a cleared formation comes
+back; from stage 4 GameOver ends in the title and a wave starts with an Intro, so on a later build
+it stops at "no new game". The stage 4 measurements are tests/games/swarm/stage4_costs.py.
 """
 
 import sys

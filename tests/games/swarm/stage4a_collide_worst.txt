@@ -1,0 +1,5 @@
+# uv run --package budget-runner python tests/games/swarm/stage3_collide_worst.py   (build/swarm/swarm.prg, VICE 3.10 x64sc PAL, DEBUG) on the stage 4 part A build (no sound): the regression look at item 7 of memory-map.md "Stage 4" (f); limit 2,825
+A  stage3_costs.py's placed worst frame (shots on enemies 0 and 6, 3 divers at Y 216, the last rams): 8 frames, min 1862, max 1863 raster cycles; started on lines 40-41, ended on 70-70; score 000000 -> 000330; divers active after: 2
+B  a diver in each shot's band, missed; 2 parked hits; the third diver rams: 8 frames, min 2446, max 2446 raster cycles; started on lines 40-40, ended on 90-90; score 000000 -> 000300; divers active after: 2
+C  a diver under each shot, over a parked enemy: 2 diver hits; the third diver rams: 8 frames, min 2471, max 2471 raster cycles; started on lines 40-40, ended on 90-90; score 000000 -> 000300; divers active after: 0
+after all of the above: game_overrun_count 0, mux_late_count 0, irq_late_count 0, mux_pin_drop_count 0 (all required 0)

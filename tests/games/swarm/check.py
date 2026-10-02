@@ -1,17 +1,31 @@
 """Joystick-driven checks of Swarm (M4): stage 1's player, player shots, panel and stars, stage 2
 part A's formation (18 enemies, the drift, the animation) and part B's collisions (player shots
-against the enemies, explosions, the score, the formation coming back after a clear), and stage
-3's enemy shots, the player's death, lives, READY and game over, the divers (launcher, wind-up,
-the three paths, firing, return), a diver shot mid-dive and the ram.
+against the enemies, explosions, the score), stage 3's enemy shots, the player's death, lives,
+READY and game over, the divers (launcher, wind-up, the three paths, firing, return), a diver
+shot mid-dive and the ram, and stage 4 part A's title screen, the start of a game, the seeding,
+the waves (Intro, Fight, Clear, the bonus, the three stores, each wave's settings) and the end of
+a game in the title.
 
-EARLIER CASES AND STAGE 3. Every case from "setup" to "sprites" was written when nothing dived
-and nothing could hit the ship; they assume a formation that stays Parked. They are kept valid
-by holding the launcher off: launcher(False) re-writes zp_launch_timer to 255 every 32 frames
-(through the monitor), so no dive is ever launched, no enemy shot exists and the ship can't be
-hit. Nothing else about them changed, except that the pause after a clear is now zp_clear_timer
-(it was zp_state_timer). The stage 3 cases turn the launcher on where they want a dive
-(launcher(True), usually for one frame with zp_launch_timer = 1), and safe(True) holds
-zp_player_invuln up where a case is about a diver's flight and not about the ship.
+HOW THE EARLIER CASES STAY VALID.
+Stage 3: every case from "setup" to "sprites" was written when nothing dived and nothing could hit
+the ship; they assume a formation that stays Parked. They are kept valid by holding the launcher
+off: launcher(False) re-writes zp_launch_timer to 255 every 32 frames (through the monitor), so no
+dive is ever launched, no enemy shot exists and the ship can't be hit. The stage 3 cases turn the
+launcher on where they want a dive (launcher(True), usually for one frame with zp_launch_timer =
+1), and safe(True) holds zp_player_invuln up where a case is about a diver's flight and not about
+the ship.
+Stage 4: the cases of stages 1 to 3 were written for a game that starts in Play with a full
+formation, plays pattern 3 at loop 0 on every formation and brings a cleared formation straight
+back. Now the script starts a game from the title with the stick (start_game), and those cases run
+in a wave whose stores are put at the stage 3 values through the monitor (shown wave 01, pattern
+index 2, loop 0) after the game's own Intro has run to Fight. Where a case wants a full formation
+again, respawn() puts the Clear phase at its last frame with the stores one wave back, so the game
+itself advances them to those values and runs its Intro (legacy_wave); a case that clears waves by
+itself puts the stores back in each new wave's first frame (legacy_stores). Where a case ended a
+game it now goes through the title to the next one (end_game). The stage 4 cases set a wave the
+same way (start_wave(n)), kill a formation by leaving one enemy with its explosion's last frame to
+run (last_explosion: the game's own enemy_kill pays the bonus), and reach the title by GameOver's
+last frame (to_title).
 
 `make test` can't press buttons, so this drives joystick port 2 through the VICE monitor (the
 "I/O simulation" joyport device, as tests/engine/input/check.py does) on the GAME build (not the
@@ -96,6 +110,11 @@ Cases (PASS/FAIL each, exit code 1 on any failure):
   double       two shots in flight hit in the same frame: one fired at enemy 5 (row 0, column 5,
                the rows below it dead), then left held for 10 frames and a second fired at enemy
                16 (row 2, column 4): both Exploding in frame f + 18, not before, + 200
+  title, title-press, new-game   (first, from power-on) the title frame by frame: what is shown,
+               the three title enemies, PRESS FIRE's blink, rng_next once a frame, the power-on
+               panel, a tap while it is drawn and a held button starting nothing; the new press:
+               the seed, the erase, the new game 6 frames later; the new-game reset list item by
+               item (junk put in every store first) and the 25-frame fire hold
   clear        every enemy left is shot (the player chases each): the score ends at 6 x 280 =
                001680; when the last explosion ends all 18 are Dead and hidden, zp_enemies_alive 0;
                + 1,000 in that frame (002680) and the phase is Clear; the sky stays empty for 75
@@ -125,8 +144,8 @@ Cases (PASS/FAIL each, exit code 1 on any failure):
                flash colour every frame, a shot falling through the ship, hit in frame 150 exactly
   game-over, game-over-timeout, game-over-50, game-over-diving   the last life: the high score
                only then, GAME OVER, held fire doesn't skip, a new press before frame 50 doesn't,
-               one in frame 50 or later does, 200 frames otherwise; the new game's state; with a
-               diver out GameOver still starts at frame 100 and the diver flies on
+               one in frame 50 or later does, 200 frames otherwise; then the title (stage 4); with
+               a diver out GameOver still starts at frame 100 and the diver flies on
   dive-*       each path, as authored and mirrored, launched by the launcher (every other enemy
                taken away) and compared in every frame with a model of the design's tables:
                position, state, colour, fire steps and each shot's dx, lethal steps, wrap, Return
@@ -148,11 +167,33 @@ Cases (PASS/FAIL each, exit code 1 on any failure):
   stage3-play  1,500 frames of play: pinned sprites 0-3 never dropped, nothing missing 2 frames
                running, no overrun (DEBUG counters)
 
+  (stage 4 part A)
+  autoplay-seed   (run first, on the AUTOPLAY budget build) two runs from power-on are the same game
+  wave-intro   an Intro frame by frame: enemy k Parked in frame 2k, 18 alive and the diver slots
+               free from frame 0, WAVE nn in frames 0-74, Fight in frame 100 with the launch timer
+               at 50, no rng_next call and no launch before frame 150
+  wave-stores  the shown wave, the pattern index and the loop over waves 1-15, and 97-99-99-99
+  waves-played waves 1-4 played through, each formation killed through the monitor: the bonus in
+               Clear's frame 0, the 75-frame pause, the next wave's stores
+  wave-clear-* the bonus in PlayerDying (lives left), in Respawn (READY showing) and with the last
+               life gone (the timer stops, GameOver over an empty sky, the high score has the
+               bonus); READY written only in Fight and erased only if written; WAVE nn untouched
+               by a Respawn's end
+  clear-shot   an enemy shot in flight in a Clear still kills
+  wave-timeline, wave-timeline-last-life   the design's worked case (Stage 4 rule 8), frame by frame
+  wave-settings-N   waves 1, 2, 3, 6, 9, 12: the rows that dive, divers at once, the launch
+               interval, 2-step frames, shots a dive, shot speed, wind-up frames, drift speed
+  seed         two games started in different title frames: different seeds and launches
+  row9-uncovered   no Parked enemy's lines touch row 9 while WAVE nn, READY or GAME OVER shows
+  (and in the cases above: game-over ends in the title, the press that skipped it starts nothing
+  while held, a tap in the title's frame 7 isn't read and one in frame 8 is, the high score is
+  compared once, in GameOver's frame 0)
+
 Run from the repo root (build first: make GAME=swarm):
 
     uv run --package budget-runner python tests/games/swarm/check.py [--prg build/swarm/swarm.prg]
 
-Takes about 2 minutes. Works on a release build too (make BUILD=release GAME=swarm): the DEBUG
+Takes about 1 minute. Works on a release build too (make BUILD=release GAME=swarm): the DEBUG
 counters are read only if the build has them. Results of the last run: tests/games/swarm/check_results.txt.
 """
 
@@ -160,7 +201,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from budget_runner.session import STOP_TIMEOUT, MeasureError, Vice
+from budget_runner.session import STOP_TIMEOUT, MeasureError, Vice, build_program
 from vice_monitor import CPU_OP_EXEC  # on sys.path once budget_runner.session is imported
 
 REPO = Path(__file__).resolve().parents[3]
@@ -182,6 +223,11 @@ ENEMY_WAITING = 2               # stage 4: hidden until its turn in the wave's I
 PHASE_FIGHT, PHASE_INTRO, PHASE_CLEAR = 0, 1, 2
 INTRO_FRAMES, INTRO_MSG_FRAMES = 100, 75
 ROW9_LINES = range(51 + 8 * MSG_ROW, 59 + 8 * MSG_ROW)     # raster lines 123-130
+GS_PLAY, GS_RESPAWN, GS_DYING, GS_OVER, GS_TITLE = 0, 1, 2, 3, 4
+# The title's texts in the order it draws them (text 0 in its frame 0, then one a frame): text, row, first column
+TITLE_TEXTS = [("PRESS FIRE", 19, 15), ("SWARM", 5, 17), ("150 PTS", 9, 17), (" 80 PTS", 11, 17), (" 50 PTS", 13, 17),
+               ("DIVING SCORES DOUBLE", 16, 10)]
+TITLE_FIRE_FRAME, TITLE_SPRITES, NEW_GAME_COOLDOWN = 8, [(120, 119), (120, 135), (120, 151)], 25
 ENEMY_DEAD, ENEMY_EXPLODING, SHAPE_EXPLOSION, EXPLOSION_FRAMES, ORANGE = 0, 0x83, 0xC9, 16, 8
 FLIGHT = [18, 13, 8]            # frames from the fire frame to the first frame inside row 0 / 1 / 2's box
 ROW_SCORE = [150, 80, 50]
@@ -198,6 +244,48 @@ def code(text):
     return [ord(c) - 64 if c.isalpha() else ord(c) for c in text]
 
 
+def autoplay_seed(rep):
+    """autoplay-seed: the AUTOPLAY budget build has no title and keeps the constant seed: two runs
+    from power-on are the same game (the generator, every sprite, the score and the launches)."""
+    prg = build_program("swarm_budget", "tests/games/swarm", ["games/swarm/src"])
+    runs = []
+    for _ in range(2):
+        v = Vice(prg, 0)
+        try:
+            mon, sym = v.mon, v.symbols
+            mon.checkpoint_set(sym["game_update_end"], sym["game_update_end"], CPU_OP_EXEC)
+
+            def get(label, n=1):
+                return bytes(mon.mem_get(sym[label], sym[label] + n - 1))
+
+            def step():
+                mon.exit()
+                if not mon.wait_stopped(STOP_TIMEOUT):
+                    mon.ping()
+                    raise MeasureError("autoplay-seed: game_update_end not reached")
+
+            step()
+            first = (get("zp_rng_lo", 2).hex(), get("zp_game_state")[0], get("zp_wave")[0], get("zp_pattern")[0],
+                     get("zp_loop")[0], get("zp_wave_phase")[0])
+            launches, prev = [], get("enemy_state", ENEMIES)
+            for f in range(1, 700):
+                step()
+                st = get("enemy_state", ENEMIES)
+                launches += [(f, e) for e in range(ENEMIES) if prev[e] == ENEMY_PARKED and st[e] == 0x80]
+                prev = st
+            snap = (get("zp_rng_lo", 2), st, get("mux_x_lo", 24), get("mux_x_hi", 24), get("mux_y", 24),
+                    get("game_score", 3), get("zp_player_x_lo", 2), get("zp_wave_phase"))
+            runs.append((first, launches, snap))
+        finally:
+            v.close()
+    a, b = runs
+    rep("autoplay-seed", a == b and a[0] == ("5a1d", GS_PLAY, 0x12, 2, 3, PHASE_INTRO) and len(a[1]) >= 5 and a[2][7][0] == PHASE_FIGHT,
+        f"the AUTOPLAY budget build, two runs of 700 frames from power-on: no title (first frame: generator, state, "
+        f"shown wave, pattern, loop, phase {a[0]}: the constant seed $1D5A, Play, wave 12's Intro); the same in both "
+        f"runs: {a == b} (the generator's state, all 18 enemy states, all 24 sprites, the score, the ship's X); "
+        f"launches (frame, enemy) {a[1][:6]}... {len(a[1])} in all, the first after the Intro")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--prg", default=str(REPO / "build/swarm/swarm.prg"))
@@ -209,7 +297,9 @@ def main() -> int:
         if not ok:
             fails.append(name)
 
-    v = Vice(Path(a.prg), 0)        # no warm-up: the first stop below is the game's first frame
+    autoplay_seed(rep)
+
+    v = Vice(Path(a.prg), 0)        # no warm-up: the first stop below is the title's frame 1
     try:
         mon, sym = v.mon, v.symbols
         mon.resource_set("JoyPort2Device", JOYPORT_IO_SIMULATION)
@@ -364,20 +454,186 @@ def main() -> int:
                 poke("zp_pattern", [2])
                 poke("zp_loop", [0])
 
-        def start_game():
-            """Nothing to do until the title exists (step 3): the game starts in Intro's frame 0."""
-            if phase() != (PHASE_INTRO, 0):
-                raise MeasureError(f"start_game: not in a new game's first frame: phase {phase()}")
+        def start_game(tap_frame=None):
+            """From the title to the new game's frame (Intro's frame 0) by the stick: wait until
+            fire is read (the title's frame 8, or tap_frame if given), a one-frame press, then the
+            six erase frames. Returns the title frame the press was made in."""
+            if peek("zp_game_state") != GS_TITLE:
+                raise MeasureError(f"start_game: not at the title: state {peek('zp_game_state')}")
+            n = 0
+            while peek("zp_state_timer") + 1 < (tap_frame or TITLE_FIRE_FRAME):
+                frame(0)
+                n += 1
+                if n > 300:
+                    raise MeasureError("start_game: the title never read fire")
+            frame(BITS["fire"])
+            pressed_in = peek("zp_state_timer")
+            for _ in range(8):
+                frame(0)
+                if peek("zp_game_state") == GS_PLAY:
+                    break
+            if peek("zp_game_state") != GS_PLAY or phase() != (PHASE_INTRO, 0):
+                raise MeasureError(f"start_game: no new game: state {peek('zp_game_state')}, phase {phase()}")
+            return pressed_in
+
+        def to_title():
+            """From a game to the title's frame 0 by the game's own path: GameOver's last frame."""
+            poke("zp_game_state", [GS_OVER])
+            poke("zp_state_timer", [199])
+            frame(0)
+            if peek("zp_game_state") != GS_TITLE:
+                raise MeasureError(f"to_title: state {peek('zp_game_state')}")
+
+        def screen_text():
+            """Every play-area cell that isn't a space or a star: {cell: screen code}."""
+            return {i: c for i, c in enumerate(mem(SCREEN, 960)) if c not in (SPACE, STAR_HI, STAR_LO)}
+
+        def text_cells(texts):
+            out = {}
+            for text, row_, col in texts:
+                out.update({row_ * 40 + col + i: c for i, c in enumerate(code(text)) if c != SPACE})
+            return out
+
+        def title_texts(f):
+            """What the title shows in its frame f: text i from frame i on, PRESS FIRE by the blink."""
+            return text_cells([t for i, t in enumerate(TITLE_TEXTS) if (i and f >= i) or (i == 0 and f % 64 < 32)])
+
+        def sprites24():
+            xl, xh, ys = mem(sym["mux_x_lo"], 24), mem(sym["mux_x_hi"], 24), mem(sym["mux_y"], 24)
+            ps, cs = mem(sym["mux_ptr"], 24), mem(sym["mux_col"], 24)
+            return {i: (xl[i] + 256 * xh[i], ys[i], ps[i], cs[i] & 15) for i in range(24) if ys[i] != MUX_OFF}
+
+        def title_sprites(f):
+            return {ENEMY0 + r * COLS: TITLE_SPRITES[r] + (SHAPE_ENEMY + 2 * r + (f >> 4 & 1), ENEMY_COLOURS[r]) for r in range(3)}
+
+        def rng_step(lo, hi):
+            v = lo | hi << 8
+            v ^= (v << 7) & 0xFFFF
+            v ^= v >> 9
+            v ^= (v << 8) & 0xFFFF
+            return v & 255, v >> 8
+
+        def panel_row():
+            return "".join("^" if c == SHIP + PANEL_BG else chr((c & 63) + 64) if (c & 63) < 27 else chr(c & 63)
+                           for c in mem(SCREEN + 960, 40))
 
         launcher(False)                           # until the stage 3 cases: nothing dives
-        frame(0)
-        start_game()                              # from the title (stage 4 step 3) to Intro's frame 0
-        poke("zp_pattern", [2])                   # stage 3's stand-in for waves: pattern 3 at loop 0
-        first = enemies()                         # after the game's first formation_update
+        frame(0)                                  # the title's frame 1 (frame 0 was drawn before the first frame)
+
+        # title: the power-on title, frame by frame. A one-frame tap of fire in frame 3 (while it is being
+        # drawn), then fire held from frame 6 to frame 139 (down before fire is first read, in frame 8: never a
+        # new press), released, and a new press in frame 142
+        PRESS = 142
+        sched = {3: BITS["fire"], 4: 0, 6: BITS["fire"], 140: 0, PRESS: BITS["fire"], PRESS + 1: 0}
+        errs, blink, rng_bad, prev_rng = [], [], 0, None
+        power_on = (panel_row(), peek("zp_lives"), mem(sym["game_score"], 3).hex(), mem(sym["game_hiscore"], 3).hex())
+        for f in range(1, PRESS):
+            if f > 1:
+                frame(sched.get(f))
+            got = (peek("zp_game_state"), peek("zp_state_timer"), screen_text(), sprites24())
+            want = (GS_TITLE, f, title_texts(f), title_sprites(f))
+            if got != want:
+                errs.append(f"frame {f}: state {got[0]}, timer {got[1]}, texts as designed {got[2] == want[2]}, "
+                            f"sprites {got[3]}")
+            pf = all(got[2].get(cell) == c for cell, c in text_cells(TITLE_TEXTS[:1]).items())
+            if not blink or blink[-1][1] != pf:
+                blink.append((f, pf))
+            r = tuple(mem(sym["zp_rng_lo"], 2))
+            if prev_rng is not None and r != rng_step(*prev_rng):
+                rng_bad += 1
+            prev_rng = r
+        stars_now = {i for i, c in enumerate(mem(SCREEN, 960)) if c in (STAR_HI, STAR_LO)}
+        under = stars_now & set(text_cells(TITLE_TEXTS))
+        ok = (not errs and blink == [(1, True), (32, False), (64, True), (96, False), (128, True)] and rng_bad == 0
+              and power_on == (" SCORE 000000  HI 005000  WAVE 01       ", 0, "000000", "005000") and not under
+              and len(stars_now) == 48)
+        rep("title", ok,
+            f"power-on, frames 1-{PRESS - 1}: state Title, the frame count in zp_state_timer; SWARM on row 5 from frame 1, "
+            f"150 PTS / 80 PTS / 50 PTS on rows 9, 11, 13 from frames 2, 3, 4, DIVING SCORES DOUBLE on row 16 from frame 5 "
+            f"(one text a frame; nothing else in the play area but the 48 stars, {len(under)} of them under a text); the "
+            f"only sprites are 6, 12, 18 at (120, 119 / 135 / 151) in purple / yellow / light green, shapes swapping "
+            f"every 16 frames; PRESS FIRE (row 19) changes at (frame, shown) {blink}: on 32, off 32; rng_next once a "
+            f"frame ({rng_bad} frames otherwise); panel '{power_on[0]}', lives {power_on[1]} (no markers); a tap of fire "
+            f"in frame 3 and fire held from frame 6 to 139 started nothing; errors: {errs[:2] or 'none'}")
+
+        # title-press: the new press in frame 142: the seed, the sprites gone at once, the six texts erased one a
+        # frame, and the new game in the frame after the last erase
+        frame(sched[PRESS])
+        stepped = rng_step(*prev_rng)
+        seeded, irq_f = tuple(mem(sym["zp_rng_lo"], 2)), peek("zp_irq_frame")
+        seed_line = seeded[1] ^ stepped[1]
+        errs = []
+        if not (peek("zp_game_state") == GS_TITLE and sprites24() == {} and seeded[0] == stepped[0] ^ irq_f
+                and screen_text() == text_cells(TITLE_TEXTS[1:])):
+            errs.append(f"the press's frame: sprites {sprites24()}, rng {prev_rng} -> {seeded} (stepped {stepped}, frame {irq_f})")
+        for i in range(1, 6):
+            frame(0)
+            if peek("zp_game_state") != GS_TITLE or screen_text() != text_cells(TITLE_TEXTS[i + 1:]) or sprites24():
+                errs.append(f"press + {i}: texts left {len(screen_text())} cells, state {peek('zp_game_state')}")
+            if tuple(mem(sym["zp_rng_lo"], 2)) != seeded:
+                errs.append(f"press + {i}: the generator moved after the seed")
+        rep("title-press", not errs and 0 < seed_line < 60,
+            f"a new press in frame {PRESS} (fire up in 140 and 141): in that frame the three sprites are hidden and the "
+            f"generator is seeded: low byte = its stepped state ^ zp_irq_frame ({stepped[0]:#04x} ^ {irq_f:#04x} = "
+            f"{seeded[0]:#04x}), high byte = its stepped state ^ the raster line read (line {seed_line}); the texts are "
+            f"erased one a frame (PRESS FIRE in the press's frame, DIVING SCORES DOUBLE last, 5 frames later), the "
+            f"generator untouched after the seed; errors: {errs[:2] or 'none'}")
+
+        # new-game: the reset list of Stage 4 rule 10, item by item. Junk is put in everything it must reset
+        # (monitor), in the frame before; fire is held from the new game's frame to time the 25-frame hold
+        poke("game_score", [0x12, 0x34, 0x50])
+        poke("game_hiscore", [0x00, 0x77, 0x70])
+        poke("zp_wave", [0x47])
+        poke("zp_pattern", [1])
+        poke("zp_loop", [2])
+        poke("zp_lives", [0])
+        poke("mux_y", [100, 110, 120, 130, 140], 1)       # three enemy shots and two player shots "in flight"
+        poke("explosion_enemy", [1, 2, 3, 4])
+        poke("diver_enemy", [5, 6, 7])
+        poke("zp_divers_active", [3])
+        poke("zp_player_invuln", [77])
+        poke("zp_player_x_lo", [100, 0])
+        poke("zp_player_cooldown", [3])
+        poke("game_ready", [1])
+        poke("zp_launch_timer", [7])
+        x, shots = frame(BITS["fire"])                    # the new game's frame, N
+        first = enemies()                                 # after the game's first formation_update
         first_states = list(mem(sym["enemy_state"], ENEMIES))
+        ng = dict(state=peek("zp_game_state"), score=mem(sym["game_score"], 3).hex(), lives=peek("zp_lives"),
+                  stores=(peek("zp_wave"), peek("zp_pattern"), peek("zp_loop")),
+                  shots=list(mem(sym["mux_y"] + 1, 5)), expl=list(mem(sym["explosion_enemy"], 4)),
+                  divers=(peek("zp_divers_active"), list(mem(sym["diver_enemy"], 3))),
+                  ship=sprites24().get(0), x=x, invuln=peek("zp_player_invuln"), cooldown=peek("zp_player_cooldown"),
+                  dirty=peek("panel_dirty"), hi=mem(sym["game_hiscore"], 3).hex(), phase=phase(),
+                  text=screen_text() == text_cells([("WAVE 01", MSG_ROW, 16)]), alive=peek("zp_enemies_alive"),
+                  states=first_states == [ENEMY_PARKED] + [ENEMY_WAITING] * (ENEMIES - 1), ready=peek("game_ready"),
+                  launch=peek("zp_launch_timer"), rng=tuple(mem(sym["zp_rng_lo"], 2)) == seeded)
+        want_ng = dict(state=GS_PLAY, score="000000", lives=3, stores=(1, 0, 0), shots=[MUX_OFF] * 5, expl=[0xFF] * 4,
+                       divers=(0, [0xFF] * 3), ship=(X_START, PLAYER_Y, 0xC0, 3), x=X_START, invuln=0,
+                       cooldown=NEW_GAME_COOLDOWN, dirty=0x0F, hi="007770", phase=(PHASE_INTRO, 0), text=True,
+                       alive=ENEMIES, states=True, ready=0, launch=50, rng=True)
         frame()
         second = enemies()
+        row1 = panel_row()
+        fired = None
+        for k in range(2, 40):
+            x, shots = frame(None if fired is None else 0)
+            if any(shots) and fired is None:
+                fired = k
+                mon.mem_set(sym["mux_y"] + 4, bytes([MUX_OFF, MUX_OFF]))    # taken away: it must hit nothing
+        frame(0)
+        poke("game_hiscore", [0x00, 0x50, 0x00])
+        poke("panel_dirty", [8])
+        rep("new-game", ng == want_ng and row1 == " SCORE 000000  HI 007770  WAVE 01  ^^   " and fired == NEW_GAME_COOLDOWN,
+            f"the frame after the last erase (press + 6) is the new game, all in that frame, with junk put in every "
+            f"store first: {ng}; differences from the design's list: "
+            f"{ {k: (ng[k], want_ng[k]) for k in ng if ng[k] != want_ng[k]} or 'none'}; panel a frame later '{row1}' (all "
+            f"four fields redrawn, the high score kept); fire held from the new game's frame: the first shot in its frame "
+            f"{fired} (the 25-frame hold: none in frames 0-24)")
+
+        poke("zp_pattern", [2])                   # stage 3's stand-in for waves: pattern 3 at loop 0
         to_fight()
+        settle()
 
         # setup
         ct = mem(sym["colour_table"], 19)
@@ -1040,7 +1296,6 @@ def main() -> int:
 
 
         # ================================================================ stage 3
-        GS_PLAY, GS_RESPAWN, GS_DYING, GS_OVER = 0, 1, 2, 3
         ESHOT0, SHAPE_ESHOT, ESHOT_HIT_Y, ESHOT_HIT_DX = 1, 0xC2, 207, 6
         PANEL_DIRTY_LIVES, PANEL_DIRTY_HI = 2, 8
         MSG = SCREEN + MSG_ROW * 40
@@ -1108,13 +1363,11 @@ def main() -> int:
 
         def end_game():
             """From GameOver to the next game's first frame (Intro's frame 0), by the game's own path:
-            GameOver's last frame, then one frame (step 3: through the title)."""
+            GameOver's last frame, the title, a press of fire."""
             if gstate()[0] != GS_OVER:
                 raise MeasureError(f"end_game: not in GameOver: {gstate()}")
-            poke("zp_state_timer", [199])
-            frame(0)
-            if gstate()[0] != GS_PLAY or phase() != (PHASE_INTRO, 0):
-                raise MeasureError(f"end_game: no new game: state {gstate()}, phase {phase()}")
+            to_title()
+            start_game()
 
         respawn()
         ct = mem(sym["colour_table"], 19)
@@ -1312,6 +1565,7 @@ def main() -> int:
             frame()
         poke("zp_player_invuln", [0])
         poke("game_score", [0x00, 0x61, 0x50])
+        poke("panel_dirty", [PANEL_DIRTY_SCORE])              # the panel shows what the script put in the score
         hi_before = mem(sym["game_hiscore"], 3).hex()
         x = state()[0]
         put_eshot(0, x, 205, 0)
@@ -1339,31 +1593,35 @@ def main() -> int:
             if gstate() != (GS_OVER, k):
                 errs.append(f"frame G + {k} with fire held since the hit: state {gstate()}")
         frame(0)                                              # G + 80: released
-        launcher(True)
-        frame(BITS["fire"])                                   # G + 81: a new press
+        before_end = sprites24()
+        frame(BITS["fire"])                                   # G + 81: a new press, and fire stays down
         gs_press = gstate()
-        frame()                                               # G + 82: the new game
-        fx, fdir, en = enemies()
-        new = dict(state=gstate()[0], score=score(), lives=peek("zp_lives"), hi=mem(sym["game_hiscore"], 3).hex(),
-                   row9=msg().strip(), ship=ship(), invuln=peek("zp_player_invuln"), fx=fx,
-                   intro=estates() == [ENEMY_PARKED] + [ENEMY_WAITING] * (ENEMIES - 1), home=en[0][:2] == home(FX_START)[0],
-                   phase=phase(), stores=(peek("zp_wave"), peek("zp_pattern"), peek("zp_loop")),
-                   eshots=eshots(), divers=peek("zp_divers_active"), expl=list(mem(sym["explosion_enemy"], 4)))
-        ok_new = (new["state"] == GS_PLAY and new["score"] == 0 and new["lives"] == 3 and new["hi"] == "006150"
-                  and new["row9"] == "WAVE 01" and new["ship"][:3] == (X_START, PLAYER_Y, 0xC0) and new["ship"][3] == ct[3]
-                  and new["invuln"] == 0 and new["fx"] == FX_START and new["intro"] and new["home"]
-                  and new["phase"] == (PHASE_INTRO, 0) and new["stores"] == (1, 0, 0)
-                  and new["eshots"] == [None] * 3 and new["divers"] == 0 and new["expl"] == [0xFF] * 4)
-        launcher(False)
+        frame()                                               # G + 82: the title's frame 0
+        t0 = dict(state=gstate(), sprites=sprites24() == title_sprites(0), row9=msg().strip(),
+                  texts=screen_text() == title_texts(0), score=score(), lives=peek("zp_lives"),
+                  hi=mem(sym["game_hiscore"], 3).hex(), phase=phase()[0], step=peek("title_step"))
+        ok_title = t0 == dict(state=(GS_TITLE, 0), sprites=True, row9="", texts=True, score=6150, lives=0, hi="006150",
+                              phase=t0["phase"], step=0) and len(before_end) > 15
+        held = []
+        for k in range(1, 30):                                # the press that skipped GameOver is still down
+            frame()
+            held.append((gstate()[0], screen_text() == title_texts(k), sprites24() == title_sprites(k)))
+        row = panel_row()
         frame(0)
-        row = "".join("^" if c == SHIP + PANEL_BG else chr((c & 63) + 64) if (c & 63) < 27 else chr(c & 63)
-                      for c in mem(SCREEN + 960, 40))
-        rep("game-over", not errs and gs_press[0] == GS_OVER and ok_new and panel_hi == "006150"
-            and row == " SCORE 000000  HI 006150  WAVE 01  ^^   ",
+        frame()
+        pressed_in = start_game()
+        frame()
+        row_new = panel_row()
+        rep("game-over", not errs and gs_press[0] == GS_OVER and ok_title and panel_hi == "006150"
+            and set(held) == {(GS_TITLE, True, True)} and row == " SCORE 006150  HI 006150  WAVE 01       "
+            and row_new == " SCORE 000000  HI 006150  WAVE 01  ^^   ",
             f"last life lost with the score at 6150: high score {hi_before} through PlayerDying's 100 frames, GameOver in "
             f"frame 100 with GAME OVER at columns 15-23, no markers, high score {hi_after} (panel {panel_hi} a frame "
-            f"later); fire held since the hit didn't skip it in 80 frames; released, then a new press in G + 81: a new "
-            f"game in G + 82: {new}; panel '{row}'; errors: {errs[:3] or 'none'}")
+            f"later); fire held since the hit didn't skip it in 80 frames; released, then a new press in G + 81 ended "
+            f"it: G + 82 is the title's frame 0: {t0} ({len(before_end)} sprites were shown the frame before: the "
+            f"formation vanished at once), panel '{row}' as the game ended; that press, still held for 29 title frames "
+            f"(past frame 8), started nothing and the title drew itself as at power-on; released and pressed again in "
+            f"title frame {pressed_in}: a new game, panel '{row_new}'; errors: {errs[:3] or 'none'}")
 
         # game-over-early and game-over-timeout: a press before frame 50 does nothing; with no press the
         # screen stays 200 frames and the new game starts in frame 200. Lives set to 1 through the monitor.
@@ -1382,15 +1640,26 @@ def main() -> int:
                 stick = BITS["fire"]                          # new presses in G + 20 and G + 49: too early
             if k in (21, 50):
                 stick = 0
+            if k == 10:
+                poke("game_score", [0x00, 0x90, 0x00])        # above the high score, after GameOver's frame 0
             frame(stick)
             if gstate() != (GS_OVER, k) or msg().strip() != "GAME OVER":
                 errs.append(f"frame G + {k}: state {gstate()}, row 9 '{msg().strip()}'")
-        frame()
-        rep("game-over-timeout", not errs and gstate()[0] == GS_PLAY and msg().strip() == "WAVE 01" and peek("zp_lives") == 3
-            and score() == 0 and mem(sym["game_hiscore"], 3).hex() == "006150",
+        hi_mid = mem(sym["game_hiscore"], 3).hex()
+        frame()                                               # frame 200: the title's frame 0
+        t0 = (gstate(), msg().strip(), peek("zp_lives"), score(), mem(sym["game_hiscore"], 3).hex())
+        taps = []
+        for k in range(1, 31):                                # a one-frame tap in the title's frame 7: not read
+            frame(BITS["fire"] if k == 7 else 0)
+            taps.append(gstate()[0])
+        rep("game-over-timeout", not errs and t0 == ((GS_TITLE, 0), "", 0, 9000, "006150") and hi_mid == "006150"
+            and set(taps) == {GS_TITLE},
             f"GameOver again (lives set to 1, a hit): new presses of fire in frames 20 and 49 did nothing; GAME OVER "
-            f"stayed through frame 199; frame 200 is the new game (state {gstate()[0]}, lives {peek('zp_lives')}, score "
-            f"{score()}, high score kept {mem(sym['game_hiscore'], 3).hex()}); errors: {errs[:3] or 'none'}")
+            f"stayed through frame 199; frame 200 is the title's frame 0 (state, row 9, lives, score, high score) {t0}: "
+            f"the score was put up to 9,000 in GameOver's frame 10 (monitor) and the high score stayed {hi_mid}: it is "
+            f"compared once, in GameOver's frame 0; a one-frame tap of fire in the title's frame 7 started nothing in "
+            f"30 frames (fire is read from frame 8); errors: {errs[:3] or 'none'}")
+        start_game()
         poke("game_hiscore", [0x00, 0x50, 0x00])
 
 
@@ -1719,13 +1988,23 @@ def main() -> int:
             frame(0)
         frame(BITS["fire"])                                   # frame 50
         g50 = gstate()
-        frame(0)
-        rep("game-over-50", g50[0] == GS_OVER and gstate()[0] == GS_PLAY and peek("zp_lives") == 3
+        frame(0)                                              # the title's frame 0
+        t0 = (gstate(), sprites24() == title_sprites(0), peek("zp_divers_active"))
+        for k in range(1, 8):
+            frame(0)
+        frame(BITS["fire"])                                   # a one-frame tap in the title's frame 8: read
+        t8 = (gstate(), peek("title_step"))
+        for k in range(6):
+            frame(0)
+        rep("game-over-50", g50[0] == GS_OVER and t0[:2] == ((GS_TITLE, 0), True) and t8 == ((GS_TITLE, 8), 10)
+            and gstate()[0] == GS_PLAY and phase() == (PHASE_INTRO, 0) and peek("zp_lives") == 3
             and peek("zp_divers_active") == 0 and estates() == [ENEMY_PARKED] + [ENEMY_WAITING] * (ENEMIES - 1)
             and list(mem(sym["diver_enemy"], 3)) == [0xFF] * 3,
-            f"a new press of fire in GameOver's frame 50: still GameOver in that frame (state {g50}), a new game in the "
-            f"next (state {gstate()[0]}, lives {peek('zp_lives')}, Intro's frame 0, divers active {peek('zp_divers_active')} "
-            f"and every diver slot free although a diver was out)")
+            f"a new press of fire in GameOver's frame 50: still GameOver in that frame (state {g50}), the title's frame 0 "
+            f"in the next ({t0[0]}, only the three title sprites: {t0[1]}); a one-frame tap in the title's frame 8, the "
+            f"first frame fire is read: the erase began in that frame (state, title_step {t8}) and the new game came 6 "
+            f"frames later (state {gstate()[0]}, lives {peek('zp_lives')}, Intro's frame 0, divers active "
+            f"{peek('zp_divers_active')} and every diver slot free)")
 
         # diver-hit-*: a diver shot in WindUp, Dive and Return: the diving value, the explosion where it is,
         # divers active - 1 in the hit's frame, its shot in flight carries on
@@ -2063,8 +2342,9 @@ def main() -> int:
 
         # wave-intro: a wave's Intro, frame by frame (Stage 4 rules 2 and 3). The wave is 5 (pattern
         # index 1, loop 1); the diver slots are filled with junk first, to show the Intro frees them
+        to_fight()                                    # the case before may have ended in an Intro
         settle()
-        clear_eshots()                                # the case before left enemy shots in flight
+        clear_eshots()                                # and left enemy shots in flight
         next_wave_in(2, (4, 0, 1))
         poke("diver_enemy", [3, 0xFF, 5])
         poke("zp_divers_active", [2])
@@ -2411,6 +2691,30 @@ def main() -> int:
                 f"{got['dy']} (design {want['dy']}); wind-up {got['windup']} frames (design {want['windup']}); drift steps "
                 f"in 8 frames {got['drift']} (design {want['drift']})")
         safe(False)
+
+        # seed: two games started in different title frames get different seeds and launch different enemies
+        # (wave 1: a launch every 150 frames from Intro's frame 150, each a row 2 enemy)
+        seqs = {}
+        for tap in (TITLE_FIRE_FRAME, 41):
+            safe(False)
+            to_title()
+            pressed = start_game(tap_frame=tap)
+            seed = tuple(mem(sym["zp_rng_lo"], 2))
+            safe(True)
+            picks, prev = [], estates()
+            for f in range(760):
+                frame()
+                st = estates()
+                picks += [e for e in range(ENEMIES) if prev[e] == ENEMY_PARKED and st[e] == ST_W]
+                prev = st
+            seqs[tap] = (pressed, seed, picks)
+        safe(False)
+        a_, b_ = seqs[TITLE_FIRE_FRAME], seqs[41]
+        rep("seed", (a_[0], b_[0]) == (TITLE_FIRE_FRAME, 41) and a_[1] != b_[1] and a_[2] != b_[2] and len(a_[2]) == len(b_[2]) == 5
+            and all(e // COLS == 2 for e in a_[2] + b_[2]),
+            f"a game started by a press in the title's frame {a_[0]}: generator state after the press {a_[1]}, the first "
+            f"five enemies launched {a_[2]}; one started in the title's frame {b_[0]}: {b_[1]}, {b_[2]} (different "
+            f"seeds, different launch sequences; all row 2, wave 1's)")
 
         rep("row9-uncovered", row9 == {"READY": True, "GAME OVER": True, "WAVE nn": True},
             f"with all 18 enemies Parked, no Parked enemy's lines (Y + 1 to Y + 21) touch row 9's (123-130), while each "

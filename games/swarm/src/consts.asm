@@ -228,6 +228,7 @@
 .const GAME_STATE_RESPAWN  = 1  // READY: 50 frames, the ship back and controllable
 .const GAME_STATE_DYING    = 2  // PlayerDying: the explosion, then the wait for the divers
 .const GAME_STATE_GAMEOVER = 3
+.const GAME_STATE_TITLE    = 4  // stage 4: the play routines don't run (main.asm, title.asm)
 .const PLAYER_EXPLOSION_FRAMES = 32     // the hit's frame and the 31 after: 4 shapes of 8 frames
 .const PLAYER_INVULN_FRAMES = 150       // from the first frame of Respawn: 50 of READY + 100 of play
 .const RESPAWN_FRAMES      = 50

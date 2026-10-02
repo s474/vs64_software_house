@@ -5,7 +5,8 @@
 //   PlayerDying ---- first frame, 100 or later, with no diver out, lives left --> Respawn
 //   PlayerDying ---- frame 100, no lives left, whatever is diving --------------> GameOver
 //   Respawn -------- 50 frames (READY, if the phase was Fight in its frame 0) --> Play
-//   GameOver ------- 200 frames, or a NEW press of fire from its frame 50 ------> a new game
+//   GameOver ------- 200 frames, or a NEW press of fire from its frame 50 ------> Title
+//   Title ---------- a NEW press of fire from its frame 8 (title.asm) ----------> Play (game_new)
 // zp_state_timer is the number of frames the state has run: 0 in the frame the state is entered,
 // + 1 at the top of every later frame (game_state_update), stopping at 255. It isn't counted in
 // Play. The player's hit happens in collide_update, so frame 0 of PlayerDying is the hit's frame;
@@ -35,11 +36,14 @@
 // score 0, lives 3, the wave stores at 01 / 0 / 0, no shot of either kind, the ship at X 171,
 // shown, no invulnerability, the fire cooldown at 25, state Play, all four panel fields redrawn;
 // then the wave's Intro (the formation reset, every diver slot free, WAVE 01, enemy 0). The high
-// score is kept.
+// score is kept. Called by the title (title.asm) in the frame after its last text is erased, and
+// at power-on in the budget build, which has no title.
 // In:  nothing       Out: nothing
 // Uses: A, X, Y, zp_tmp4-5
 // Cost: about 950 cycles (counted: game_wave_intro's 720 and the other inits). Measured as
-//       game_update for the frame it runs in: tests/games/swarm/stage4_costs.txt
+//       game_update for the frame it runs in, from the title: 2,190 raster cycles, to line 58,
+//       formation_update 369 on lines 48-54, 14,720 cycles idle (a one-off frame: limits 4,000,
+//       750 and 5,000 idle; tests/games/swarm/stage4_costs.txt, item 4)
 game_new:
         ldx #TEXT_GAME_OVER             // row 9: the widest message's cells
         jsr game_text_erase
@@ -75,7 +79,8 @@ game_new:
 // In:  zp_wave, zp_loop      Out: zp_wave_phase = Intro, zp_wave_timer = 0
 // Uses: A, X, Y, zp_tmp4-5
 // Cost: about 720 cycles + jsr/rts (counted: formation_reset 430, diver_init 40, the text 150,
-//       enemy_park 86); a one-off frame
+//       enemy_park 86); a one-off frame. Measured for a later wave's Intro frame 0: game_update
+//       1,892, formation_update 326 on lines 43-48, 15,008 idle (stage4_costs.txt, item 2)
 game_wave_intro:
         lda #WAVE_PHASE_INTRO
         sta zp_wave_phase
@@ -108,7 +113,10 @@ game_wave_intro:
 // marked for redraw, and the Clear phase starts: this is its frame 0.
 // In:  nothing       Out: X preserved
 // Uses: A
-// Cost: 62 cycles + rts, 78 when the score stops (counted); inside formation_update's row
+// Cost: 62 cycles + rts, 78 when the score stops (counted); inside formation_update's row.
+//       Measured: formation_update 650-670 in Clear's first frame with 3 explosions ending on a
+//       turn-and-swap frame, ending on lines 37-38 (limit 750; stage4_costs.txt, item 1). Part
+//       B's sound request goes on top of that
 game_wave_clear:
         lda #WAVE_PHASE_CLEAR           // 2
         sta zp_wave_phase               // 3
@@ -140,7 +148,9 @@ game_wave_clear:
 // Out: enemies parked, WAVE nn erased, Fight entered; or the next wave's Intro
 // Uses: A, X, Y, zp_tmp4-5
 // Cost: about 25 cycles in an ordinary frame; 105 in a frame an enemy appears (enemy_park), 110
-//       when WAVE nn is erased, about 790 when the next wave starts (counted)
+//       when WAVE nn is erased, about 790 when the next wave starts (counted). Measured over a
+//       whole Intro with the ship firing: formation_update ends on line 37 at the latest
+//       (stage4_costs.txt, item 3)
 game_wave_step:
         inc zp_wave_timer
         ldx zp_wave_timer
@@ -192,7 +202,7 @@ game_wave_step:
 // shots have moved and before formation_update (memory-map.md "Order of the frame").
 // In:  zp_game_state, zp_state_timer, zp_wave_phase, zp_wave_timer, zp_lives, zp_joy_pressed
 // Out: both machines stepped: texts on row 9, the ship (Respawn), the high score (GameOver), a
-//      new wave, a new game
+//      new wave, the title
 // Uses: A, X, Y, zp_tmp4-5
 // Cost: 22 cycles in Play and Fight (counted: the usual frame); up to about 60 in the other
 //       states' ordinary frames; a state change up to about 300; the wave phase's frames as
@@ -284,7 +294,7 @@ game_state_update_end:
         rts
 
 // GameOver's frames after its first: 200 frames; from frame 50 a new press of fire ends it.
-// In:  A = zp_state_timer (1 or more)     Out: a new game when it ends
+// In:  A = zp_state_timer (1 or more)     Out: the title when it ends
 // Uses: A, X, Y, zp_tmp4-5
 // Cost: about 20 cycles a frame (counted)
 game_over_step:
@@ -298,7 +308,8 @@ game_over_step:
         lda #GAMEOVER_FRAMES - 1        // this is GameOver's last frame
         sta zp_state_timer
 !out:   rts
-!new:   jmp game_new
+!new:   jmp title_enter                 // not a new game: the title (Stage 4 rule 13). main.asm
+                                        // then skips the rest of this frame's play routines
 
 // Write text X (a TEXT_* index: tables.asm) to its cells in the play area. Screen codes only: the
 // play area's colour RAM has been the message colour since screen_init and no star is in a text's

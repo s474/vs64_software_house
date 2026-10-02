@@ -1,9 +1,9 @@
-// Swarm (M4 training game), stage 3: the player's ship moves and fires, the star field twinkles,
-// the status panel is drawn, the formation of 18 enemies drifts and animates, the player's shots
-// hit the enemies, and now the enemies dive (wind-up, three paths, return), shoot aimed shots and
-// ram; the player has lives, dies, comes back behind READY, and the game ends with GAME OVER and
-// starts again. Every formation is pattern 3 at loop 0 (design "Stage 3 rules", rule 1). No waves,
-// wave-clear bonus, title screen or sound yet: stage 4.
+// Swarm (M4 training game), stage 4 part A: the title screen, a game of waves (Intro, Fight,
+// Clear, the + 1,000 bonus, three patterns over four loops of difficulty), GAME OVER and back to
+// the title, on top of stage 3's game: the ship, its shots, the star field, the panel, the
+// formation of 18, hits and explosions, the divers and their shots, lives and READY.
+// No sound yet (part B: engine/sfx.asm); the places that will ask for each effect are marked
+// "SFX (part B)".
 //
 // Design (the source of truth for behaviour): docs/games/swarm/design.md
 // Memory, zero page, raster timeline, budgets: docs/games/swarm/memory-map.md
@@ -14,7 +14,8 @@
 //   screen.asm    charset and screen set-up (init only)
 //   stars.asm     star field and twinkle        panel.asm   status panel, score variables
 //   player.asm    the ship                      pshot.asm   the player's shots
-//   eshot.asm     the enemies' shots            game.asm    the game states, a new game
+//   eshot.asm     the enemies' shots            game.asm    the game state and the wave phase,
+//   title.asm     the title screen, the seeding               a new game, the play-area texts
 //   formation.asm the 18 enemies: per-enemy state, the drift, the animation, the explosions
 //   diver.asm     the launcher and the divers: wind-up, dive paths, firing, return
 //   collide.asm   player shots against the enemies (grid lookup + box test), the player against
@@ -24,9 +25,10 @@
 // Chain: entry 0 mux_irq_top at line 16, entry 1 game_irq_bottom at line 251 (nothing to do
 // until the sound stage). Main loop: irq_wait_frame, input_read, panel_update and stars_update
 // (first, so they are always in the top border: memory-map.md "The panel's budget", "Order of the
-// frame"), pshot_update, eshot_update, game_state_update, formation_update, diver_update,
-// collide_update, player_update, then mux_update. That order is memory-map.md's and is behaviour:
-// shots move before the divers fire, every mover before the collisions, the player last.
+// frame"); then, at the title, title_update alone; in a game pshot_update, eshot_update,
+// game_state_update, formation_update, diver_update, collide_update, player_update; then
+// mux_update. That order is memory-map.md's and is behaviour: shots move before the divers fire,
+// every mover before the collisions, the player last.
 //
 // Rules this code keeps (engine v1, memory-map.md "(c) The four conditions"): after irq_init
 // there is no sei, no write to $01, $DC00 or $DC02; $D011 is written once (screen_init); $D017
@@ -93,12 +95,14 @@ start:
         jsr stars_init
         jsr panel_init
         jsr input_init                  // $DC02: before irq_init, and never written again
-        lda #<GAME_RNG_SEED             // a fixed seed until stage 4's title seeds from zp_irq_frame
-        ldx #>GAME_RNG_SEED             // and $D012 at the press of fire (engine/rng.md); AUTOPLAY
-        jsr rng_seed                    // keeps this constant
-        jsr game_new                    // score 0, lives 3, wave 1's Intro frame 0, the ship, state Play
-        dec zp_wave_timer               // game_new ran Intro's frame 0 outside a frame: the first frame
-                                        // of the main loop counts the timer back to 0 and is frame 0
+        lda #<GAME_RNG_SEED             // a constant: the title steps the generator every frame
+        ldx #>GAME_RNG_SEED             // and seeds it at the press of fire (title.asm); the budget
+        jsr rng_seed                    // build has no title and keeps this seed
+#if AUTOPLAY
+        jsr game_new                    // the budget build starts through wave 12's Intro
+#else
+        jsr title_enter                 // the title's frame 0: lives 0, the power-on panel
+#endif
         lda #0
 #if DEBUG
         sta game_overrun_count
@@ -117,12 +121,9 @@ main:   jsr irq_wait_frame              // A = frame number
 main_frame:
         sta zp_game_frame
 // game_update .. game_update_end: everything the main loop does in a frame except mux_update.
-// Cost (stage 3, measured: tests/games/swarm/stage3_costs.py, results beside it; raster cycles,
-//       IRQs excluded): 1,421-3,448, average 2,066, in the AUTOPLAY build (wave 12, 3 divers,
-//       600 passes), from line 23 to lines 45-86. Budget 6,075. One-off frames: 2,875 when a
-//       cleared formation comes back, 3,713 when a new game starts (formation_init: those frames
-//       run formation_update below line 51, with nothing diving and nothing to hit).
-//       Idle in the worst AUTOPLAY frame: 6,288 cycles (required 625)
+// Cost (measured: tests/games/swarm/stage4_costs.py, results beside it; raster cycles, IRQs
+//       excluded): see stage4_costs.txt for the AUTOPLAY build (wave 12, 3 divers), the title's
+//       frames, and the one-off frames (a new game, a wave's Intro frame 0). Budget 6,050
 game_update:
         jsr input_read                  // exactly once a frame, straight after the tick
 #if AUTOPLAY
@@ -132,9 +133,18 @@ game_update:
                                         // draws what the previous frame's updates made dirty
         jsr stars_update                // in the border too (memory-map.md "Order of the frame"):
                                         // no badline, no sprite DMA, so its cost is its CPU count
-        jsr pshot_update                // the shots move first, in the border ...
+        lda zp_game_state
+        cmp #GAME_STATE_TITLE
+        bne !play+
+        jsr title_update                // the title runs none of the play routines ...
+        jmp !started+
+!play:  jsr pshot_update                // the shots move first, in the border ...
         jsr eshot_update                // ... so a shot fired this frame stays at its spawn position
-        jsr game_state_update           // the state's timer and changes; the formation's return
+        jsr game_state_update           // the wave phase and the game state: timers and changes
+!started:
+        lda zp_game_state               // ... until the frame its press of fire starts a game in
+        cmp #GAME_STATE_TITLE           // (game_new: Intro's frame 0, which runs what follows); and
+        beq game_update_end             // a GameOver that has just ended in the title stops here
         jsr formation_update            // this frame's home X, the animation, the explosions
         jsr diver_update                // the launcher, wind-up, dive paths (and their shots), return
         jsr collide_update              // every mover has moved before the collisions ...
@@ -240,6 +250,7 @@ game_idle_warm:         .byte 0         // frames left before game_idle_min star
 #import "formation.asm"
 #import "diver.asm"                     // after formation.asm: it uses the ENEMY_* states
 #import "game.asm"
+#import "title.asm"
 #import "collide.asm"                   // after formation.asm: it uses the ENEMY_* states
 #if AUTOPLAY
 #import "autoplay.asm"

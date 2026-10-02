@@ -83,6 +83,20 @@ def main() -> int:
             poke("zp_game_state", [GS_OVER])
             poke("zp_state_timer", [199])
             frame()
+            if "title_step" in sym:
+                # Stage 4 builds: GameOver ends in the title and a game starts with wave 1's Intro.
+                # A press of fire in the title's frame 8, the new game 6 frames later, the pattern
+                # store put at stage 3's (pattern 3, index 2; the loop is 0), and the game's own
+                # Intro run to Fight's first frame: the same state the stage 3 build's game_new gave
+                # (a full formation, score 0, lives 3, the ship at X 171), fx apart.
+                while peek("zp_state_timer")[0] < 7:
+                    frame()
+                mon.joyport_set(PORT2, 0x0F)
+                frame()
+                mon.joyport_set(PORT2, 0x1F)
+                frame(6)
+                poke("zp_pattern", [2])
+                frame(100)
             if peek("zp_game_state")[0] != GS_PLAY or list(peek("enemy_state", 18)) != [PARKED] * 18:
                 raise MeasureError("new_game: no new game")
             poke("zp_launch_timer", [255])
