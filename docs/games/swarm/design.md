@@ -32,12 +32,19 @@ wind-up's wording says what it does (a 2-pixel swing), and stage 4 is specified 
 ([Stage 4 rules](#stage-4-rules)). **2026-10-02, after stage 4 part A's build:** built as designed,
 the build's five choices confirmed ([as built](#stage-4-part-a-as-built)); one layout change, **the
 title's rows and sprite Y** (its three enemies overlapped:
-[Title](#title-and-game-over-screens)), which moves four star bands.
+[Title](#title-and-game-over-screens)), which moves four star bands. **2026-10-02, after Simon's
+playtest of stage 4 ("too easy"): the first behaviour change since approval.** The wave's start is
+shorter (first dive 1.2 s after the wave appears, not 3.0 s) and every wave launches more often and
+fires more: six constants and three tables, listed from → to in
+[Tuning after the stage 4 playtest](#tuning-after-the-stage-4-playtest). **Not yet built:** until it
+is, the game plays the old numbers, which that section keeps.
 
 Every number that can be checked without the game is checked by
 [tests/games/swarm/check_design.py](../../../tests/games/swarm/check_design.py)
 (`uv run python tests/games/swarm/check_design.py`; its output is in
-[check_design_results.txt](../../../tests/games/swarm/check_design_results.txt)). Its flicker figures
+[check_design_results.txt](../../../tests/games/swarm/check_design_results.txt)); the before and
+after of the stage 4 tuning by [free_period.py](../../../tests/games/swarm/free_period.py)
+([results](../../../tests/games/swarm/free_period_results.txt)). Their flicker figures
 come from a Python model of the multiplexer's selection rules, so they are **design estimates**, not
 measurements: QA's `positions.py` on the real game replaces them (deliverable 6).
 
@@ -142,7 +149,7 @@ What can pass over each message (`check_design.py`, "What can pass over the mess
 
 | Message | When it shows | Parked enemies | Divers | Enemy shots | Player shots |
 |---|---|---|---|---|---|
-| `WAVE nn` | Intro frames 0–74: every enemy is new and Parked | Never | **None exist:** the wave before ended with all 18 dead | **None:** the longest-lived shot lasts 67 frames, and the last was fired before the 75 empty frames began | His own, see below |
+| `WAVE nn` | Intro frames 0–**48** (0–74 until the stage 4 tuning): every enemy is new and Parked | Never | **None exist:** the wave before ended with all 18 dead, and the first launch is in frame 60, 11 frames after the erase | **None:** the longest-lived shot lasts 67 frames, and the last was fired before the 75 empty frames began | His own, see below |
 | `READY` | The 50 frames of Respawn, which starts only when no enemy is in WindUp, Dive or Return ([Stage 3 rules](#stage-3-rules) 9); nothing launches until Play | Never | **None:** not even one returning | **None:** removed at the hit, and none fired since | His own, see below |
 | `GAME OVER` | From frame 100 of the last PlayerDying, whatever is still diving | Never | **None over the text:** a Sweep is last over row 9 in frame 43 after its launch and a Plunge in frame 62 (loop 0, the slowest; a Hook never), and nothing launches from the hit's frame on: 37 frames to spare | None (as `READY`) | None: the ship is gone, and a shot lives 21 frames |
 
@@ -316,8 +323,9 @@ the lowest indices (the engine pins the first four flagged).
 shots because they are the small things that kill: a bullet missing for a frame is an unfair death,
 while a 24-pixel diver missing for one frame is still readable. The cost is that the flicker moves
 onto divers and player shots: with the shots pinned the model gives enemy shots 0% missing, divers
-up to 2.1% and player shots up to 1.2% of their frames; with only the player pinned, enemy shots are
-missing in up to 3.8% of theirs (`check_design_results.txt`, both tables).
+up to 2.2% and player shots up to 1.4% of their frames; with only the player pinned, enemy shots are
+missing in up to 4.0% of theirs (`check_design_results.txt`, both tables; 2.1%, 1.2% and 3.8% before
+the stage 4 tuning).
 
 ### Hit boxes
 
@@ -573,8 +581,12 @@ Stage 4 replaces rule 1 (waves advance), rule 12 (the wave timer) and the last s
 | 14 | **No sound in stage 3** | `engine/sfx.asm` is stage 4 |
 | 15 | **One ram a frame.** 6c tests the diver slots in slot order and stops at the first enemy that rams: that enemy dies and scores, the player is hit, and any other diver overlapping him in the same frame flies on (from the next frame he is dead and rule 7 applies). So a frame has at most 2 shot hits, 1 ram and 1 player hit, at every loop, with 2 or 3 divers out | As built. "At most one player hit a frame" (step 6) already meant it; this says so for two or three divers on the ship at once, which loop 1's third diver makes more likely |
 
-Checked for rule 10: at loop 0 the first thing that can hit a respawned player is a Hook's shot,
-50 + 24 + 8 + 32 = 114 frames into play, after the 100.
+Checked for rule 10 (`check_design.py`, "The wave's start"; corrected 2026-10-02, this line said a
+Hook's shot at 114): with the launch in Play's frame 49, as built, at loop 0 the first thing that can
+hit a respawned player is a **Hook itself, in Play's frame 107** (49 + 24 + step 35), and its first
+shot in frame 112: both after the 100. At loops 1–3 the first of them arrives inside the 100 (frames
+96, 87, 83) and passes through him (rule 7); what is in the air when the flash stops is in plain
+sight. Unchanged by the stage 4 tuning: the respawn's timer stays 50.
 
 ## Waves
 
@@ -582,11 +594,17 @@ Wave n (from 1): pattern = (n − 1) mod 3 + 1 (the table's 1–3), loop = (n �
 is the same 18 each time. Loops past 3 play as loop 3. What is shown and what is stored:
 [Stage 1 rules](#stage-1-rules-confirmed-from-the-build) 7 and 8.
 
+**Changed 2026-10-02 after the stage 4 playtest** (the old values:
+[Tuning](#tuning-after-the-stage-4-playtest)):
+
 | Pattern | Rows that dive | Max diving at once (loops 0 / 1 / 2 / 3) | Launch interval, frames (loops 0 / 1 / 2 / 3) | Shots per dive at loop 0 |
 |---|---|---|---|---|
-| 1 "Hooks" | 2 | 1 / 2 / 2 / 2 | 150 / 120 / 100 / 80 | 1 |
-| 2 "Bombers" | 1, 2 | 2 / 2 / 3 / 3 | 120 / 100 / 80 / 64 | 2 |
-| 3 "All in" | 0, 1, 2 | 2 / 3 / 3 / 3 | 100 / 80 / 64 / 50 | 2 |
+| 1 "Hooks" | 2 | **2 / 2 / 2 / 2** | **100 / 80 / 64 / 50** | **2** |
+| 2 "Bombers" | 1, 2 | **2 / 3 / 3 / 3** | **80 / 64 / 50 / 40** | **3** |
+| 3 "All in" | 0, 1, 2 | **3 / 3 / 3 / 3** | **64 / 50 / 40 / 32** | **3** |
+
+A dive never has more shots than its path has fire steps (Hook 2, Sweep 4, Plunge 3), so in play a
+Hook fires 2 at every loop, a Plunge 3 at every loop, and a Sweep 3 at loop 0 and 4 from loop 1.
 
 **What "faster" means,** per loop:
 
@@ -600,9 +618,10 @@ is the same 18 each time. Loops past 3 play as loop 3. What is shown and what is
 
 Return speed, player speed and player shots never change.
 
-**Wave start (Intro, 100 frames):** `WAVE nn` shows for 75 frames. Enemies appear in place (no
-fly-in), one every 2 frames, row 0 first, left to right (the last in frame 34). The launcher starts
-at frame 100 with the launch timer at 50. **Wave clear** (all 18 dead and exploded): + 1,000, 75
+**Wave start (Intro, 50 frames; 100 until the stage 4 tuning):** `WAVE nn` shows for **49** frames.
+Enemies appear in place (no fly-in), one every 2 frames, row 0 first, left to right (the last in
+frame 34). The launcher starts at frame **50** with the launch timer at **10**: the first wind-up is
+in frame **60**. **Wave clear** (all 18 dead and exploded): + 1,000, 75
 frames' pause, next wave. To the frame: [Stage 4 rules](#stage-4-rules).
 
 ## Scoring
@@ -636,7 +655,7 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
     [*] --> Intro: new game (wave 1)
-    Intro --> Fight: 100 frames (WAVE nn for 75, enemies appear in frames 0 to 34)
+    Intro --> Fight: 50 frames (WAVE nn for 49, enemies appear in frames 0 to 34)
     Fight --> Clear: the last explosion ends (+ 1,000)
     Clear --> Intro: 75 frames, then wave + 1
 ```
@@ -649,26 +668,28 @@ or respawning. The rules are [Stage 4 rules](#stage-4-rules).
 is hidden. No new dives start; enemies already diving finish and return. Player shots in flight
 carry on and score. On respawn the player appears at X 171 and can't be hit for the 50 frames of
 `READY` and the first 100 of play (drawn in alternating colours every 4 frames, not hidden); the
-launch timer restarts at 50. The frame-by-frame rules are [Stage 3 rules](#stage-3-rules) 8–13.
+launch timer restarts at 50 (not the wave start's 10: a respawn keeps the pause Simon played). The frame-by-frame rules are [Stage 3 rules](#stage-3-rules) 8–13.
 
 ## Stage 4 rules
 
 What stage 4 builds, to the frame: waves, the title, sound, the high score. Where this and the
 prose elsewhere differ, this wins. Everything stage 3 built stays as it is except where a rule here
-says "replaces".
+says "replaces". **Rules 2, 3 and 8 changed on 2026-10-02 after the stage 4 playtest** (Intro 100 to
+50 frames, `WAVE nn` 75 to 49, the launch timer at Fight 50 to 10:
+[Tuning](#tuning-after-the-stage-4-playtest)); the rules below are the new ones.
 
 **The wave phase**
 
 | # | Rule | Why |
 |---|---|---|
 | 1 | **A wave phase** (Intro, Fight, Clear) with its own timer, beside the game state. **The wave timer counts in every frame in which lives > 0** (Play, Respawn, and PlayerDying unless the last life has just gone); it stands still in the last PlayerDying, in GameOver and at the title. Replaces Stage 3 rule 12 and Stage 2 rule 3's stage 2 and 3 behaviour | As built, the formation's pause already runs on its own timer whatever the player is doing. Stopping it with the last life keeps `WAVE nn` and a wave number the player never played off the game-over screen |
-| 2 | **Intro, 100 frames (0–99).** Frame 0: every enemy is Waiting (hidden, can't be hit, isn't Parked); **enemies alive = 18**; `fx` = 48 moving right, and the drift and the animation run from this frame; `WAVE nn` is written (rule 6); the panel's `WAVE` is redrawn; the wave start sound. **Enemy k (0–17: row 0 left to right, then rows 1 and 2) becomes Parked at its home in frame 2k,** so the last appears in frame 34. Frame 75: `WAVE nn` is erased. Nothing launches in Intro | 18 alive from frame 0 so the wave can't read as cleared while it is still arriving. One enemy every 2 frames keeps the multiplexer's sort to one new sprite at a time |
-| 3 | **Fight** starts in the frame after Intro's frame 99, with the launch timer set to 50. **The launcher runs only when the game state is Play and the phase is Fight;** entering Play still sets the timer to 50 (Stage 3 rule 10) | First launch 150 frames after the wave appears, as stage 3's formation return gave |
+| 2 | **Intro, 50 frames (0–49).** Frame 0: every enemy is Waiting (hidden, can't be hit, isn't Parked); **enemies alive = 18**; `fx` = 48 moving right, and the drift and the animation run from this frame; `WAVE nn` is written (rule 6); the panel's `WAVE` is redrawn; the wave start sound. **Enemy k (0–17: row 0 left to right, then rows 1 and 2) becomes Parked at its home in frame 2k,** so the last appears in frame 34. Frame **49**: `WAVE nn` is erased (the erase frame must be odd, past frame 34 and inside Intro: the code's own rule). Nothing launches in Intro | 18 alive from frame 0 so the wave can't read as cleared while it is still arriving. One enemy every 2 frames keeps the multiplexer's sort to one new sprite at a time |
+| 3 | **Fight** starts in the frame after Intro's frame 49 (wave frame 50), with the launch timer set to **10: its own constant, not the 50 of entering Play.** **The launcher runs only when the game state is Play and the phase is Fight;** entering Play still sets the timer to 50 (Stage 3 rule 10), and whichever of the two is set later stands | First launch **60** frames after the wave appears (150 as first built): 25 frames after the last enemy is in place and 11 after `WAVE nn` goes. The wind-up is the warning, so the pause before it only gave the player free kills |
 | 4 | **Clear, 75 frames.** Starts in the frame enemies alive reaches 0 (the last explosion ends: Stage 2 rule 2), whatever the game state. In that frame: **+ 1,000** and the wave clear sound. The sky is empty; the player moves and fires. No enemy is in WindUp, Dive or Return at a Clear (all 18 are dead, and a hit frees its diver slot at once), so the next Intro starts with divers active = 0 and every diver slot free: if the code's re-park doesn't guarantee that, it must clear them | The bonus is paid when it is earned, also to a dying player: with the last life gone it still counts toward the high score, which is taken 100 frames after the hit |
 | 5 | **The frame after Clear's 75th:** shown wave + 1 (BCD, sticks at 99), pattern + 1 (2 wraps to 0), and loop + 1 when the pattern wraps (sticks at 3); then Intro's frame 0 with the new numbers. **Only here do the three stores change in a game;** a new game sets them to 01, 0, 0 (rule 10) and its first Intro doesn't advance them. Everything a loop changes (drift speed, wind-up, steps, shots, shot speed) is read from the loop store when it is used: no diver or enemy shot exists when it changes | Stage 1 rule 8. A test can still set the stores |
 | 6 | **Row 9 holds one message at a time.** `WAVE nn` is `WAVE`, a space and the shown wave's two digits (`WAVE 01`). `GAME OVER` is written over whatever is there (it covers columns 15–23, the widest). **`READY` is written only if the phase is Fight in Respawn's first frame, and erased at Respawn's end only if it was written;** Respawn's 50 frames, the ship and the flash are the same without it. `WAVE nn` and `GAME OVER` can't meet: with the last life gone the wave timer stops (rule 1), and the player can't be hit while `WAVE nn` shows (rule 7) | A Respawn that falls in a Clear or an Intro would write `READY` into `WAVE nn` or erase part of it. The wave message says the same thing: get ready |
 | 7 | **What can hit the player outside Fight:** only an enemy shot still in flight in Clear's first 51 frames (the longest-lived shot lasts 67 frames and its diver died at least 16 before the Clear). Nothing in Intro. A death there is an ordinary death | No special case |
-| 8 | **A typical case, to check the rules against:** the player rams the last enemy in frame d with lives left. d + 16: Clear, + 1,000. d + 91: Intro frame 0, `WAVE nn`, enemies appearing. d + 100: Respawn, the ship back, no `READY` (phase Intro). d + 150: Play. d + 166: `WAVE nn` erased. d + 191: Fight, launch timer 50. d + 241: first launch. d + 250: invulnerability ends. With the last life: d + 16 Clear and + 1,000, the timer stops, d + 100 GameOver over an empty sky | |
+| 8 | **A typical case, to check the rules against:** the player rams the last enemy in frame d with lives left. d + 16: Clear, + 1,000. d + 91: Intro frame 0, `WAVE nn`, enemies appearing. d + 100: Respawn, the ship back, no `READY` (phase Intro). d + 140: `WAVE nn` erased. d + 141: Fight, launch timer 10 (not counted: the state is Respawn). d + 150: Play, which sets the launch timer to 50. d + 199: first launch (Play's frame 49, as built). d + 250: invulnerability ends; the first thing that can hit him is that Hook in d + 257. (As first built: erased d + 166, Fight d + 191, launch d + 241.) **The other order,** Play entered before Fight (he died earlier, so the Respawn ends inside the Intro): Fight's 10 stands and the first launch is 10 frames after Fight, at the soonest Play's frame 11; at loop 0 that dive and its shots reach the ship in Play's frames 69–74, inside the 100 invulnerable frames, and pass through him. Accepted: it needs a wave cleared while dying With the last life: d + 16 Clear and + 1,000, the timer stops, d + 100 GameOver over an empty sky | |
 
 **The title, starting and ending a game**
 
@@ -693,7 +714,7 @@ read two ways the build chose; **all five confirmed, no behaviour change.** Ever
 
 | # | As built | Verdict | Why |
 |---|---|---|---|
-| a | **Launch timer at Fight:** reads **50 at the end of Fight's frame 0**, 0 at the end of Fight's frame 50, and the launch is in that frame (the code stores 51 and the launcher counts it once in the same frame). Fight is Intro's frame 100, so the first launch is frame 150 of the wave | Confirmed | It is rule 3's "150 frames after the wave appears" and rule 8's d + 191 and d + 241 |
+| a | **Launch timer at Fight:** reads **50 at the end of Fight's frame 0**, 0 at the end of Fight's frame 50, and the launch is in that frame (the code stores 51 and the launcher counts it once in the same frame). Fight is Intro's frame 100, so the first launch is frame 150 of the wave. **After the stage 4 tuning, read the same way:** stores 11, reads 10 at the end of Fight's frame 0 (wave frame 50), launch in wave frame 60 | Confirmed | It is rule 3's "150 frames after the wave appears" and rule 8's d + 191 and d + 241 |
 | b | **Fire cooldown at a new game:** reads **25 at the end of the new game's frame 0**; no shot in frames 0–24; fire held, the first shot is in **frame 25** (the code stores 26, counted once that frame) | Confirmed | The same reading as Stage 1 rule 4: a cooldown of n read at a frame's end means the next shot n frames later. 25 whole frames of hold, as rule 10 meant |
 | c | **Title frame 0 is the frame the title is entered in:** at power-on the first frame shown; after GameOver, the frame after GameOver's last (GameOver's frame 200, or the frame after the skipping press). The frame count reads 0 at its end | Confirmed | One counter serves the drawing, the blink (count mod 64) and "fire is read from frame 8" |
 | d | **Drawing:** frame 0: the sprites and `PRESS FIRE`; frames 1–5: `SWARM`, `150 PTS`, ` 80 PTS`, ` 50 PTS`, `DIVING SCORES DOUBLE`, one a frame; frames 6 and 7: nothing; fire read from frame 8 | Confirmed | `PRESS FIRE` first so the blink is on in frames 0–31 as rule 9 says, with no special case. One text a frame is at most 20 cells |
@@ -718,12 +739,12 @@ Active objects (all bounded by the slot counts):
 | Player shots | 2 | Move; box test against up to 18 enemies (36 tests) |
 | Enemy shots | 3 | Move; box test against the player (3 tests) |
 | Enemies parked or winding up | 18 | Home position from `fx` |
-| Enemies in Dive or Return | 3 (2 until loop 1) | Up to 2 path steps; box test against the player (3 tests) |
+| Enemies in Dive or Return | 3 (from wave 3; 2 in waves 1 and 2. Before the stage 4 tuning: 2 until loop 1) | Up to 2 path steps; box test against the player (3 tests) |
 | Explosions | **4** enemy + 1 player (in the dead object's slot: no sprite of their own). A 5th enemy gets none ([Explosions at once](#explosions-at-once)) | Animation timer |
 | Stars | 1 colour write | |
 | Sound | 3 voices | |
 | **Box tests in all** | **42** | |
-| Sprites whose Y changes by more than 8 lines in one frame | **3** (a wrap, a shot spawning or leaving) | No mass re-sort ever: the formation's Y is fixed and enemies appear one per 2 frames |
+| Sprites whose Y changes by more than 8 lines in one frame | **4** in the model (wraps, shots spawning or leaving; pattern 3 at loops 2 and 3). 3 before the stage 4 tuning: for the Technical Director to note | No mass re-sort ever: the formation's Y is fixed and enemies appear one per 2 frames |
 
 Sprites per window, from the model (full formation, nothing ever dies, player firing at the maximum
 rate, 6,000 frames per row; "window" is the README's Y − 38 … Y + 25 around any one sprite):
@@ -731,21 +752,23 @@ rate, 6,000 frames per row; "window" is the README's Y − 38 … Y + 25 around 
 | Situation | Most in one window | Frames with any sprite dropped | Longest run a sprite is missing |
 |---|---|---|---|
 | Formation, player, 2 shots, no diver | at most 8 | 0% | 0 |
-| Pattern 1, loop 0 | 14 | 0% | 0 |
-| Pattern 2, loop 0 | 14 | 2.2% | 1 frame |
-| Pattern 3, loop 0 | 16 | 7.1% | 1 frame |
-| Pattern 3, loop 3 (the worst) | 17 | 10.5% | 1 frame |
+| Pattern 1, loop 0 | 14 | 0.3% (was 0%) | 1 frame |
+| Pattern 2, loop 0 | 14 | 3.1% (was 2.2%) | 1 frame |
+| Pattern 3, loop 0 (the worst, now that it has 3 divers) | 17 (was 16) | **11.6%** (was 7.1%) | 1 frame |
+| Pattern 3, loop 2 | 17 | 11.5% (was 8.0%) | 1 frame |
+| Pattern 3, loop 3 (the worst before the tuning) | 17 | 10.4% (was 10.5%) | 1 frame |
 | Player and enemy shots, every case | – | **never dropped** | 0 |
 
 Sprites in the shown range: up to **24**, every slot in use at once, first when all 3 enemy shots
-are in flight together: pattern 2 from loop 1, where a dive has 3 shots (the model's "sprites in
+are in flight together: every pattern 2 and 3 wave, where a dive has 3 shots (before the tuning: from
+loop 1; the model's "sprites in
 range" column; divers don't add to it, being enemies that are already counted). A window of 14–17 is a diver
 between two rows, seeing both; what matters is the dropped column. A real game is lighter: enemies
 die, and shots stop at the first thing they hit.
 
 **Close to the limits:** all 24 virtual sprites and all 4 pins are used, with none spare. Row spacing
 40 against the guarantee's 39. The player's zone (Y 183–221) can hold player + 2 shots + 3 enemy
-shots + 3 divers = 9, one over, from loop 1: the four pinned are safe and a diver or player shot
+shots + 3 divers = 9, one over, from wave 3 (from loop 1 before the stage 4 tuning): the four pinned are safe and a diver or player shot
 misses a frame. Pinned sprites evicting in a crowd cost CPU (README: about 226 cycles an eviction),
 which is the Technical Director's to budget; the v1 promise's one exception needs a mass re-sort,
 which this design never does.
@@ -819,11 +842,14 @@ A playtester can check each of these.
    played in stage 3: fair.)
 5. The player and the enemy shots never flicker. Nothing is missing for 2 frames running.
 6. With nothing diving, nothing flickers.
-7. A new player clears wave 1 on the first or second game, and usually loses the first life in
-   wave 2 or 3. (Stage 3, Simon, playing wave 3's settings on every formation: "it is quite easy,
+7. A new player clears wave 1 within the first three games, and usually loses the first life in
+   wave 1 or 2. **Simon (three stages of practice) loses a life by wave 3 in most games and does not
+   call waves 1 to 3 easy.** (Until the stage 4 tuning this read "first or second game … wave 2 or
+   3"; stage 4 as built was "too easy generally".) (Stage 3, Simon, playing wave 3's settings on every formation: "it is quite easy,
    but probably about right for a first level". Not yet a test of this target: waves are stage 4.
    See [Stage 3 playtest and the difficulty curve](#stage-3-playtest-and-the-difficulty-curve).)
 8. A first game lasts 2 to 4 minutes. A good player reaches loop 2 (wave 7) in about 5 minutes.
+   (To re-check after the stage 4 tuning: each wave's start is 1.8 s shorter, each wave is harder.)
 9. Every death has a visible cause: the player can say what hit him. (The same for kills, stage 2,
    Simon on the C64 Ultimate, 2026-10-02: "it is clear when something is hit".) **Met, stage 3
    playtest (Simon, C64 Ultimate, 2026-10-02):** deaths feel like your fault.
@@ -835,6 +861,18 @@ A playtester can check each of these.
     **Met, stage 2 playtest (Simon, C64 Ultimate, 2026-10-02):** collisions "all good", and that
     shot "feels nice and precise". No change requested: the boxes, the shot speed and the drift
     stay as they are.
+12. **The wave's start is not free.** Counting from the frame the first enemy appears: the last
+    enemy is in place at 0.7 s, `WAVE nn` goes at 1.0 s, the first enemy flashes at **1.2 s** (frame
+    60), the first enemy shot is in the air by **1.8 s** (frame 91 at loop 0) and can reach the ship
+    at 2.5 s. Holding fire under the formation from the wave's first frame, **no more than 5 of the
+    18 die before the first flash** (the model's fastest player; 11 as first built). A playtester
+    should not be able to clear half the formation before something dives.
+13. **There is usually something to dodge.** In wave 1, once the dives start, a new dive begins about
+    every 2 seconds and each drops 2 shots; from wave 2 it is common to see all 3 enemy shots on
+    screen at once; in wave 3 three divers are out together. With the formation full the rates are
+    1.0 / 1.4 / 1.7 enemy shots a second in waves 1 / 2 / 3 (0.3 / 0.8 / 1.0 as first built).
+14. **Still fair** (targets 3, 4 and 9 are unchanged and must still be met): the tuning changes how
+    often things happen, not how fast they move or how long the warning is at any loop.
 
 ## Stage 3 playtest and the difficulty curve
 
@@ -845,8 +883,13 @@ pixel" and saw more: it is a 2-pixel swing, to spec: [Enemy behaviour](#enemy-be
 fault found was the layout's, not the feel's: the messages under the formation's bottom row
 ([Text cells](#text-cells-and-the-star-rule)).
 
+**This section is the record of stage 3 and of the curve as built in stage 4.** Simon played that
+curve on 2026-10-02 and found it too easy; the curve the design now asks for is in
+[Tuning after the stage 4 playtest](#tuning-after-the-stage-4-playtest).
+
 **What he played was wave 3,** not wave 1: stage 3 runs pattern 3 at loop 0 on every formation
-(Stage 3 rule 1). The curve as designed, per wave (`check_design.py`, "Difficulty by wave":
+(Stage 3 rule 1). The curve as first designed and as built in stage 4, per wave (`check_design.py`,
+"Difficulty by wave", before the tuning; now printed by `free_period.py`, "before":
 launches and shots counted in the model with a formation that never dies, so they are the most the
 launcher can do; a real wave thins out, then the interval halves for the last 4):
 
@@ -888,6 +931,159 @@ The designer's reading:
   (he called it about right), or touching speeds or wind-up, which are what make deaths fair.
 - **If the top is too hard or too easy** once he reaches it, the loop 1 row is the one to tune
   (interval and the third diver in wave 6), and that needs a playtest that gets there.
+
+## Tuning after the stage 4 playtest
+
+**Simon, 2026-10-02, stage 4 in VICE and on a real C64 Ultimate.** The sounds are at the right
+times and levels: no change. **"The game is too easy generally":** partly because "there is a period
+at the start of each wave when the player can fire, but the enemies can't", partly because "the
+enemies don't fire enough generally". He also notes, and accepts for this version, that divers leave
+to the side, not off the bottom (an engine v1 limit), so a diver rarely threatens on its way out.
+
+**Status: designed, not yet built.** Every change is a constant or a table value. No rule, path,
+speed, wind-up, hit box, score or sound changes, and no maximum count: still at most 3 divers and 3
+enemy shots, 24 sprites, 4 pinned. Figures marked "model" come from
+[free_period.py](../../../tests/games/swarm/free_period.py) and `check_design.py`
+(`uv run python tests/games/swarm/free_period.py`;
+[results](../../../tests/games/swarm/free_period_results.txt)): design estimates, not measurements.
+
+### What was wrong, in numbers
+
+As built, counting from the frame a wave's first enemy appears (wave frame 0):
+
+| | Frame | Seconds |
+|---|---|---|
+| The last enemy appears | 34 | 0.7 |
+| `WAVE nn` erased | 75 | 1.5 |
+| Fight starts, launch timer 50 | 100 | 2.0 |
+| **First wind-up** | **150** | **3.0** |
+| First enemy shot in the air (a Hook's step 8; loops 0 / 1 / 2 / 3) | 181 / 175 / 170 / 166 | 3.6 to 3.3 |
+| First frame that shot can reach the ship | 213 / 206 / 191 / 187 | 4.3 to 3.7 |
+
+The player fires from frame 0 (frame 25 in a new game's first wave), one shot every 10 frames, and
+a shot reaches the bottom row in 8. In the model a player who shoots the nearest column and never
+has to move out of the way kills **11 of the 18 before the first wind-up and 15 before the first
+enemy shot**; one firing two thirds as fast and starting 15 frames late kills **8 and 13**. The wave
+was mostly over before it began, so its launch interval and shots hardly mattered: against the
+slower of those two players a whole wave 1 fired **0.6 enemy shots**, wave 3 **2.1**.
+
+And when the launcher did run it was slow: with the formation full, 0.33 / 0.82 / 0.97 enemy shots a
+second in waves 1 / 2 / 3, one dive every 3.0 / 2.4 / 2.0 seconds.
+
+### The changes (all of them)
+
+| # | What | Where it is in the design | From | To | What it should change about the feel |
+|---|---|---|---|---|---|
+| 1 | Intro length | Stage 4 rule 2 | 100 frames | **50** | The wave is "on" a second sooner. 50 still covers the 35 frames in which the enemies appear |
+| 2 | `WAVE nn` shown for | Stage 4 rule 2 | 75 frames | **49** | It must go before Fight (the erase is done in Intro) and before the first dive, so no diver ever crosses it. A second is enough for two words; it is on row 9, clear of everything |
+| 3 | Launch timer set when Fight starts | Stage 4 rule 3 | 50 (the same constant as entering Play) | **10, its own constant** | With 1: first wind-up in wave frame **60**, not 150. The 10 is the beat between the text going and the first flash |
+| 4 | Launch timer set when Play is entered (after a respawn) | Stage 3 rule 10 | 50 | **50: not changed** | A respawned player keeps the pause he had: the stage 3 verdict "deaths feel like your fault" was given with it |
+| 5 | Launch interval, pattern 1, loops 0 / 1 / 2 / 3 | [Waves](#waves) | 150 / 120 / 100 / 80 | **100 / 80 / 64 / 50** | Wave 1 launches as often as wave 3 used to. Still Hooks only: it is still the wave that teaches the Hook |
+| 6 | Launch interval, pattern 2 | Waves | 120 / 100 / 80 / 64 | **80 / 64 / 50 / 40** | Each pattern takes the row that was one step harder |
+| 7 | Launch interval, pattern 3 | Waves | 100 / 80 / 64 / 50 | **64 / 50 / 40 / 32** | Wave 3 launches at old wave 9's rate, at loop 0's speeds |
+| 8 | Max diving at once, pattern 1 | Waves | 1 / 2 / 2 / 2 | **2 / 2 / 2 / 2** | A second Hook can wind up while the first is still out: the player can't park under the formation between dives |
+| 9 | Max diving at once, pattern 2 | Waves | 2 / 2 / 3 / 3 | **2 / 3 / 3 / 3** | The third diver arrives one loop sooner |
+| 10 | Max diving at once, pattern 3 | Waves | 2 / 3 / 3 / 3 | **3 / 3 / 3 / 3** | Wave 3 is the first with three out: the loop's climax, as its name says |
+| 11 | Shots per dive at loop 0, patterns 1 / 2 / 3 (+ 1 a loop, as before) | Waves | 1 / 2 / 2 | **2 / 3 / 3** | Every Hook fires both its shots from wave 1 (Y 144 and 160: 0.64 s and 0.48 s to the ship). A Sweep bombs 3 times at loop 0 and 4 from loop 1 (it was 4 only from loop 2); a Plunge fires all 3 from wave 3 (it was from loop 1) |
+
+Considered and **not** changed: enemy shot speed, diver speed and the wind-up at any loop (they are
+what make a death fair, feel targets 3 and 4); the paths and their fire steps (every fire step is
+still at Y ≤ 164, never point blank); "halved with 4 or fewer alive"; the 75 empty frames of Clear
+(nothing to shoot in them); the new game's 25-frame fire hold; the order the enemies appear in.
+
+### The wave's start, before and after
+
+Wave frames, the same for all three patterns (every pattern's first threat is a Hook; where a
+pattern has no Hook left the first shot is later, never sooner):
+
+| | Before | After |
+|---|---|---|
+| First wind-up, every wave | 150 (3.0 s) | **60 (1.2 s)** |
+| First enemy shot in the air, loops 0 / 1 / 2 / 3 | 181 / 175 / 170 / 166 | **91 / 85 / 80 / 76** |
+| First frame a shot can reach the ship | 213 / 206 / 191 / 187 | **123 / 116 / 101 / 97** |
+| First frame a Hook can touch the ship | 208 / 197 / 188 / 184 | **118 / 107 / 98 / 94** |
+| Kills before the first wind-up, model, fastest player (loops 0–1 / 2–3) | 11 / 12 | **5 / 3** |
+| Kills before the first wind-up, model, two-thirds player | 8 | **2 to 3** |
+| Kills before the first enemy shot, fastest (waves 1 to 3) | 15 to 16 | **10 to 11** |
+| Kills before the first enemy shot, two-thirds player (waves 1 to 3) | 13 to 14 | **6** |
+
+The warning itself is untouched: from the first flash to the first frame a Hook can touch the ship
+is still 58 frames (1.16 s) at loop 0, and a shot still takes 0.44 s or more to arrive.
+
+**What is left of the free period, and why not less:** 60 frames. 35 of them are the enemies
+appearing (two patterns must not launch before row 2, the last to appear, is in place: the launcher
+would fall back to any parked enemy and wave 1 would open with a Plunge). The smallest values the
+code allows are Intro 38, `WAVE nn` 37 and timer 1: first wind-up in frame 39, 21 frames sooner,
+about 2 kills. If the start still feels free after this build, that is the next step
+(open question 15).
+
+### Enemy fire, before and after
+
+With the formation full and never dying (the most the launcher can do; `check_design.py`,
+"Difficulty by wave"). Shots a second = the table's shots a minute / 60:
+
+| Wave | Pattern, loop | Launch interval | Divers at once | Shots a dive (Hook / Sweep / Plunge) | Launches a minute | Enemy shots a minute | Enemy shots a second: before → after | Frames with a sprite dropped: before → after |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 1, 0 | 100 | 2 | 2 / – / – | 30 | 59 | 0.33 → **0.98** | 0% → 0.3% |
+| 2 | 2, 0 | 80 | 2 | 2 / 3 / – | 34 | 81 | 0.82 → **1.35** | 2.2% → 3.1% |
+| 3 | 3, 0 | 64 | 3 | 2 / 3 / 3 | 46 | 100 | 0.97 → **1.67** | 7.1% → 11.6% |
+| 4 | 1, 1 | 80 | 2 | 2 / – / – | 38 | 74 | 0.82 → **1.23** | 0.2% → 0.4% |
+| 5 | 2, 1 | 64 | 3 | 2 / 4 / – | 47 | 117 | 1.20 → **1.95** | 2.4% → 3.5% |
+| 6 | 3, 1 | 50 | 3 | 2 / 4 / 3 | 58 | 130 | 1.56 → **2.17** | 7.1% → 9.7% |
+| 7 | 1, 2 | 64 | 2 | 2 / – / – | 47 | 93 | 0.98 → **1.55** | 0.3% → 0.5% |
+| 8 | 2, 2 | 50 | 3 | 2 / 4 / – | 60 | 149 | 1.67 → **2.48** | 2.4% → 3.3% |
+| 9 | 3, 2 | 40 | 3 | 2 / 4 / 3 | 70 | 174 | 2.15 → **2.90** | 8.0% → 11.5% |
+| 10 | 1, 3 | 50 | 2 | 2 / – / – | 60 | 119 | 1.23 → **1.98** | 0.4% → 0.6% |
+| 11 | 2, 3 | 40 | 3 | 2 / 4 / – | 73 | 178 | 2.15 → **2.97** | 3.0% → 2.8% |
+| 12 and on | 3, 3 | 32 | 3 | 2 / 4 / 3 | 76 | 174 | 2.67 → **2.90** | 10.5% → 10.4% |
+
+Wind-up, diver speed, shot speed and drift per loop are as in the stage 4 table above: unchanged.
+
+In a wave that is being shot down (the model's two-thirds player, who is never hit and never has to
+dodge, so his waves are short: 7 to 9 seconds), enemy shots fired in the whole wave, before → after:
+wave 1 **0.6 → 4.2**, wave 2 **1.8 → 5.7**, wave 3 **2.1 → 6.5**, wave 6 3.3 → 10.2, wave 9
+6.1 → 13.9, wave 12 8.8 → 20.8. A real player dodges, so his waves last longer and he sees more.
+
+The designer's reading:
+
+- **Wave 1 is now about what Simon played in stage 3** for fire (0.98 a second against 0.97), but
+  with Hooks only and with the wave's start taken away. Waves 2 and 3 are above anything loop 0 had.
+- **Waves 1 to 11 gain 35% to 200% in shots; the top gains little** (wave 12: 2.67 to 2.90, 9%).
+  About **2.9 a second is the ceiling of 3 enemy shots at once**: a shot is in the air for 29 to 67
+  frames at loops 0 and 1, and a fire step with no free slot is lost. Above wave 9 the difficulty comes from the
+  speeds, as before. Raising the ceiling needs a 4th enemy shot, which is a sprite the engine
+  doesn't have (open question 16).
+- **Still a sawtooth:** each loop opens with Hooks only (waves 4, 7, 10), below the wave before it.
+- **The risk now is the other way:** wave 1 may be too hard for someone who has never played. Feel
+  target 7 is loosened to say so. If it is, the one number to give back is pattern 1's loop 0
+  interval, 100 to 120, leaving the wave's start short.
+
+### What the engineer changes
+
+| File | Constant or table | From | To |
+|---|---|---|---|
+| `games/swarm/src/consts.asm` | `INTRO_FRAMES` | 100 | 50 |
+| `games/swarm/src/consts.asm` | `INTRO_MSG_FRAMES` (must stay odd, ≥ 36 and < `INTRO_FRAMES`: the first two are the existing `.errorif`, the third is new and worth adding to it) | 75 | 49 |
+| `games/swarm/src/consts.asm` | `FIGHT_LAUNCH_TIMER` | `LAUNCH_TIMER_START + 1` (51) | a new `FIGHT_LAUNCH_DELAY = 10`, `+ 1` (11). `LAUNCH_TIMER_START` stays 50 for `game.asm`'s two other uses (new game, Respawn to Play) |
+| `games/swarm/src/tables.asm` | `wave_interval` | 150, 120, 100, 80, 120, 100, 80, 64, 100, 80, 64, 50 | 100, 80, 64, 50, 80, 64, 50, 40, 64, 50, 40, 32 |
+| `games/swarm/src/tables.asm` | `wave_max_divers` | 1, 2, 2, 2, 2, 2, 3, 3, 2, 3, 3, 3 | 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3 |
+| `games/swarm/src/tables.asm` | `wave_shots` | 1, 2, 2 | 2, 3, 3 |
+
+No code path changes: `game_wave_step` already tests `INTRO_FRAMES` before `INTRO_MSG_FRAMES`, and
+the launcher already counts only in Play and Fight. Comments that quote the old numbers (consts.asm
+at `FIGHT_LAUNCH_TIMER` and `WAVE_PHASE_INTRO`, `game_wave_step`'s header) change with them.
+
+### Close to the limits after the tuning
+
+- **Flicker:** the worst wave in the model is now wave 3 (pattern 3, loop 0) at 11.6% of frames
+  with a sprite dropped, against 10.5% for the old worst (wave 12). Still one frame at a time, never
+  the player or an enemy shot (feel target 5 holds in the model). A real wave is lighter.
+- **Sprites jumping in one frame:** the model now sees 4 sprites change Y by more than 8 lines in a
+  frame (it was 3), in pattern 3 at loops 2 and 3. Not a mass re-sort; for the Technical Director.
+- **CPU:** no count rises, and the budget build already plays wave 12 with 3 divers and 3 shots. But
+  wave 12's interval goes 50 to 32, so the frames with a launch come more often, and 3 divers now
+  exist at loop 0. `make test ARGS=swarm` after the build, and the Technical Director reads it.
+- **The 3 enemy-shot slots** are now the limit on fire from wave 9 (above).
 
 ## Fire rate: decided
 
@@ -945,14 +1141,29 @@ Simon, 2026-10-02, after playing stage 3 on the C64 Ultimate: no change to how i
 the warning, deaths and the level of difficulty:
 [Stage 3 playtest](#stage-3-playtest-and-the-difficulty-curve)). The wind-up's 2-pixel swing stays.
 
-**Open for Simon, at the stage 4 playtest** (the designer's recommendation in each):
+Simon, 2026-10-02, for stage 4 (the brief's decisions 10–13):
+
+| # | Question | Decision |
+|---|---|---|
+| 10 | The messages on row 9, between formation rows 1 and 2 | **Row 9** |
+| 11 | Are waves 1 and 2 too gentle now that wave 3 is "quite easy"? | **Build stage 4 as designed and decide after playing it.** Played: the whole game is too easy, not only waves 1 and 2. Answered by [Tuning after the stage 4 playtest](#tuning-after-the-stage-4-playtest), which goes further than the "150 to 120, 1 diver to 2" first offered here |
+| 12 | Wave start and wave clear sounds on voice 3 | **Yes** |
+| 13 | A new game holds fire for 25 frames | **Yes, 25** |
+
+Simon, 2026-10-02, after playing stage 4 in VICE and on the C64 Ultimate: sounds right, no change;
+"too easy generally" (the wave's start, and not enough enemy fire); divers leaving to the side
+accepted for this version.
+
+**Open for Simon, after the stage 4 playtest** (the designer's recommendation in each). The tuning
+above is what gets built; none of these is part of it.
 
 | # | Question | Recommendation |
 |---|---|---|
-| 10 | The messages are now on row 9, between formation rows 1 and 2, 5 and 6 lines clear of them. Does `READY` / `WAVE nn` read well there, or does it look squeezed? | **Keep row 9:** it is the only place nothing but the player's own shot ever crosses. If it looks squeezed, `WAVE nn` and `READY` can go to row 18 in open sky (already a star band: nothing flies during either), with `GAME OVER` staying on row 9 because divers do fly during it |
-| 11 | Are waves 1 and 2 too gentle now that wave 3 is "quite easy"? | **Play stage 4 first.** If they drag: pattern 1 at loop 0, interval 150 to 120 and 1 diver to 2 |
-| 12 | Wave start and wave clear sounds on voice 3 so the player's shots are never silenced: agreed? | **Yes** |
-| 13 | A new game holds fire for 25 frames so the press that started it doesn't shoot. Right length? | **Yes, 25** (half a second, under `WAVE 01`, before anything can be hit that matters) |
+| 14 | Should parked enemies fire too (a rule change: the formation drops a shot now and then, as in Galaxian)? | **Not yet: play the tuned build first.** It would answer "the enemies can't fire at the start" completely, and it costs no sprite (the same 3 shot slots). But a shot from a parked enemy has no wind-up: it is the first thing in the game that kills without a warning, against "deaths feel like your fault"; from row 2 (Y 136) it arrives in 0.7 s. It is also new code in the formation's part of the frame, which has the least time to spare, so the Technical Director would have to budget it. If wanted later: bottom row only, one shot at a time, a 12-frame flash first |
+| 15 | If the wave's start still feels free at 1.2 s: go to the code's minimum (Intro 38, `WAVE nn` 37, timer 1: first wind-up at 0.78 s)? | **Only if the playtest asks.** It is three constants; `WAVE nn` is then on screen for 0.74 s, which is short to read |
+| 16 | Fire tops out at about 2.9 shots a second because only 3 enemy shots exist. Want more at the top? | **No for M4.** A 4th shot is a 25th sprite or one enemy fewer, and a 5th pin the multiplexer doesn't have. The top of the curve is hard through speed, and nobody has played it yet |
+| 17 | After a respawn the first dive still comes 49 frames into play (and the ship can't be hit for 100). Shorten it like the wave's start? | **No.** It follows a death, the player has just lost a ship, and it is the timing the stage 3 verdict was given on |
+| 18 | Wave 1 for a first-time player: is two Hooks out and 2 shots a dive too much for a first game? | **Find out with someone who hasn't played.** If so: pattern 1, loop 0 interval 100 to 120, nothing else |
 
 Noted, not required: divers leaving through the bottom (see
 [Requests of the engine](#requests-of-the-engine)), a multiplexer v2 candidate.

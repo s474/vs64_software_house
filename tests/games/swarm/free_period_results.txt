@@ -1,0 +1,128 @@
+
+===== before (stage 4 as built) =====
+Intro 100 frames, launch timer at Fight 50, interval halved at 4 or fewer alive
+intervals [[150, 120, 100, 80], [120, 100, 80, 64], [100, 80, 64, 50]], divers at once [[1, 2, 2, 2], [2, 2, 3, 3], [2, 3, 3, 3]], shots a dive at loop 0 [1, 2, 2]
+
+1. The free period (wave frames; 50 = 1 s)
+wave pattern loop | first launch | first enemy shot fired | first frame a shot can reach the ship | first frame a diver can touch the ship
+   1  1  0 | 150 (3.00 s) | 181 (3.62 s) | 213 (4.26 s) | 208 (4.16 s)
+   2  2  0 | 150 (3.00 s) | 181 (3.62 s) | 213 (4.26 s) | 208 (4.16 s)
+   3  3  0 | 150 (3.00 s) | 181 (3.62 s) | 213 (4.26 s) | 208 (4.16 s)
+   4  1  1 | 150 (3.00 s) | 175 (3.50 s) | 206 (4.12 s) | 197 (3.94 s)
+   5  2  1 | 150 (3.00 s) | 175 (3.50 s) | 206 (4.12 s) | 197 (3.94 s)
+   6  3  1 | 150 (3.00 s) | 175 (3.50 s) | 206 (4.12 s) | 197 (3.94 s)
+   7  1  2 | 150 (3.00 s) | 170 (3.40 s) | 191 (3.82 s) | 188 (3.76 s)
+   8  2  2 | 150 (3.00 s) | 170 (3.40 s) | 191 (3.82 s) | 188 (3.76 s)
+   9  3  2 | 150 (3.00 s) | 170 (3.40 s) | 191 (3.82 s) | 188 (3.76 s)
+  10  1  3 | 150 (3.00 s) | 166 (3.32 s) | 187 (3.74 s) | 184 (3.68 s)
+  11  2  3 | 150 (3.00 s) | 166 (3.32 s) | 187 (3.74 s) | 184 (3.68 s)
+  12  3  3 | 150 (3.00 s) | 166 (3.32 s) | 187 (3.74 s) | 184 (3.68 s)
+
+2/4. A wave against the bot: best (cooldown 10, from frame 0); mean of 40 seeds
+wave | kills before the first launch | kills before the first enemy shot | wave length, frames (s) | enemy shots fired in the wave | launches | waves finished
+   1 | 11.0 | 15.2 |   249 ( 5.0 s) |  0.6 |  1.0 | 40/40
+   2 | 11.0 | 15.9 |   282 ( 5.6 s) |  0.7 |  1.2 | 40/40
+   3 | 11.0 | 16.1 |   277 ( 5.5 s) |  0.8 |  1.3 | 40/40
+   4 | 11.0 | 15.2 |   262 ( 5.2 s) |  1.1 |  1.0 | 40/40
+   5 | 11.0 | 15.9 |   254 ( 5.1 s) |  0.7 |  1.2 | 40/40
+   6 | 11.0 | 15.4 |   253 ( 5.1 s) |  1.0 |  2.0 | 40/40
+   7 | 12.0 | 12.0 |   279 ( 5.6 s) |  2.0 |  2.0 | 40/40
+   8 | 12.0 | 12.0 |   301 ( 6.0 s) |  3.1 |  2.0 | 40/40
+   9 | 12.0 | 12.0 |   318 ( 6.4 s) |  3.2 |  2.9 | 40/40
+  10 | 12.0 | 12.0 |   288 ( 5.8 s) |  2.2 |  2.1 | 40/40
+  11 | 12.0 | 12.0 |   314 ( 6.3 s) |  3.8 |  2.7 | 40/40
+  12 | 12.0 | 12.0 |   338 ( 6.8 s) |  5.2 |  4.0 | 40/40
+
+2/4. A wave against the bot: competent (cooldown 15, from frame 15); mean of 40 seeds
+wave | kills before the first launch | kills before the first enemy shot | wave length, frames (s) | enemy shots fired in the wave | launches | waves finished
+   1 |  8.0 | 13.8 |   344 ( 6.9 s) |  0.6 |  2.0 | 40/40
+   2 |  8.0 | 12.9 |   391 ( 7.8 s) |  1.8 |  2.2 | 40/40
+   3 |  8.0 | 13.1 |   415 ( 8.3 s) |  2.1 |  2.8 | 40/40
+   4 |  8.0 | 13.2 |   344 ( 6.9 s) |  1.2 |  2.0 | 40/40
+   5 |  8.0 | 12.3 |   378 ( 7.6 s) |  2.8 |  2.4 | 40/40
+   6 |  8.0 | 12.1 |   378 ( 7.6 s) |  3.3 |  3.2 | 40/40
+   7 |  8.0 | 11.4 |   361 ( 7.2 s) |  3.3 |  2.0 | 40/40
+   8 |  8.0 | 11.0 |   393 ( 7.9 s) |  5.1 |  3.6 | 40/40
+   9 |  8.0 | 10.9 |   391 ( 7.8 s) |  6.1 |  4.2 | 40/40
+  10 |  8.0 | 12.1 |   344 ( 6.9 s) |  2.0 |  3.0 | 40/40
+  11 |  8.0 | 10.2 |   413 ( 8.3 s) |  7.6 |  4.5 | 40/40
+  12 |  8.0 | 10.7 |   430 ( 8.6 s) |  8.8 |  5.6 | 40/40
+
+3. Full formation that never dies, 6000 frames (the most the launcher can do)
+wave | launches a second | enemy shots a second | frames with a sprite dropped % | most divers, enemy shots at once
+   1 | 0.33 | 0.33 |  0.00% | 1, 1
+   2 | 0.42 | 0.82 |  2.23% | 2, 2
+   3 | 0.49 | 0.97 |  7.07% | 2, 2
+   4 | 0.42 | 0.82 |  0.23% | 1, 2
+   5 | 0.50 | 1.20 |  2.43% | 2, 3
+   6 | 0.62 | 1.56 |  7.13% | 3, 3
+   7 | 0.50 | 0.98 |  0.27% | 1, 2
+   8 | 0.62 | 1.67 |  2.35% | 2, 3
+   9 | 0.78 | 2.15 |  7.98% | 3, 3
+  10 | 0.62 | 1.23 |  0.37% | 2, 2
+  11 | 0.78 | 2.15 |  3.00% | 3, 3
+  12 | 0.99 | 2.67 | 10.48% | 3, 3
+
+===== after (the design now) =====
+Intro 50 frames, launch timer at Fight 10, interval halved at 4 or fewer alive
+intervals [[100, 80, 64, 50], [80, 64, 50, 40], [64, 50, 40, 32]], divers at once [[2, 2, 2, 2], [2, 3, 3, 3], [3, 3, 3, 3]], shots a dive at loop 0 [2, 3, 3]
+
+1. The free period (wave frames; 50 = 1 s)
+wave pattern loop | first launch | first enemy shot fired | first frame a shot can reach the ship | first frame a diver can touch the ship
+   1  1  0 |  60 (1.20 s) |  91 (1.82 s) | 123 (2.46 s) | 118 (2.36 s)
+   2  2  0 |  60 (1.20 s) |  91 (1.82 s) | 123 (2.46 s) | 118 (2.36 s)
+   3  3  0 |  60 (1.20 s) |  91 (1.82 s) | 123 (2.46 s) | 118 (2.36 s)
+   4  1  1 |  60 (1.20 s) |  85 (1.70 s) | 116 (2.32 s) | 107 (2.14 s)
+   5  2  1 |  60 (1.20 s) |  85 (1.70 s) | 116 (2.32 s) | 107 (2.14 s)
+   6  3  1 |  60 (1.20 s) |  85 (1.70 s) | 116 (2.32 s) | 107 (2.14 s)
+   7  1  2 |  60 (1.20 s) |  80 (1.60 s) | 101 (2.02 s) |  98 (1.96 s)
+   8  2  2 |  60 (1.20 s) |  80 (1.60 s) | 101 (2.02 s) |  98 (1.96 s)
+   9  3  2 |  60 (1.20 s) |  80 (1.60 s) | 101 (2.02 s) |  98 (1.96 s)
+  10  1  3 |  60 (1.20 s) |  76 (1.52 s) |  97 (1.94 s) |  94 (1.88 s)
+  11  2  3 |  60 (1.20 s) |  76 (1.52 s) |  97 (1.94 s) |  94 (1.88 s)
+  12  3  3 |  60 (1.20 s) |  76 (1.52 s) |  97 (1.94 s) |  94 (1.88 s)
+
+2/4. A wave against the bot: best (cooldown 10, from frame 0); mean of 40 seeds
+wave | kills before the first launch | kills before the first enemy shot | wave length, frames (s) | enemy shots fired in the wave | launches | waves finished
+   1 |  5.0 | 10.1 |   273 ( 5.5 s) |  2.5 |  2.5 | 40/40
+   2 |  5.0 | 11.3 |   260 ( 5.2 s) |  2.1 |  3.2 | 40/40
+   3 |  5.0 | 10.2 |   308 ( 6.2 s) |  3.9 |  3.8 | 40/40
+   4 |  5.0 |  6.0 |   275 ( 5.5 s) |  3.6 |  3.2 | 40/40
+   5 |  5.0 |  7.5 |   266 ( 5.3 s) |  4.3 |  3.3 | 40/40
+   6 |  5.0 |  7.8 |   295 ( 5.9 s) |  5.6 |  5.1 | 40/40
+   7 |  3.0 |  5.8 |   308 ( 6.2 s) |  5.4 |  4.3 | 40/40
+   8 |  3.0 |  6.7 |   347 ( 6.9 s) |  8.9 |  5.5 | 40/40
+   9 |  3.0 |  7.2 |   408 ( 8.2 s) | 12.2 |  7.8 | 40/40
+  10 |  3.0 |  5.8 |   303 ( 6.1 s) |  5.8 |  4.8 | 40/40
+  11 |  3.0 |  6.5 |   376 ( 7.5 s) | 11.9 |  7.0 | 40/40
+  12 |  3.0 |  7.0 |   404 ( 8.1 s) | 12.7 |  8.4 | 40/40
+
+2/4. A wave against the bot: competent (cooldown 15, from frame 15); mean of 40 seeds
+wave | kills before the first launch | kills before the first enemy shot | wave length, frames (s) | enemy shots fired in the wave | launches | waves finished
+   1 |  2.0 |  5.8 |   380 ( 7.6 s) |  4.2 |  3.2 | 40/40
+   2 |  2.0 |  6.3 |   418 ( 8.4 s) |  5.7 |  4.7 | 40/40
+   3 |  2.0 |  6.3 |   409 ( 8.2 s) |  6.5 |  5.5 | 40/40
+   4 |  2.0 |  4.8 |   344 ( 6.9 s) |  4.2 |  4.0 | 40/40
+   5 |  2.0 |  5.6 |   405 ( 8.1 s) |  8.4 |  5.3 | 40/40
+   6 |  2.0 |  5.5 |   449 ( 9.0 s) | 10.2 |  7.4 | 40/40
+   7 |  3.0 |  4.0 |   362 ( 7.2 s) |  6.8 |  5.1 | 40/40
+   8 |  3.0 |  4.5 |   416 ( 8.3 s) | 12.8 |  6.8 | 40/40
+   9 |  3.0 |  5.0 |   452 ( 9.0 s) | 13.9 |  8.7 | 40/40
+  10 |  3.0 |  3.0 |   362 ( 7.2 s) |  7.7 |  6.2 | 40/40
+  11 |  3.0 |  4.0 |   424 ( 8.5 s) | 14.7 |  8.7 | 40/40
+  12 |  3.0 |  4.6 |   573 (11.5 s) | 20.8 | 11.8 | 40/40
+
+3. Full formation that never dies, 6000 frames (the most the launcher can do)
+wave | launches a second | enemy shots a second | frames with a sprite dropped % | most divers, enemy shots at once
+   1 | 0.50 | 0.98 |  0.28% | 1, 2
+   2 | 0.57 | 1.35 |  3.13% | 2, 3
+   3 | 0.76 | 1.67 | 11.63% | 3, 3
+   4 | 0.62 | 1.23 |  0.35% | 1, 2
+   5 | 0.78 | 1.95 |  3.47% | 3, 3
+   6 | 0.96 | 2.17 |  9.68% | 3, 3
+   7 | 0.78 | 1.55 |  0.45% | 2, 2
+   8 | 0.99 | 2.48 |  3.30% | 3, 3
+   9 | 1.17 | 2.90 | 11.48% | 3, 3
+  10 | 0.99 | 1.98 |  0.55% | 2, 2
+  11 | 1.21 | 2.97 |  2.82% | 3, 3
+  12 | 1.26 | 2.90 | 10.40% | 3, 3

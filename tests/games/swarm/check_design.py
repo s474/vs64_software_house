@@ -25,6 +25,9 @@ What it does:
      on its line; every text cell inside a star band, and the free cells.
   6. The difficulty curve: launches and enemy shots a minute per wave, counted in the play
      simulation of 3 (a formation that stays full: the most the launcher can do).
+  7. The wave's start (design.md "Stage 4 rules" 2-3): the first launch, the first enemy shot and
+     the first frame anything can reach the ship, per wave, and the same after a respawn.
+     The before / after of the stage 4 tuning is free_period.py, beside this file.
 
 The multiplexer model is a transcription of the README's pseudocode, not the engine: its
 figures are design estimates until QA's positions.py runs on the real game (M4 deliverable 6).
@@ -62,10 +65,20 @@ PATHS = {
 ROW_PATH = ["plunge", "sweep", "hook"]
 
 # Per wave pattern (0-2), per loop (0, 1, 2, 3+)
-INTERVAL = [[150, 120, 100, 80], [120, 100, 80, 64], [100, 80, 64, 50]]
-MAX_DIVERS = [[1, 2, 2, 2], [2, 2, 3, 3], [2, 3, 3, 3]]
+# Tuned after the stage 4 playtest (design.md "Tuning after the stage 4 playtest"). As built in
+# stage 4: INTERVAL [[150, 120, 100, 80], [120, 100, 80, 64], [100, 80, 64, 50]], MAX_DIVERS
+# [[1, 2, 2, 2], [2, 2, 3, 3], [2, 3, 3, 3]], SHOTS_BASE [1, 2, 2]; free_period.py holds those
+# for its before / after tables.
+INTERVAL = [[100, 80, 64, 50], [80, 64, 50, 40], [64, 50, 40, 32]]
+MAX_DIVERS = [[2, 2, 2, 2], [2, 3, 3, 3], [3, 3, 3, 3]]
 ROWS = [{2}, {1, 2}, {0, 1, 2}]
-SHOTS_BASE = [1, 2, 2]
+SHOTS_BASE = [2, 3, 3]
+LAUNCH_HALVE_ALIVE = 4             # the interval is halved with this many or fewer alive
+# The wave's start (Stage 4 rules 2-3): Intro's length, the frame WAVE nn is erased, the last
+# enemy's frame (enemy k appears in frame 2k), and the launch timer set when Fight starts
+# (as built in stage 4: 100, 75, 34, 50)
+INTRO_FRAMES, INTRO_MSG_FRAMES, INTRO_LAST_ENEMY_FRAME, FIGHT_LAUNCH_DELAY = 50, 49, 34, 10
+PLAY_LAUNCH_DELAY, INVULN_PLAY_FRAMES = 50, 100   # entering Play from Respawn: unchanged
 # Per loop
 ESHOT_DY = [2, 2, 3, 3]
 EXTRA_STEP_EVERY = [0, 4, 2, 2]    # a diver takes a second path step every Nth frame
@@ -370,8 +383,10 @@ def play_checks(frames=6000):
                     assert s["missing"]["enemy shot"] == 0
 
     print("\n== Full formation, player and player shots, before the first launch ==")
-    s = simulate(0, 0, 100, True)        # no launch in the first 100 frames (interval 150)
-    print(f"frames with a drop before the first launch: {s['drop_frames']} of 100")
+    n = INTERVAL[0][0] - 1               # the model's first launch is in frame INTERVAL - 1
+    s = simulate(0, 0, n, True)
+    assert s["launches"] == 0
+    print(f"frames with a drop before the first launch: {s['drop_frames']} of {n}")
     assert s["drop_frames"] == 0
 
 
@@ -642,6 +657,78 @@ def title_checks():
     assert bands == BAND_ROWS and cells == 840 and STARS <= cells
 
 
+# ---- The wave's start (design.md "Stage 4 rules" 2-3, "Tuning after the stage 4 playtest") ----
+def path_y(name, step):
+    y, n = ROW_Y[PATHS[name]["row"]], 0
+    for dx, dy, cnt in PATHS[name]["segs"]:
+        for _ in range(cnt or 400):
+            y, n = y + dy, n + 1
+            if n == step:
+                return y
+    raise ValueError(step)
+
+
+def dive_frames(loop, step):
+    """Fewest Dive frames (1 = the frame of step 1) to reach `step`: the extra-step frame first."""
+    every, f, n = EXTRA_STEP_EVERY[loop], 0, 0
+    while n < step:
+        n += 2 if every and f % every == 0 else 1
+        f += 1
+    return f
+
+
+def first_threat(launch, pattern, loop):
+    """From a launch in frame `launch`: (first shot fired, first frame a shot can hit, first ram)."""
+    shot = hit = ram = None
+    for name, p in PATHS.items():
+        if p["row"] not in ROWS[pattern]:
+            continue
+        for step in p["fire"][:min(len(p["fire"]), SHOTS_BASE[pattern] + loop)]:
+            f = launch + WINDUP[loop] + dive_frames(loop, step) - 1
+            h = f + -(-(ESHOT_HIT_Y - path_y(name, step)) // ESHOT_DY[loop])
+            shot, hit = min(shot or f, f), min(hit or h, h)
+        lethal = [n for n in range(1, 200) if n <= sum(c for _, _, c in p["segs"]) and path_y(name, n) >= LETHAL_Y]
+        if lethal:
+            r = launch + WINDUP[loop] + dive_frames(loop, lethal[0]) - 1
+            ram = min(ram or r, r)
+    return shot, hit, ram
+
+
+def wave_start_checks():
+    print("\n== The wave's start (wave frame 0 = Intro's frame 0) ==")
+    launch = INTRO_FRAMES + FIGHT_LAUNCH_DELAY
+    print(f"last enemy appears in frame {INTRO_LAST_ENEMY_FRAME}; WAVE nn erased in frame {INTRO_MSG_FRAMES}; Fight in "
+          f"frame {INTRO_FRAMES} with the launch timer at {FIGHT_LAUNCH_DELAY}; first launch in frame {launch} "
+          f"({launch / 50:.2f} s)")
+    # the code's own rules (consts.asm): the erase frame is odd, past the last enemy, and inside Intro
+    assert INTRO_MSG_FRAMES % 2 == 1 and INTRO_MSG_FRAMES >= 36 and INTRO_MSG_FRAMES < INTRO_FRAMES
+    assert INTRO_FRAMES > INTRO_LAST_ENEMY_FRAME + 1 and 1 <= FIGHT_LAUNCH_DELAY <= 254
+    print("wave pattern loop | first enemy shot fired | first frame a shot can reach the ship | first frame a diver can ram")
+    for wave in range(1, 13):
+        pattern, loop = (wave - 1) % 3, (wave - 1) // 3
+        shot, hit, ram = first_threat(launch, pattern, loop)
+        print(f"  {wave:2d}  {pattern + 1}  {loop} | {shot} ({shot / 50:.2f} s) | {hit} ({hit / 50:.2f} s) | {ram} ({ram / 50:.2f} s)")
+        # WAVE nn is gone before anything launches, so no diver crosses it and nothing can hit under it
+        assert INTRO_MSG_FRAMES < launch < shot < hit
+    # After a respawn (Stage 3 rule 10, Stage 4 rule 8). Entering Play sets the launch timer to
+    # PLAY_LAUNCH_DELAY and counts it in the same frame, so the launch is Play's frame 49 (as
+    # built). Only if the wave's Fight starts AFTER Play was entered (the wave was cleared while
+    # the player was dying) does Fight's shorter timer apply: launch FIGHT_LAUNCH_DELAY after Fight.
+    print(f"after a respawn in Fight (the usual case): launch in Play's frame {PLAY_LAUNCH_DELAY - 1}; "
+          f"the invulnerability ends at Play's frame {INVULN_PLAY_FRAMES}")
+    print("loop | first shot fired | first frame a shot can hit | first frame a diver can ram (pattern 3: every path)")
+    for loop in range(4):
+        shot, hit, ram = first_threat(PLAY_LAUNCH_DELAY - 1, 2, loop)
+        print(f"  {loop} | {shot} | {hit} | {ram}" + ("" if min(hit, ram) >= INVULN_PLAY_FRAMES else
+              "   (inside the invulnerability: it passes through him, Stage 3 rule 7)"))
+        if loop == 0:
+            assert min(hit, ram) >= INVULN_PLAY_FRAMES
+    shot, hit, ram = first_threat(1 + FIGHT_LAUNCH_DELAY, 2, 0)
+    print(f"a respawn that ends inside an Intro, Fight starting in Play's frame 1 (the soonest): launch in Play's frame "
+          f"{1 + FIGHT_LAUNCH_DELAY}; at loop 0 its first shot can reach the ship in frame {hit} and a Hook in frame {ram}, "
+          f"both inside the {INVULN_PLAY_FRAMES} invulnerable frames (they pass through him)")
+
+
 # ---- The difficulty curve ----
 def difficulty(frames=6000):
     print(f"\n== Difficulty by wave (launches and shots counted over {frames} frames of the play simulation: "
@@ -670,5 +757,6 @@ if __name__ == "__main__":
     static_checks()
     explosion_checks()
     layout_checks()
+    wave_start_checks()
     difficulty()
     play_checks()
