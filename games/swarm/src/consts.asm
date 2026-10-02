@@ -102,6 +102,35 @@
 .const SHAPE_EXPLOSION  = SPRITE_PTR0 + 9       // 4 shapes
 .const SHAPE_COUNT      = 13
 
+// Hit boxes (design.md#hit-boxes, the only place the numbers live): columns x0-x1 and rows y0-y1
+// inside the 24 x 21 cell, inclusive. col_pairs (tables.asm) and the Y guards below are built
+// from these; nothing else types a box number.
+.const BOX_PLAYER_X0 = 6
+.const BOX_PLAYER_X1 = 17
+.const BOX_PLAYER_Y0 = 6
+.const BOX_PLAYER_Y1 = 20
+.const BOX_ENEMY_X0  = 4
+.const BOX_ENEMY_X1  = 19
+.const BOX_ENEMY_Y0  = 3
+.const BOX_ENEMY_Y1  = 17
+.const BOX_PSHOT_X0  = 11
+.const BOX_PSHOT_X1  = 12
+.const BOX_PSHOT_Y0  = 0
+.const BOX_PSHOT_Y1  = 7
+.const BOX_ESHOT_X0  = 11
+.const BOX_ESHOT_X1  = 12
+.const BOX_ESHOT_Y0  = 14
+.const BOX_ESHOT_Y1  = 20
+// Rows of col_pairs, in the order of engine/collision.md's contract
+.const COL_PAIR_PSHOT_ENEMY  = 0        // A = a player shot, targets = the 18 enemies
+.const COL_PAIR_PLAYER_ESHOT = 1        // A = the player, targets = the 3 enemy shots (stage 3)
+.const COL_PAIR_PLAYER_ENEMY = 2        // A = the player, targets = diving enemies (stage 3)
+// The lowest Y at which a target can touch the player (memory-map.md "The collision budget",
+// rule 3): stage 3 tests mux_y against these before spending a collision_begin on the player.
+.const PLAYER_HIT_ESHOT_Y = MUX_Y_MAX + BOX_PLAYER_Y0 - BOX_ESHOT_Y1    // 207
+.const PLAYER_HIT_ENEMY_Y = MUX_Y_MAX + BOX_PLAYER_Y0 - BOX_ENEMY_Y1    // 210
+.errorif PLAYER_HIT_ESHOT_Y != 207 || PLAYER_HIT_ENEMY_Y != 210, "design: an enemy shot hits from Y 207, an enemy from Y 210"
+
 // --- Player and player shots (design.md "Controls and rules", "Entities") -------------------
 .const PLAYER_X_MIN    = 24
 .const PLAYER_X_MAX    = 318
@@ -127,6 +156,10 @@
 .const FORM_FX_START   = 48     // moving right
 .const ENEMY_ANIM_FRAMES = 16   // the two shapes of a type swap every 16 frames, all together
 .const GAME_LOOP_MAX   = 3      // loops past 3 play as loop 3
+.const EXPLOSION_SHAPES      = 4        // design "Sprite shapes": 4 shapes x 4 frames, stationary
+.const EXPLOSION_SHAPE_FRAMES = 4
+.const EXPLOSION_FRAMES      = EXPLOSION_SHAPES * EXPLOSION_SHAPE_FRAMES        // 16
+.const WAVE_CLEAR_PAUSE      = 75       // design "Waves": frames between the last explosion's end and the next formation
 .errorif SPR_ENEMY + ENEMY_COUNT != 24, "the enemies are virtual sprites 6-23"
 .errorif FORM_X0 + FORM_FX_MAX + FORM_COL_DX * (FORM_COLS - 1) != 310, "design: the formation's sprite X is 34-310"
 

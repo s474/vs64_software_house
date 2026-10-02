@@ -1,6 +1,8 @@
-// Swarm (M4 training game), stage 2 part A: the player's ship moves and fires, the star field
-// twinkles, the status panel is drawn, and the formation of 18 enemies drifts and animates. No
-// collisions, dives, lives logic, title screen or sound yet.
+// Swarm (M4 training game), stage 2: the player's ship moves and fires, the star field twinkles,
+// the status panel is drawn, the formation of 18 enemies drifts and animates, and the player's
+// shots hit the enemies: they explode and score. When all 18 are gone the formation comes back
+// after the design's 75-frame pause (no bonus and no wave count yet: stage 4's). No dives, enemy
+// shots, lives logic, title screen or sound yet.
 //
 // Design (the source of truth for behaviour): docs/games/swarm/design.md
 // Memory, zero page, raster timeline, budgets: docs/games/swarm/memory-map.md
@@ -11,7 +13,8 @@
 //   screen.asm    charset and screen set-up (init only)
 //   stars.asm     star field and twinkle        panel.asm   status panel, score variables
 //   player.asm    the ship                      pshot.asm   the player's shots
-//   formation.asm the 18 enemies: per-enemy state, the drift, the animation
+//   formation.asm the 18 enemies: per-enemy state, the drift, the animation, the explosions
+//   collide.asm   player shots against the enemies, the score (engine/collision.asm)
 //   autoplay.asm  the scripted stick of the AUTOPLAY budget build (tests/games/swarm/main.asm)
 //
 // Chain: entry 0 mux_irq_top at line 16, entry 1 game_irq_bottom at line 251 (nothing to do
@@ -47,6 +50,7 @@ BasicUpstart2(start)
 #import "engine/multiplexer.asm"
 #import "engine/input.asm"
 #import "engine/rng.asm"
+#import "engine/collision.asm"          // after the multiplexer: it reads its arrays. Needs col_pairs
 
 * = * "Chain"
         IrqChainBegin()
@@ -130,7 +134,15 @@ game_update:
         jsr panel_update                // straight after the input: always in the top border. It
                                         // draws what the previous frame's updates made dirty
         jsr pshot_update                // before player_update: see pshot_update's header
-        jsr formation_update            // every mover has moved before the collisions (part B) ...
+        // Stand-in for stage 4's wave clear: when the last explosion has ended (enemy_kill starts
+        // the timer) wait WAVE_CLEAR_PAUSE frames, then the same 18 again. No bonus, no wave + 1.
+        lda zp_state_timer              // 3
+        beq !+                          // 3: no pause running, the usual frame
+        dec zp_state_timer
+        bne !+
+        jsr formation_init              // a frame with no enemy and nothing to hit: time to spare
+!:      jsr formation_update            // every mover has moved before the collisions ...
+        jsr collide_update
         jsr player_update               // ... and the player moves and fires after them
         jsr stars_update
 game_update_end:
@@ -231,6 +243,7 @@ game_idle_warm:         .byte 0         // frames left before game_idle_min star
 #import "pshot.asm"
 #import "player.asm"
 #import "formation.asm"
+#import "collide.asm"                   // after formation.asm: it uses the ENEMY_* states
 #if AUTOPLAY
 #import "autoplay.asm"
 #endif

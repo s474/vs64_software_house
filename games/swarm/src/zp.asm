@@ -29,7 +29,8 @@
 // $18-$1F: game core (main.asm)
 .label zp_game_frame  = $18     // the value irq_wait_frame returned for the frame being worked on
 .label zp_game_state  = $19     // GAME_STATE_* (stage 1: always GAME_STATE_PLAY)
-.label zp_state_timer = $1a     // 2 bytes: frames left in the current state (unused in stage 1)
+.label zp_state_timer = $1a     // 2 bytes: frames left in the current state. Stage 2 part B: the low byte counts
+                                // the pause after the last enemy's explosion (0 = no pause running)
 .label zp_idle_lo     = $1c     // DEBUG: idle-loop iterations this frame
 .label zp_idle_hi     = $1d
 .label game_idle_min  = $1e     // 2 bytes, DEBUG, little-endian: fewest idle iterations in a frame
@@ -45,7 +46,7 @@
 .label zp_drift_dir       = $26 // formation drift direction: 1 = right, $FF = left (added to zp_fx)
 .label zp_launch_timer    = $27 // frames until the next dive launch (stage 3)
 .label zp_divers_active   = $28 // enemies in WindUp, Dive or Return (stage 3)
-.label zp_enemies_alive   = $29 // enemies not dead (stage 2)
+.label zp_enemies_alive   = $29 // enemies whose state isn't ENEMY_DEAD (an exploding one still counts)
 .label zp_wave            = $2a // wave number as shown, BCD 01-99
 .label zp_loop            = $2b // difficulty loop 0-3 (counted from stage 4; 0 until then)
 .label zp_drift_timer     = $2c // frames until the drift's next 1-pixel step

@@ -4,7 +4,8 @@
 // The drift: fx runs 0 -> 96 -> 0, one pixel every 2 frames (every frame from loop 2), starting
 // at 48 moving right. Each row is one type (A, B, C): its colour and its two shapes, which swap
 // every 16 frames, all 18 together.
-// Stage 2 part A: every enemy is Parked. No hits, explosions or dives yet.
+// Stage 2 part B: an enemy is Parked, Exploding (16 frames, 4 shapes of 4 frames, orange,
+// stationary, in the enemy's own sprite) or Dead (hidden). No dives yet.
 //
 // PER-ENEMY DATA LAYOUT (for part B's hits and stage 3's divers). Parallel arrays indexed by the
 // enemy index e (0-17), all absolute:
@@ -35,6 +36,18 @@
 //      AFTER the swap (in formation_update's tail, or in a routine called after it).
 //   4. Whoever takes an enemy out of Parked sets bit 7 in its state in the same frame it starts
 //      writing mux_x; whoever kills one keeps zp_enemies_alive.
+// EXPLOSIONS (part B). A hit calls enemy_explode: state ENEMY_EXPLODING, enemy_timer = 16, the
+// first explosion shape, orange, and the enemy's index goes in one of the EXPLOSION_SLOTS entries
+// of explosion_enemy. formation_update's tail walks those entries (not the 18 states) after the
+// animation swap: it counts the timer down, writes the shape for the frames left, and when the
+// timer reaches 0 calls enemy_kill: Dead, hidden, zp_enemies_alive - 1, and at 0 alive the pause
+// before the next formation starts (zp_state_timer; main.asm). So zp_enemies_alive counts every
+// enemy that isn't Dead, an exploding one included: it reaches 0 when the last explosion ends
+// (design: "all 18 dead and exploded").
+// The sprite is shown exploding for exactly 16 frames: the hit's frame and the 15 after it.
+// Why 4 slots: shots spawn at least 10 frames apart and a shot lives at most 21, so no more than
+// 4 hits can fall inside any 16 frames (3 while every target is parked: flights of 8, 13 or 18
+// frames). If the slots were ever all taken, enemy_explode kills the enemy at once (no explosion).
 
 .const ENEMY_DEAD      = $00    // slot hidden
 .const ENEMY_PARKED    = $01
@@ -43,6 +56,8 @@
 .const ENEMY_DIVE      = $81    // stage 3
 .const ENEMY_RETURN    = $82    // stage 3
 .const ENEMY_EXPLODING = $83    // part B
+.const EXPLOSION_SLOTS = 4      // explosions animating at once
+.const EXPLOSION_FREE  = $ff    // explosion_enemy entry: no explosion (any value with bit 7 set)
 
 // The first column whose home X can pass 255: formation_update writes mux_x_hi from here on.
 .const FORM_HI_COL = floor((255 - FORM_FX_MAX - FORM_X0) / FORM_COL_DX) + 1    // 4
@@ -51,10 +66,16 @@
 // Start a wave's formation: fx = 48 moving right, animation frame 0, all 18 enemies Parked at
 // their home positions in their type's colour and first shape.
 // (The design's wave start, one enemy appearing every 2 frames, is the wave stage's.)
-// In:  zp_loop (the drift's speed)   Out: zp_enemies_alive = 18
+// Also the stand-in for the next wave after a clear (main.asm): it may be called in a frame.
+// In:  zp_loop (the drift's speed)   Out: zp_enemies_alive = 18, no explosion running
 // Uses: A, X, Y
-// Cost: init only
+// Cost: init only (about 2,000 cycles, counted: 18 enemy_park calls)
 formation_init:
+        ldx #EXPLOSION_SLOTS - 1
+        lda #EXPLOSION_FREE
+!:      sta explosion_enemy,x
+        dex
+        bpl !-
         lda #FORM_FX_START
         sta zp_fx
         lda #1
@@ -113,19 +134,70 @@ enemy_park:
         sta mux_ptr + SPR_ENEMY,x
         rts
 
+// Start enemy's explosion (a hit): state Exploding for EXPLOSION_FRAMES frames, the first
+// explosion shape, the explosion's colour, where it is now (bit 7 of the state stops the
+// formation placing it). formation_update animates it from the next frame and ends it.
+// In:  X = the enemy's VIRTUAL SPRITE, SPR_ENEMY + e (what collision_range returns)
+// Out: nothing       Uses: A, X, Y
+// Cost: 61-88 cycles + jsr/rts by the slot found (counted); only on a hit
+enemy_explode:
+        lda #ENEMY_EXPLODING            // 2
+        sta enemy_state - SPR_ENEMY,x   // 5
+        lda #EXPLOSION_FRAMES           // 2
+        sta enemy_timer - SPR_ENEMY,x   // 5
+        lda #SHAPE_EXPLOSION            // 2
+        sta mux_ptr,x                   // 5
+        lda colour_table + COL_ENEMY_EXPLODE    // 4
+        sta mux_col,x                   // 5
+        txa                             // 2
+        sec                             // 2
+        sbc #SPR_ENEMY                  // 2
+        tax                             // 2  X = enemy index
+        ldy #EXPLOSION_SLOTS - 1        // 2
+!find:  lda explosion_enemy,y           // 4
+        bmi !free+                      // 2 / 3
+        dey                             // 2
+        bpl !find-                      // 3
+        jmp enemy_kill                  // every slot taken (can't happen: see the top): no explosion
+!free:  txa                             // 2
+        sta explosion_enemy,y           // 5
+        rts
+
+// Enemy X is dead: hide its sprite, count it, and when it was the last one start the pause
+// before the next formation (design "Waves": 75 frames; main.asm counts it).
+// In:  X = enemy index 0-17      Out: X preserved
+// Uses: A
+// Cost: 28 cycles + jsr/rts (counted); only when an explosion ends
+enemy_kill:
+        lda #ENEMY_DEAD
+        sta enemy_state,x
+        lda #MUX_OFF
+        sta mux_y + SPR_ENEMY,x
+        dec zp_enemies_alive
+        bne !+
+        lda #WAVE_CLEAR_PAUSE
+        sta zp_state_timer
+!:      rts
+
 // The formation's frame: step the drift, work out the six columns' home X and write it to every
-// enemy the formation places (state bit 7 clear), and every 16 frames swap the animation shape
-// of all 18. Unrolled by column. Runs after pshot_update and before the collisions and the player.
+// enemy the formation places (state bit 7 clear), every 16 frames swap the animation shape
+// of all 18, then (after the swap, which writes all 18) animate the explosions and end those
+// whose 16 frames are up. Unrolled by column. Runs after pshot_update and before the collisions
+// and the player.
 // In:  nothing       Out: formation_home_x_lo/hi, mux_x_lo/hi and mux_ptr of the enemies
-// Uses: A, X
+// Uses: A, X, Y
 // Cost: to formation_update_end, CPU cycles counted: 298 in a frame with no drift step and no
 //       swap, + 27 on a drift step (+ 34 on a turn), + 105 on a swap frame: 437 at most.
 //       Measured, raster cycles: 296-437 in the game (vice_profile, 400 passes, loop 0); 323-437,
 //       average 331, in the AUTOPLAY build, which drifts every frame (600 passes:
 //       tests/games/swarm/stage2a_costs.py, results beside it). Budget 750 (memory-map.md row 5,
 //       which also has to hold stage 3's wind-up wobble and explosion timers).
-//       NO DMA IN THESE FIGURES: it runs on lines 29-36, above the first badline and the first
-//       enemy row. Once the collisions run before it, expect about x 1.27: 555
+//       Part B, with the explosion slots (stage2b_costs.py, results beside it): 352-466, average
+//       359, in the AUTOPLAY build, where nothing explodes (4 free slots: + 28); 431-538 in the
+//       game with all 4 slots animating for 15 frames and ending together in the 16th, drifting
+//       every frame. Counted worst: 437 + 2 ending (53 each) + 2 animating (31 each) = 605.
+//       NO DMA IN THESE FIGURES: it runs on lines 24-37, above the first badline and the first
+//       enemy row
 formation_update:
         dec zp_drift_timer              // 5
         bne !placed+                    // 3 / 2
@@ -187,12 +259,30 @@ formation_update:
                 }
         }
 !done:
+        // The explosions: 7 cycles a free slot, 31 one that is animating, 53 one that ends.
+        .for (var i = 0; i < EXPLOSION_SLOTS; i++) {
+                ldx explosion_enemy + i                 // 4
+                bmi !next+                              // 3 / 2   free
+                dec enemy_timer,x                       // 7
+                beq !over+                              // 2 / 3
+                ldy enemy_timer,x                       // 4   frames left, 15-1
+                lda explosion_shape,y                   // 4
+                sta mux_ptr + SPR_ENEMY,x               // 5
+                bne !next+                              // 3   always: a shape pointer is never 0
+!over:          lda #EXPLOSION_FREE                     // 2
+                sta explosion_enemy + i                 // 4
+                jsr enemy_kill                          // 6 + 28 + 6
+!next:
+        }
 formation_update_end:
         rts
+.errorif SHAPE_EXPLOSION == 0, "formation_update: the explosion loop's bne assumes a non-zero shape pointer"
 
 // Per-enemy variables, indexed by enemy index 0-17 (the layout is described at the top).
 enemy_state:            .fill ENEMY_COUNT, ENEMY_DEAD
 enemy_timer:            .fill ENEMY_COUNT, 0
+// The enemies that are exploding, by enemy index 0-17; EXPLOSION_FREE = none in this entry.
+explosion_enemy:        .fill EXPLOSION_SLOTS, EXPLOSION_FREE
 // This frame's home X of each column, 9 bits (hi is 0 or 1). Columns 0-3 never pass 255.
 formation_home_x_lo:    .fill FORM_COLS, 0
 formation_home_x_hi:    .fill FORM_COLS, 0

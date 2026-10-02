@@ -1,0 +1,12 @@
+# uv run --package budget-runner python tests/games/swarm/stage2b_costs.py   (AUTOPLAY budget build and the game's DEBUG build, VICE 3.10 x64sc PAL, 2026-10-02)
+[PASS] AUTOPLAY collide_update -> collide_update_end: 600 passes, min 18, avg 685.3, max 1192 raster cycles (limit 2050: the fallback trigger; budget 2,825); starts on raster lines 34-37, ends on 35-55
+[PASS] AUTOPLAY formation_update -> formation_update_end: 600 passes, min 352, avg 359.4, max 466 raster cycles (limit 750: budget); starts on raster lines 28-29, ends on 34-37
+[PASS] AUTOPLAY player_update -> player_update_end: 600 passes, min 57, avg 68.1, max 123 raster cycles (limit 200: budget); starts on raster lines 35-56, ends on 36-57
+[FAIL] AUTOPLAY stars_update -> stars_update_end: 600 passes, min 56, avg 65.1, max 129 raster cycles (limit 100: budget); starts on raster lines 36-58, ends on 37-60
+[PASS] AUTOPLAY game_update -> game_update_end: 600 passes, min 883, avg 1668.6, max 2217 raster cycles (limit 6115: budget); starts on raster lines 23-23, ends on 37-58
+[PASS] AUTOPLAY mux_update -> mux_update_fast: 600 passes, min 3414, avg 4183.6, max 6089 raster cycles (limit 7400: engine limit; average <= 5,000); starts on raster lines 37-58, ends on 100-165
+[PASS] AUTOPLAY mux_update -> mux_update_end: 600 passes, min 3423, avg 4182.4, max 6078 raster cycles (limit 13000: engine limit); starts on raster lines 37-60, ends on 100-164
+[PASS] AUTOPLAY after 3000 more frames: idle in the worst frame 9488 cycles (required >= 585); game_overrun_count 0, game_flicker_frames 0, mux_max_age 0, mux_late_count 0, irq_late_count 0 (all expected 0); score 027650 (hits are scored: it stops at 999990), enemies alive 18
+[PASS] game, no shot in flight: collide_update -> collide_update_end: 50 passes, min 18, avg 18.0, max 18 raster cycles (limit 2050: the fallback trigger); starts on raster lines 30-32, ends on 30-32
+[PASS] game, two hits in one frame (enemy 0 after 12 rejects + 6 full tests, enemy 12 after 6 full tests; score and explosion start for both): collide_update -> collide_update_end, 8 frames: min 1245, max 1245 raster cycles (limit 2050: the fallback trigger); started on lines 30-30, ended on 50-50; score 000000 -> 000200 in the first
+[PASS] game, 4 explosions animating (15 frames) and ending together (the 16th), drift every frame: formation_update -> formation_update_end: 256 passes, min 431, avg 444.8, max 538 raster cycles (limit 750: budget); starts on raster lines 24-25, ends on 31-33

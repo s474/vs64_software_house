@@ -1,7 +1,7 @@
 // Swarm: game tables, $3800-$3FFF (docs/games/swarm/memory-map.md#game-tables). Imported by
 // main.asm at GAME_TABLES. Only colour_table's address is fixed; the rest follow in the memory
-// map's order and are found by label. So far: colours, stars, custom glyphs, the
-// formation's tables, strings.
+// map's order and are found by label. So far: colours, stars, custom glyphs, collision pairs,
+// the formation's tables, scores, explosion shapes, strings.
 
 // ------------------------------------------------------------------------------------------
 // Colours. EVERY colour the game writes comes from here, indexed by a COL_* constant
@@ -118,6 +118,16 @@ glyph_data_end:
 .errorif GLYPH_DATA_SIZE != 24, "glyph_data is 3 glyphs"
 
 // ------------------------------------------------------------------------------------------
+// Collision pairs (engine/collision.md): one ColPair row per pair of kinds, A's box then B's, in
+// the contract's order (COL_PAIR_* in consts.asm). The boxes are consts.asm's BOX_*, the design's
+// hit-box table. Pairs 1 and 2 are the player's scans: stage 3 (collide.asm).
+col_pairs:
+        ColPair(BOX_PSHOT_X0, BOX_PSHOT_X1, BOX_PSHOT_Y0, BOX_PSHOT_Y1,     BOX_ENEMY_X0, BOX_ENEMY_X1, BOX_ENEMY_Y0, BOX_ENEMY_Y1)  // 0: player shot against enemy
+        ColPair(BOX_PLAYER_X0, BOX_PLAYER_X1, BOX_PLAYER_Y0, BOX_PLAYER_Y1, BOX_ESHOT_X0, BOX_ESHOT_X1, BOX_ESHOT_Y0, BOX_ESHOT_Y1)  // 1: player against enemy shot
+        ColPair(BOX_PLAYER_X0, BOX_PLAYER_X1, BOX_PLAYER_Y0, BOX_PLAYER_Y1, BOX_ENEMY_X0, BOX_ENEMY_X1, BOX_ENEMY_Y0, BOX_ENEMY_Y1)  // 2: player against enemy
+.errorif * - col_pairs != 12, "col_pairs: 3 pairs of 4 bytes (memory-map.md#game-tables)"
+
+// ------------------------------------------------------------------------------------------
 // The formation (design.md "The formation"; formation.asm).
 // Column X with fx = 0, and row Y: the design's "one table" each. formation_update's unrolled code
 // takes the same FORM_* constants as immediates, so a change is made in consts.asm, not by a poke.
@@ -130,6 +140,15 @@ formation_drift_period: .byte 2, 2, 1, 1
 // Each enemy's row (its type, colour, score and path) and column, by enemy index 0-17.
 enemy_row:              .fill ENEMY_COUNT, floor(i / FORM_COLS)
 enemy_col:              .fill ENEMY_COUNT, mod(i, FORM_COLS)
+
+// Scores (design.md "Scoring"), BCD, by row 0-2 (types A, B, C): parked 150 / 80 / 50, then the
+// diving values (WindUp, Dive, Return: state bit 7 set) 300 / 160 / 100 at index row + 3.
+.const SCORE_DIVING = FORM_ROWS         // index offset of the diving values
+score_lo:               .byte $50, $80, $50,  $00, $60, $00
+score_hi:               .byte $01, $00, $00,  $03, $01, $01
+// An exploding enemy's shape by its enemy_timer (frames left, 15 down to 1; the hit's own frame
+// shows the first shape with the timer at 16): 4 frames each, 16 frames in all.
+explosion_shape:        .fill EXPLOSION_FRAMES + 1, SHAPE_EXPLOSION + EXPLOSION_SHAPES - 1 - floor((max(i, 1) - 1) / EXPLOSION_SHAPE_FRAMES)
 
 // ------------------------------------------------------------------------------------------
 // Strings. Stored as glyph codes 0-63 and written to the play area as they are; the panel
