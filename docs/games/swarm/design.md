@@ -6,6 +6,12 @@ document first, then the code.
 M4's training game ([brief](../../milestones/M4-training-game.md)). This document is the source of
 truth for behaviour; what Simon decided at approval is in [Decisions](#decisions).
 
+**Changed after the technical design (2026-10-01), no behaviour change:** the panel and the whole
+screen use extended colour mode, with a 64-glyph character set
+([Screen layout](#screen-layout), [Character set](#character-set-64-glyphs), decision 8); and the
+rules for whoever draws the sprites are collected in [Art rules](#art-rules), including the new one
+that enemy shapes keep their bottom row empty.
+
 Every number that can be checked without the game is checked by
 [tests/games/swarm/check_design.py](../../../tests/games/swarm/check_design.py)
 (`uv run python tests/games/swarm/check_design.py`; its output is in
@@ -35,15 +41,29 @@ shooting the thing that's trying to kill you.
 
 | Text rows | Raster lines | Contents |
 |---|---|---|
-| 0–23 | 51–242 | Play area: black, star field characters, all sprites |
-| 24 | 243–250 | Status panel: one row of **reverse-video** characters (a solid blue bar, white text). No raster split is needed |
+| 0–23 | 51–242 | Play area: black background, star field characters, messages, all sprites |
+| 24 | 243–250 | Status panel: a solid blue bar with white text, all 40 columns. No raster split is needed |
+
+- **Screen mode: extended colour mode (ECM) for the whole screen**, set once and never changed
+  (Simon, 2026-10-01; decision 8). In ECM the top two bits of a cell's screen code choose its
+  background colour and the low six bits choose the glyph. Play-area cells use codes 0–63 (black
+  background); panel cells use the same glyph's code **+ 64** (blue background), with colour RAM
+  white. **Every one of the 40 panel cells is written**, the blanks as space + 64, or the bar has
+  black holes. The registers are in the
+  [memory map](memory-map.md#the-panel).
+- The price is **64 glyphs for the whole screen**. The design uses 35: see
+  [Character set](#character-set-64-glyphs).
+- Why not reverse video, as this document first said: a reverse-video character draws its glyph in
+  the background colour, so the text on a blue bar would be black, not white (measured by the
+  Technical Director: `tests/timing/ecm_panel`).
 
 - `MUX_Y_MAX` = **221** (panel line 243 − 22). The player sits at Y 221, displayed on 222–242.
 - Panel columns: `SCORE` 1–5, six digits 7–12; `HI` 15–16, six digits 18–23; `WAVE` 26–29, two
   digits 31–32; spare ships 35–37 (one ship character each, 2 at the start of a game).
 - Messages in the play area, row 12, centred: `WAVE nn`, `READY`, `GAME OVER`.
 - **Star field:** 48 stars at fixed cells in rows 0–23, from a table (built once from a fixed seed;
-  none in row 12, columns 14–25, where messages go). Two star characters (dot high, dot low). Twinkle:
+  none in row 12, columns 14–25, where messages go). Two star characters (dot high, dot low: one
+  pixel each). Twinkle:
   each frame one star, in turn, steps its colour through white, light grey, grey, dark grey. That's
   **one colour RAM write a frame**; each star changes every 48 frames. The stars twinkle only: they
   don't move.
@@ -56,6 +76,38 @@ shooting the thing that's trying to kill you.
   on row 16; `PRESS FIRE` on row 19, on for 32 frames and off for 32. Fire starts a game.
 - **Game over:** `GAME OVER` on row 12 for 200 frames (fire skips it after 50), then the title. The
   high score is updated when the game ends.
+
+### Character set (64 glyphs)
+
+ECM allows screen codes 0–63 only. Everything the design puts on the screen, counted:
+
+| Text | Where | Letters it needs |
+|---|---|---|
+| `SCORE`, `HI`, `WAVE` | Panel | S C O R E H I W A V |
+| `WAVE nn`, `READY`, `GAME OVER` | Row 12 | + D Y G M |
+| `SWARM` | Title | (none new) |
+| `150 PTS`, `80 PTS`, `50 PTS` | Title | + P T |
+| `DIVING SCORES DOUBLE` | Title | + N U B L |
+| `PRESS FIRE` | Title | + F |
+
+| Glyphs | Count | Screen codes |
+|---|---|---|
+| Letters `A B C D E F G H I L M N O P R S T U V W Y` | 21 | 1–25, the ROM's own (within A–Z) |
+| Digits `0`–`9` | 10 | 48–57, the ROM's own |
+| Space | 1 | 32 |
+| Star, dot high; star, dot low | 2 | Custom: two codes no text uses |
+| Ship (the spare-ships marker in the panel) | 1 | Custom: one code no text uses |
+| **Total used** | **35 of 64** | **29 spare** |
+
+- **Nothing had to be cut or reworded.** All the text is capitals, digits and spaces: no
+  punctuation, no lower case. The five letters not used (J K Q X Z) and all the punctuation in codes
+  33–47 and 58–63 are still there if a later text wants them.
+- The three custom glyphs go in codes that no text uses; codes **27–29** (`[`, `£`, `]`) are the
+  suggestion, the choice is the engineer's.
+- **Rule for any text added later:** capitals, digits and the ROM's punctuation in codes 0–63 only.
+  No lower case, no reverse video, no graphics characters (all are codes 64 and up, which ECM shows
+  as a glyph from 0–63 on another background colour).
+- Stars keep all 16 colours: ECM restricts glyphs and backgrounds, not the colour RAM colour.
 
 ## Controls and rules
 
@@ -112,6 +164,30 @@ Y ≥ 207; a player shot moving 8 a frame can't pass through a 15-line enemy box
 Player; player shot; enemy shot; enemy types A, B, C × 2 animation frames; explosion × 4. Enemies
 swap frames every 16 frames, all together. The enemy explosion is 4 shapes × 4 frames (16 frames,
 stationary); the player's is the same 4 shapes × 8 frames (32 frames) in white.
+
+### Art rules
+
+For whoever draws the sprites. Colours are set by the game, per sprite, not by the art.
+
+1. **24 × 21 pixels, hires, one colour plus transparent.** No multicolour, no expanded sprites, and
+   no exceptions: every sprite on screen is in the same mode (decision 7).
+2. **13 shapes**, as listed above. Each fits its [hit box](#hit-boxes) plus about 2 pixels, and is
+   centred on it: a shape that overhangs its box makes deaths look unfair.
+3. **Enemy shapes (types A, B, C, both frames) keep sprite row 20, the bottom row, empty.** A
+   wrapping diver re-enters at Y 30, which is displayed on raster lines 31–51, and line 51 is the
+   first line of the display window: anything drawn in row 20 would show for a frame as a line of
+   pixels at the top of the screen, above the enemy's home. The enemy box plus 2 is rows 1–19, so
+   this costs nothing; it makes the "about" in rule 2 exact for the bottom edge.
+4. **Player shot:** 2 pixels wide, in columns 11–12, rows 0–7 (the top of the cell). **Enemy
+   shot:** 2 pixels wide, columns 11–12, rows 14–20 (the bottom of the cell). The rest of each cell
+   is empty: the shape is the hit box.
+5. **Enemy animation:** the two frames of a type have the same outline size and centre, so the
+   16-frame swap doesn't look like movement.
+6. **One set of 4 explosion shapes** serves enemies and the player; they are drawn in the dead
+   object's slot and may fill the cell.
+7. **White is reserved**: the wind-up flash, the player's explosion and the panel text are white, so
+   an enemy's own colour is not white (or light enough to be mistaken for it), and nothing is blue
+   that could be lost against the panel.
 
 ## The formation
 
@@ -392,6 +468,12 @@ Simon, 2026-10-01: the stage 0 open questions, each answered as recommended.
 | 5 | Should the stars drift downward? | **No: twinkle only**, no drift yet | A drift costs about 12 screen writes every 8 frames; twinkle is one colour write a frame |
 | 6 | Enemies appear in place at wave start, with no fly-in. Enough? | **Yes: no fly-in** | A fly-in is a fourth and fifth path and a mass re-sort risk |
 | 7 | Hires or multicolour sprites? | **Hires, all sprites the same mode** | Sharper bullets and the larger zone-timing margin |
+
+Simon, 2026-10-01, after the technical design:
+
+| # | Question | Decision | Why |
+|---|---|---|---|
+| 8 | The panel's white text on a blue bar can't be done with reverse video (the text would be black). Extended colour mode, or black text on a lighter bar? | **Extended colour mode for the whole screen** | White on blue as designed, with no raster split. The cost is 64 glyphs for the whole screen; the design uses 35 ([Character set](#character-set-64-glyphs)) |
 
 Noted, not required: divers leaving through the bottom (see
 [Requests of the engine](#requests-of-the-engine)), a multiplexer v2 candidate.
