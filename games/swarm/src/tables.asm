@@ -226,12 +226,12 @@ path_fire_first: .byte 0, 4, 9
 .const PATH_FIRE_NONE = 3
 
 // Waves (design.md "Waves"), by pattern index 0-2 and loop 0-3: entry pattern * 4 + loop.
-wave_max_divers:        .byte 1, 2, 2, 2,  2, 2, 3, 3,  2, 3, 3, 3      // most diving at once
-wave_interval:          .byte 150, 120, 100, 80,  120, 100, 80, 64,  100, 80, 64, 50   // launch interval, frames
+wave_max_divers:        .byte 2, 2, 2, 2,  2, 3, 3, 3,  3, 3, 3, 3      // most diving at once
+wave_interval:          .byte 100, 80, 64, 50,  80, 64, 50, 40,  64, 50, 40, 32   // launch interval, frames
 .errorif * - wave_interval != 3 * (GAME_LOOP_MAX + 1), "wave tables: 3 patterns x 4 loops"
 // By pattern: the rows that dive (bit r = row r) and the shots per dive at loop 0 (+ 1 a loop).
 wave_rows:              .byte %100, %110, %111
-wave_shots:             .byte 1, 2, 2
+wave_shots:             .byte 2, 3, 3
 diver_row_bit:          .fill FORM_ROWS, 1 << i
 // By loop: the wind-up's length, and the frames in which every diver takes 2 path steps: those
 // whose frame number AND the mask equals the compare value (never at loop 0, every 4th at loop

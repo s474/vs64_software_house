@@ -191,20 +191,22 @@
 .const ESHOT_AIM_DEAD  = 15     // a shot's dx is 0 when |player X - shot X| <= 15
 .const LAUNCH_TIMER_START = 50  // the launch timer when Play is entered and when a formation returns
 .const LAUNCH_HALVE_ALIVE = 4   // the interval is halved with 4 or fewer enemies alive
-.const FIGHT_LAUNCH_TIMER = LAUNCH_TIMER_START + 1      // set in Fight's first frame, before diver_update counts it
-                                // once in that same frame (in Play): it reads 50 at that frame's end and the
-                                // first launch is 50 frames later, 150 after the wave appeared (design, Stage 4
-                                // rule 8: Fight at d + 191, first launch at d + 241)
+.const FIGHT_LAUNCH_DELAY = 10  // the launch timer when Fight starts: its own constant, not Play's 50
+                                // (design, Stage 4 rule 3, changed by the tuning after the stage 4 playtest)
+.const FIGHT_LAUNCH_TIMER = FIGHT_LAUNCH_DELAY + 1      // set in Fight's first frame, before diver_update counts it
+                                // once in that same frame (in Play): it reads 10 at that frame's end and the
+                                // first launch is 10 frames later, 60 after the wave appeared (design, Stage 4
+                                // rule 8: Fight at d + 141; "the other order": first launch 10 frames after Fight)
 .const PATTERN_COUNT   = 3      // the pattern index cycles 0-2
 .errorif DIVER_WRAP_Y < 30 || DIVER_X_MAX > 511, "divers stay inside the multiplexer's range"
 
 // --- Waves (design.md "Game flow", "Stage 4 rules" 1-8) ----------------------------------------
 // The wave phase, beside the game state. Fight is 0 so that "in Play and in Fight" is one ora.
 .const WAVE_PHASE_FIGHT = 0
-.const WAVE_PHASE_INTRO = 1     // 100 frames: WAVE nn for 75, enemy k appears in frame 2k
+.const WAVE_PHASE_INTRO = 1     // 50 frames: WAVE nn for 49, enemy k appears in frame 2k
 .const WAVE_PHASE_CLEAR = 2     // 75 frames of empty sky after the last explosion ended
-.const INTRO_FRAMES     = 100
-.const INTRO_MSG_FRAMES = 75    // WAVE nn is erased in Intro's frame 75
+.const INTRO_FRAMES     = 50    // 100 until the tuning after the stage 4 playtest
+.const INTRO_MSG_FRAMES = 49    // WAVE nn is erased in Intro's frame 49 (75 until the tuning)
 .const WAVE_START       = $01   // BCD: a new game's shown wave
 .const WAVE_MAX         = $99   // BCD: the shown wave stops here; the game carries on
 .const WAVE_BONUS_MID   = $10   // + 1,000: BCD, added to the score's middle byte
@@ -220,6 +222,8 @@
 .const NEW_GAME_COOLDOWN = 25   // Stage 4 rule 10: the press that started the game is still held. The ship
                                 // can't fire in the new game's frame or the 24 after it
 .errorif INTRO_MSG_FRAMES < 2 * ENEMY_COUNT || (INTRO_MSG_FRAMES & 1) == 0, "wave_step: the erase frame must be odd or past the last enemy's frame (2 * 17)"
+.errorif INTRO_MSG_FRAMES >= INTRO_FRAMES, "wave_step: the erase frame must be inside Intro (INTRO_FRAMES is tested first)"
+.errorif FIGHT_LAUNCH_DELAY < 1 || FIGHT_LAUNCH_DELAY > 254, "the launch timer is one byte and counts at least once"
 
 // --- Game core and the game states (design.md "Game flow", "Stage 3 rules" 8-13) --------------
 // The order matters: the ship is shown (and moves and fires) in the states below

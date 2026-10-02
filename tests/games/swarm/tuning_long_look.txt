@@ -1,0 +1,4 @@
+# uv run --package budget-runner python tests/games/swarm/tuning_long_look.py   (the AUTOPLAY budget build, VICE 3.10 x64sc PAL; after the stage 4 tuning; 6000 passes of each span)
+[PASS] AUTOPLAY diver_update -> diver_update_end: 6000 passes, min 192, avg 558.6, max 1296 raster cycles (limit 1350); the five largest [1186, 1194, 1233, 1268, 1296]; 3 passes above 90% of the limit (1215); starts on raster lines 37-41, ends on 40-61
+[PASS] AUTOPLAY collide_update -> collide_update_end: 6000 passes, min 112, avg 537.2, max 1673 raster cycles (limit 2825); the five largest [1495, 1505, 1562, 1634, 1673]; 0 passes above 90% of the limit (2542); starts on raster lines 40-61, ends on 42-87
+[PASS] AUTOPLAY game_update -> game_update_end: 6000 passes, min 1325, avg 2257.2, max 3758 raster cycles (limit 6050); the five largest [3602, 3616, 3680, 3705, 3758]; 0 passes above 90% of the limit (5445); starts on raster lines 23-23, ends on 44-95

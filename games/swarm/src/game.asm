@@ -13,7 +13,7 @@
 // Respawn and GameOver are entered here, at the top of a frame, which is their frame 0.
 //
 // THE WAVE PHASE (zp_wave_phase, zp_wave_timer): what the formation is doing, beside the state.
-//   Intro ---------- 100 frames: WAVE nn on row 9 for 75, enemy k appears in frame 2k --> Fight
+//   Intro ---------- 50 frames: WAVE nn on row 9 for 49, enemy k appears in frame 2k ---> Fight
 //   Fight ---------- the last explosion ends (formation_update -> enemy_kill) ----------> Clear
 //   Clear ---------- + 1,000 in its frame 0; 75 frames of empty sky; then the next wave -> Intro
 // zp_wave_timer is the number of frames the phase has run, 0 in its first frame. It counts in
@@ -28,7 +28,7 @@
 // in Play with zp_player_invuln 0; player_update moves and fires in Play and Respawn (the states
 // in which the ship is shown).
 //
-// ROW 9 HOLDS ONE MESSAGE AT A TIME (Stage 4 rule 6): WAVE nn in Intro's frames 0-74; READY in
+// ROW 9 HOLDS ONE MESSAGE AT A TIME (Stage 4 rule 6): WAVE nn in Intro's frames 0-48; READY in
 // Respawn, written only if the phase is Fight in Respawn's frame 0 and erased only if written
 // (game_ready); GAME OVER over whatever is there.
 
@@ -174,9 +174,9 @@ game_wave_step:
         jmp enemy_park                  // enemy k appears in frame 2k, Parked at its home
 !erase: ldx #TEXT_WAVE
         jmp game_text_erase
-!fight: lda #WAVE_PHASE_FIGHT           // the frame after Intro's frame 99
+!fight: lda #WAVE_PHASE_FIGHT           // the frame after Intro's last (frame 49)
         sta zp_wave_phase
-        lda #FIGHT_LAUNCH_TIMER         // 50 once diver_update has counted this frame (consts.asm)
+        lda #FIGHT_LAUNCH_TIMER         // 10 once diver_update has counted this frame (consts.asm)
         sta zp_launch_timer
 !out:   rts
 !clear: cpx #WAVE_CLEAR_PAUSE

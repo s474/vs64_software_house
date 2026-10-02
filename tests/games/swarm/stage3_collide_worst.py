@@ -32,7 +32,10 @@ Results of the last run: tests/games/swarm/stage3_collide_worst.txt.
 Stage 4 part B (the sound in): on a build that has engine/sfx.asm the script also reads sfx_request
 (3 bytes) at game_update_end of each placed frame and holds each case to 2,825 (memory-map.md
 "Stage 4" (f), item 7). Those results: tests/games/swarm/stage4b_collide_worst.txt (the same
-command, tee'd there; stage3_collide_worst.txt is kept as stage 3's).
+command, tee'd there; stage3_collide_worst.txt is kept as stage 3's). It was run again there after
+the stage 4 tuning (Intro 50 frames: new_game() below runs 50, not 100): the placed frames are the
+same frames, so the figures moved by a few cycles only (A 2,013 -> 2,010, B 2,553 -> 2,554,
+C 2,571 -> 2,612).
 
 The same three frames on the box scan this code replaced (commit 039ad26), for what the switch
 bought: build that commit's game in a worktree and pass its PRG (its main.vs is read from beside it):
@@ -102,7 +105,8 @@ def main() -> int:
                 mon.joyport_set(PORT2, 0x1F)
                 frame(6)
                 poke("zp_pattern", [2])
-                frame(100)
+                frame(50)                 # the Intro: 50 frames since the tuning after the stage 4 playtest (100
+                                          # before). Fight's first launch is 10 frames on: the timer is held below
             if peek("zp_game_state")[0] != GS_PLAY or list(peek("enemy_state", 18)) != [PARKED] * 18:
                 raise MeasureError("new_game: no new game")
             poke("zp_launch_timer", [255])

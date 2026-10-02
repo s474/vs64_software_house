@@ -28,7 +28,8 @@ game_update_end and the game then runs by itself; the stick is the monitor's joy
            inside it. Limit 750, and it must end above line 49
   item 2   a later wave's Intro frame 0 (the stores advance, the formation reset, WAVE nn, enemy 0):
            game_update, formation_update, idle. One-off rule: <= 4,000, <= 750, idle >= 5,000
-  item 3   every frame of an Intro (1-100) with the ship sweeping and firing: game_update, and
+  item 3   every frame of an Intro (1-50: 50 frames since the tuning after the stage 4 playtest; the
+           last is Fight's first frame) with the ship sweeping and firing: game_update, and
            the line formation_update ends on (above 49 in every frame)
   item 4   the new game's frame (from the title's press) and the frame after: game_update,
            formation_update, idle; panel_update with all four fields dirty (limit 350)
@@ -82,6 +83,7 @@ ENEMY0, ESHOT0, PSHOT0, MUX_OFF, ENEMIES = 6, 1, 4, 0xFF, 18
 PARKED, DEAD, WAITING, RETURN, EXPLODING = 1, 0, 2, 0x82, 0x83
 GS_PLAY, GS_RESPAWN, GS_DYING, GS_OVER, GS_TITLE = 0, 1, 2, 3, 4
 PHASE_FIGHT, PHASE_INTRO, PHASE_CLEAR, CLEAR_PAUSE = 0, 1, 2, 75
+INTRO_FRAMES = 50               # design, Stage 4 rule 2 (100 until the tuning after the stage 4 playtest)
 JOYPORT_IO_SIMULATION, PORT2 = 37, 1
 RIGHT, LEFT, FIRE = 0x08, 0x04, 0x10
 IDLE_MIN, ONEOFF_GAME, ONEOFF_IDLE, FORMATION, BORDER_LINE, PANEL4 = 670, 4000, 5000, 750, 49, 350
@@ -111,7 +113,8 @@ def main() -> int:
         print(f"[{'PASS' if ok else 'FAIL'}] {text}")
 
     print("# uv run --package budget-runner python tests/games/swarm/stage4_costs.py   (the AUTOPLAY budget build and "
-          "the game's DEBUG build, VICE 3.10 x64sc PAL; stage 4 part B: with sound)")
+          "the game's DEBUG build, VICE 3.10 x64sc PAL; stage 4 part B: with sound; after the stage 4 tuning: Intro 50 frames, "
+          "launch timer 10 at Fight, the new wave tables)")
 
     # ------------------------------------------------------------------ item 12: sizes
     out = subprocess.run(["make", "-B", "GAME=swarm"], cwd=REPO, capture_output=True, text=True).stdout
@@ -311,7 +314,8 @@ def main() -> int:
         def start_wave(n):
             """Wave n (2 or more) run to Fight's first frame by the game's own Intro; the launcher held off."""
             next_wave_in(1, (n - 1, (n - 2) % 3, min((n - 2) // 3, 3)))
-            frame(101)
+            frame(INTRO_FRAMES + 1)                               # Clear's last frame, Intro's 0 to 49, Fight's first: the
+                                                                  # first launch is 10 frames later, so the timer is held now
             if p1("zp_wave_phase") != PHASE_FIGHT or list(peek("enemy_state", ENEMIES)) != [PARKED] * ENEMIES:
                 raise MeasureError(f"start_wave({n}): phase {p1('zp_wave_phase')}")
             poke("zp_launch_timer", [255])
@@ -504,7 +508,7 @@ def main() -> int:
             next_wave_in(1)
             stick(RIGHT | FIRE if i == 0 else LEFT | FIRE)
             frame()                                               # Intro's frame 0
-            rows += list(enumerate(frames(100), 1))
+            rows += list(enumerate(frames(INTRO_FRAMES), 1))            # Intro's frames 1-49 and Fight's first
             stick(0)
             if p1("zp_wave_phase") != PHASE_FIGHT:
                 raise MeasureError("intro: Fight not reached")
@@ -512,7 +516,7 @@ def main() -> int:
         rest = [r for k, r in rows if not (k % 2 == 0 and k <= 34)]
         last = max(r["formation_update"][2] for _, r in rows)
         line(last < BORDER_LINE and worst([r for _, r in rows], "formation_update") <= FORMATION,
-             f"item 3, all of an Intro (frames 1-100, twice, the ship sweeping with fire held and its shots hitting "
+             f"item 3, all of an Intro (frames 1-{INTRO_FRAMES}, twice, the ship sweeping with fire held and its shots hitting "
              f"enemies as they appear): the 34 frames an enemy appears in: {summary(appear, 'game_update')}, "
              f"{summary(appear, 'formation_update')}; the other {len(rest)}: {summary(rest, 'game_update')}, "
              f"{summary(rest, 'formation_update')}; formation_update ended on line {last} at the latest (required: above "

@@ -9,7 +9,8 @@ a game in the title.
 HOW THE EARLIER CASES STAY VALID.
 Stage 3: every case from "setup" to "sprites" was written when nothing dived and nothing could hit
 the ship; they assume a formation that stays Parked. They are kept valid by holding the launcher
-off: launcher(False) re-writes zp_launch_timer to 255 every 32 frames (through the monitor), so no
+off: launcher(False) re-writes zp_launch_timer to 255 every 8 frames (through the monitor: fewer than
+the 10 Fight sets it to), so no
 dive is ever launched, no enemy shot exists and the ship can't be hit. The stage 3 cases turn the
 launcher on where they want a dive (launcher(True), usually for one frame with zp_launch_timer =
 1), and safe(True) holds zp_player_invuln up where a case is about a diver's flight and not about
@@ -33,7 +34,9 @@ AUTOPLAY budget build). The machine is stopped at game_update_end in EVERY frame
 frame's input_read and update routines, before mux_update); the stick is changed while it is
 stopped and the state is read at the next stop, so each sample is exactly one game frame later.
 
-Expected values are the design's (docs/games/swarm/design.md): X 24-318, 3 px a frame, start 171,
+Expected values are the design's (docs/games/swarm/design.md), with the wave's start and the wave
+tables as changed by "Tuning after the stage 4 playtest" (Intro 50 frames, WAVE nn for 49, the
+launch timer 10 at Fight, the new intervals, divers at once and shots a dive): X 24-318, 3 px a frame, start 171,
 Y 221; shots spawn at (player X, 213), move 8 a frame, are removed when Y < 46, at most 2, with a
 10-frame cooldown. Formation: enemy e = row * 6 + column on virtual sprite 6 + e, at X = 34 + fx +
 36 * column, Y = 56 / 96 / 136; fx 0 -> 96 -> 0, 1 pixel every 2 frames, starting at 48 moving right;
@@ -160,25 +163,27 @@ Cases (PASS/FAIL each, exit code 1 on any failure):
   ram-*        the Hook on the ship: only from Y 210; |diver X - ship X| = 13 rams, 14 doesn't;
                not while invulnerable; a diver shot in the same frame doesn't ram
   fifth-explosion   4 explosions running: a fifth enemy dies at once
-  launcher, launcher-halved, launcher-rows   first launch at frame 50, 100 apart, never more than 2
-               out, the pick is the first Parked enemy at or after the drawn index, never more
-               than 2 rng_next calls a frame (the generator is modelled); 50 apart with 4 alive;
-               the wave's rows, and any row when those are empty
+  launcher, launcher-halved, launcher-rows   first launch at frame 50 (the script's timer), 64 apart,
+               up to 3 out and never more, the pick is the first Parked enemy at or after the drawn
+               index, never more than 2 rng_next calls a frame (the generator is modelled); 32 apart
+               with 4 alive; the wave's rows (pattern 1: 2 at once, 100 apart), and any row when
+               those are empty
   stage3-play  1,500 frames of play: pinned sprites 0-3 never dropped, nothing missing 2 frames
                running, no overrun (DEBUG counters)
 
   (stage 4 part A)
   autoplay-seed   (run first, on the AUTOPLAY budget build) two runs from power-on are the same game
   wave-intro   an Intro frame by frame: enemy k Parked in frame 2k, 18 alive and the diver slots
-               free from frame 0, WAVE nn in frames 0-74, Fight in frame 100 with the launch timer
-               at 50, no rng_next call and no launch before frame 150
+               free from frame 0, WAVE nn in frames 0-48, Fight in frame 50 with the launch timer
+               at 10, no rng_next call and no launch before frame 60
   wave-stores  the shown wave, the pattern index and the loop over waves 1-15, and 97-99-99-99
   waves-played waves 1-4 played through, each formation killed through the monitor: the bonus in
                Clear's frame 0, the 75-frame pause, the next wave's stores
   wave-clear-* the bonus in PlayerDying (lives left), in Respawn (READY showing) and with the last
                life gone (the timer stops, GameOver over an empty sky, the high score has the
                bonus); READY written only in Fight and erased only if written; WAVE nn untouched
-               by a Respawn's end
+               by a Respawn's end; Fight before Play: Play's 50 stands (first wind-up Play's frame
+               49); Play before Fight: Fight's 10 stands (first wind-up 10 frames after Fight)
   clear-shot   an enemy shot in flight in a Clear still kills
   wave-timeline, wave-timeline-last-life   the design's worked case (Stage 4 rule 8), frame by frame
   wave-settings-N   waves 1, 2, 3, 6, 9, 12: the rows that dive, divers at once, the launch
@@ -232,7 +237,10 @@ FORM_X0, COL_DX, ROW_Y, FX_MAX, FX_START = 34, 36, [56, 96, 136], 96, 48
 ANIM_FRAMES, SHAPE_ENEMY, ENEMY_PARKED = 16, 0xC3, 1
 ENEMY_WAITING = 2               # stage 4: hidden until its turn in the wave's Intro
 PHASE_FIGHT, PHASE_INTRO, PHASE_CLEAR = 0, 1, 2
-INTRO_FRAMES, INTRO_MSG_FRAMES = 100, 75
+INTRO_FRAMES, INTRO_MSG_FRAMES = 50, 49           # design, Stage 4 rule 2 (100 and 75 until the tuning after the stage 4 playtest)
+FIGHT_LAUNCH_DELAY = 10         # the launch timer at Fight (Stage 4 rule 3; 50 until the tuning): first wind-up in wave frame 60
+FIRST_LAUNCH = INTRO_FRAMES + FIGHT_LAUNCH_DELAY
+PLAY_LAUNCH_TIMER = 50          # the launch timer when Play is entered (Stage 3 rule 10): not changed by the tuning
 ROW9_LINES = range(51 + 8 * MSG_ROW, 59 + 8 * MSG_ROW)     # raster lines 123-130
 GS_PLAY, GS_RESPAWN, GS_DYING, GS_OVER, GS_TITLE = 0, 1, 2, 3, 4
 # The title's texts in the order it draws them (text 0 in its frame 0, then one a frame): text, row, first column
@@ -246,6 +254,9 @@ HIT_DX = 8                      # |shot X - enemy X| <= 8 overlaps (columns 11-1
 CLEAR_PAUSE, DRIFT_PERIOD = 75, [2, 2, 1, 1]
 PANEL_DIRTY_SCORE = 1
 ENEMY_COLOURS = [4, 7, 13]  # purple, yellow, light green (design.md#colours), colour_table 5-7
+HOLD_EVERY = 8                  # frames between the script's re-writes of a held value: fewer than FIGHT_LAUNCH_DELAY,
+                                # so a launcher held off stays off through a Fight's start (32 until the stage 4 tuning,
+                                # when Fight set the timer to 50)
 DEBUG_COUNTERS = [("game_flicker_frames", 2), ("mux_max_age", 1), ("mux_late_count", 1), ("game_overrun_count", 1)]
 STAR_COLOURS = [1, 15, 12, 11]
 
@@ -329,7 +340,7 @@ def main() -> int:
             return x[0] + 256 * x[1], shots
 
         # Values the script holds through the monitor while a case needs a stage 3 feature out of
-        # the way: re-written every 32 frames (see launcher() and safe()).
+        # the way: re-written every HOLD_EVERY frames (see launcher() and safe()).
         hold = {"n": 0, "set": {}}
 
         def launcher(on):
@@ -358,7 +369,7 @@ def main() -> int:
                 if hold["n"] <= 0:
                     for label, value in hold["set"].items():
                         mon.mem_set(sym[label], bytes([value]))
-                    hold["n"] = 32
+                    hold["n"] = HOLD_EVERY
             if pressed is not None:
                 mon.joyport_set(PORT2, ~pressed & 0x1F)
             mon.exit()
@@ -416,8 +427,9 @@ def main() -> int:
                 poke("zp_loop", [stores[2]])
 
         def to_fight():
-            """Run the game's own Intro to the first frame of Fight."""
-            for _ in range(INTRO_FRAMES + 2):
+            """Run the game's own Intro to the first frame of Fight (and a Clear before it, if the case
+            before ended in one)."""
+            for _ in range(CLEAR_PAUSE + INTRO_FRAMES + 2):
                 if phase()[0] == PHASE_FIGHT:
                     return
                 frame()
@@ -1457,8 +1469,10 @@ def main() -> int:
         shot_case("eshot-y-206-then-208", X_START, 0, 204, 2, 2)        # Y 206 misses, 208 hits a frame later
         shot_case("eshot-y-221", X_START, 6, 219, 1, 1)                 # the last Y a shot is shown at
 
-        # death: the player's death, frame by frame
-        walk_to(X_START + 30)
+        # death: the player's death, frame by frame. The ship stands at the left clamp: a shot from X 24 can hit
+        # nothing (column 0 is never left of X 34, and a hit needs |dx| <= 8), so the shot in flight at the hit
+        # carries on to the top and the formation is whole for row9-uncovered, wherever the drift is
+        walk_to(X_MIN)
         px = settle()
         frame(BITS["fire"])                                   # a player shot in flight when the hit comes
         frame(0)
@@ -1527,6 +1541,9 @@ def main() -> int:
                 stick = BITS["fire"]
             if k == 17:
                 stick = 0
+                mon.mem_set(sym["mux_y"] + 4, bytes([MUX_OFF, MUX_OFF]))    # the shot seen in R + 15 and 16 is taken
+                                                              # away: it must hit nothing (GAME OVER's row 9 check
+                                                              # below wants all 18 Parked)
             if k == 60:
                 put_eshot(0, x, 199, 0)                       # falls through the invulnerable ship (Y 207-221 in R + 63-70)
             if k == 45:
@@ -1681,13 +1698,15 @@ def main() -> int:
                  2: [(1, 1, 8), (2, 2, 12), (1, 3, 12), (0, 2, 6), (-2, 0, 12), (-1, -2, 8)]}             # Hook
         FIRE = {0: [26, 36, 46], 1: [24, 38, 62, 86], 2: [8, 16]}
         PATH_NAME = ["Plunge", "Sweep", "Hook"]
-        WINDUP, EXTRA, ESHOT_DY, SHOTS_P3 = [24, 20, 16, 12], [0, 4, 2, 2], [2, 2, 3, 3], 2
+        WINDUP, EXTRA, ESHOT_DY, SHOTS_P3 = [24, 20, 16, 12], [0, 4, 2, 2], [2, 2, 3, 3], 3    # SHOTS_P3: 2 until the stage 4 tuning
+        CAP_P3, INTERVAL_P3 = 3, 64       # pattern 3 at loop 0 (design "Waves"): divers at once, launch interval (2 and 100 until the tuning)
         DIVE_SCORE = [300, 160, 100]
         DX_MAX, WRAP_Y, LETHAL_Y = 344, 30, 210
 
         class Dive:
             """The design's diver, stepped one frame at a time beside the game (design.md "Enemy
-            behaviour", "Dive paths", "Firing", Stage 3 rules 2-4). Pattern 3: 2 shots at loop 0."""
+            behaviour", "Dive paths", "Firing", Stage 3 rules 2-4). Pattern 3: 3 shots at loop 0 (never
+            more than the path's fire steps: a Hook has 2)."""
 
             def __init__(self, e, loop):
                 self.e, self.loop = e, loop
@@ -1841,7 +1860,7 @@ def main() -> int:
             wrap_ok = (not wraps) or (recs[first_r]["pos"] == (recs[first_r]["home"][0], WRAP_Y)
                                       and recs[first_r - 1]["pos"][0] in (2, DX_MAX - 2, 1, DX_MAX - 1))
             want_ret = {0: 13, 1: 33, 2: 32}[row]
-            fire_ok = [q[0] for q in shots_seen] == [f for f in FIRE[row][:2]
+            fire_ok = [q[0] for q in shots_seen] == [f for f in FIRE[row][:SHOTS_P3]
                                                      if 24 <= next(r for r in path_recs if r["step"] == f)["pos"][0] <= 320]
             ok = (not errs and end_ok and first_d == WINDUP[0] and off == want_off and lethal == want_lethal and wrap_ok
                   and len(ret) == want_ret and fire_ok and (steps == 58 if row == 2 else steps > sum(n for _, _, n in PATHS[row])))
@@ -1953,9 +1972,9 @@ def main() -> int:
         recs, errs, m = fly(9, player_x=X_MIN, before=kill_player, until=note, invulnerable=True, max_frames=500)
         dying = [r for r in recs if r["gs"][0] == GS_DYING]
         parked_k = next(r["k"] for r in recs if r["st"] == ENEMY_PARKED)
-        fire_steps_passed = [f for f in FIRE[1][:2] if any(r["step"] >= f for r in dying)]
+        fire_steps_passed = [f for f in FIRE[1][:SHOTS_P3] if any(r["step"] >= f for r in dying)]
         shots_while = [r["step"] for r in dying if r["new"]]
-        ok = (not errs and marks["hit"] == (GS_DYING, 0) and dying[0]["k"] == 30 and len(fire_steps_passed) == 2
+        ok = (not errs and marks["hit"] == (GS_DYING, 0) and dying[0]["k"] == 30 and len(fire_steps_passed) == SHOTS_P3
               and not shots_while and {r["launch"] for r in dying} == {76} and recs[-1]["gs"] == (GS_RESPAWN, 0)
               and recs[-1]["k"] == parked_k + 1 and recs[-2]["gs"] == (GS_DYING, parked_k - 30) and parked_k - 30 >= 100
               and all(r["active"] == 1 for r in dying[:-1]) and dying[-1]["active"] == 0)
@@ -2115,6 +2134,8 @@ def main() -> int:
         def both(k, m):
             if k == 0:
                 safe(False)
+            clear_eshots()                                    # its own shots are taken away (as ram_case does): the
+                                                              # ship is vulnerable, and one of them would kill it later
             if m.st == ST_D and m.step == 34:
                 set_player_x(m.x)
                 put_pshot(0, m.x, m.y + 2 + 14)
@@ -2149,8 +2170,9 @@ def main() -> int:
         for _ in range(14):
             frame()
 
-        # launcher: a full formation, pattern 3 at loop 0 as the game starts it: launches 100 frames apart from the
-        # 50th frame, never more than 2 out, and never more than 2 rng_next calls a frame. The generator is
+        # launcher: a full formation, pattern 3 at loop 0: launches 64 frames apart (100 until the stage 4 tuning)
+        # from the 50th frame (the script puts the timer at 50), up to 3 out and never more (2 until the tuning),
+        # and never more than 2 rng_next calls a frame. The generator is
         # modelled (engine/rng.asm: 16-bit xorshift 7, 9, 8) to count the calls and to check the pick
         def rng_step(lo, hi):
             v = lo | hi << 8
@@ -2160,6 +2182,8 @@ def main() -> int:
             return v & 255, v >> 8
 
         respawn()
+        if gstate()[0] != GS_PLAY:                # the timer counts only in Play: a death left over from a case
+            raise MeasureError(f"launcher: not in Play: state {gstate()}")   # before would delay the first launch
         safe(True)
         launcher(True)
         poke("zp_launch_timer", [50])
@@ -2181,9 +2205,9 @@ def main() -> int:
             new = [e for e in range(ENEMIES) if st0[e] == ENEMY_PARKED and st1[e] == ST_W]
             due = tm0 <= 1
             most_out = max(most_out, act1)
-            if due and act0 >= 2:
+            if due and act0 >= CAP_P3:
                 blocked += 1
-            if due and act0 < 2:
+            if due and act0 < CAP_P3:
                 want_r = draws[0] & 31 if draws else None
                 if want_r is not None and want_r >= ENEMIES:
                     want_r = draws[1] & 31 if n == 2 else None
@@ -2193,7 +2217,7 @@ def main() -> int:
                     if want_r is not None else None
                 if new != [pick] or n not in (1, 2) or (n == 2 and draws[0] & 31 < ENEMIES):
                     errs.append(f"frame {f}: launched {new}, draws {draws}, the pick by the rule {pick}")
-                elif peek("zp_launch_timer") != 100:
+                elif peek("zp_launch_timer") != INTERVAL_P3:
                     errs.append(f"frame {f}: timer reloaded with {peek('zp_launch_timer')}")
                 else:
                     launches.append(f)
@@ -2203,17 +2227,18 @@ def main() -> int:
                 errs.append(f"frame {f}: launched {new} with {n} rng calls, timer {tm0}, {act0} out")
         gaps = [b - a for a, b in zip(launches, launches[1:])]
         free_gaps = [g for g, wt in zip(gaps, waits[1:]) if wt == 0]
-        ok = (not errs and launches[0] == 50 and most_out == 2 and set(free_gaps) == {100} and len(free_gaps) >= 2
-              and all(g == 100 + wt for g, wt in zip(gaps, waits[1:])) and calls_hist[1] + calls_hist[2] == len(launches)
+        ok = (not errs and launches[0] == 50 and most_out == CAP_P3 and set(free_gaps) == {INTERVAL_P3} and len(free_gaps) >= 2
+              and all(g == INTERVAL_P3 + wt for g, wt in zip(gaps, waits[1:])) and calls_hist[1] + calls_hist[2] == len(launches)
               and store == (2, 0))
         rep("launcher", ok,
             f"1,200 frames from a formation's return, pattern and loop stores {store} (pattern 3, loop 0): first launch in "
-            f"frame {launches[0]}, {len(launches)} launches, gaps {gaps} (100 when fewer than 2 were out; longer by the "
-            f"frames the timer waited at 0 with 2 out: {waits[1:]}); never more than {most_out} out; rng_next calls a "
+            f"frame {launches[0]}, {len(launches)} launches, gaps {sorted(set(gaps))} (design {INTERVAL_P3} when fewer than {CAP_P3} were out; "
+            f"longer by the frames the timer waited at 0 with {CAP_P3} out: {sorted(set(waits[1:]))}); most out at once {most_out} "
+            f"(design: up to {CAP_P3}); rng_next calls a "
             f"frame: {calls_hist} (0 with no launch, 1 or 2 with one); every launched enemy was the first Parked at or "
             f"after the drawn index; errors: {errs[:3] or 'none'}")
 
-        # launcher-halved: the interval is halved with 4 or fewer alive (100 with 5)
+        # launcher-halved: the interval is halved with 4 or fewer alive (64 with 5, 32 with 4)
         res = {}
         for alive in (5, 4):
             respawn()
@@ -2230,25 +2255,30 @@ def main() -> int:
                 n += 1
             res[alive] = (t_after, n, first)
             launcher(False)
-        rep("launcher-halved", res[5][:2] == (100, 100) and res[4][:2] == (50, 50) and len(res[5][2]) == len(res[4][2]) == 1,
+        rep("launcher-halved", res[5][:2] == (INTERVAL_P3, INTERVAL_P3) and res[4][:2] == (INTERVAL_P3 // 2, INTERVAL_P3 // 2) and len(res[5][2]) == len(res[4][2]) == 1,
             f"5 enemies alive: the timer reloaded with {res[5][0]} and the next launch came {res[5][1]} frames later; 4 "
-            f"alive: {res[4][0]} and {res[4][1]} (design: the interval halved with 4 or fewer)")
+            f"alive: {res[4][0]} and {res[4][1]} (design: {INTERVAL_P3}, halved with 4 or fewer: {INTERVAL_P3 // 2})")
 
         # launcher-rows: with none Parked in the wave's rows the pick falls back to any Parked enemy; pattern 1
-        # (monitor: the pattern store) launches only row 2 while it has one
+        # (monitor: the pattern store) launches only row 2 while it has one: 2 at once (1 until the stage 4
+        # tuning), interval 100 (150 until then), and no third
         respawn()
         safe(True)
         poke("zp_pattern", [0])
         launcher(True)
         poke("zp_launch_timer", [1])
         frame()
-        launcher(False)
         got1 = [e for e in range(ENEMIES) if estates()[e] == ST_W]
-        t1, cap = peek("zp_launch_timer"), None
+        t1 = peek("zp_launch_timer")
         poke("zp_launch_timer", [1])
-        hold["set"].pop("zp_launch_timer")
+        frame()
+        second = [e for e in range(ENEMIES) if estates()[e] == ST_W]
+        t2 = peek("zp_launch_timer")
+        poke("zp_launch_timer", [1])
         frame()
         cap = [e for e in range(ENEMIES) if estates()[e] == ST_W]
+        t3 = peek("zp_launch_timer")
+        launcher(False)
         respawn()
         safe(True)
         only(set(range(0, 12)))
@@ -2259,10 +2289,12 @@ def main() -> int:
         launcher(False)
         got2 = [e for e in range(ENEMIES) if estates()[e] == ST_W]
         poke("zp_pattern", [2])
-        rep("launcher-rows", len(got1) == 1 and got1[0] >= 12 and t1 == 150 and cap == got1 and len(got2) == 1 and got2[0] < 12,
-            f"pattern store 0 (Hooks: row 2, 1 at once, interval 150): launched enemy {got1} (row 2), timer {t1}; with it "
-            f"out and the timer at 0 again nothing more launched ({cap}); with row 2 all dead: enemy {got2} (any Parked "
-            f"enemy)")
+        rep("launcher-rows", len(got1) == 1 and got1[0] >= 12 and (t1, t2, t3) == (100, 100, 0) and len(second) == 2
+            and set(got1) < set(second) and min(second) >= 12 and cap == second and len(got2) == 1 and got2[0] < 12,
+            f"pattern store 0 (Hooks: row 2, 2 at once, interval 100): launched enemy {got1} (row 2), timer {t1}; the "
+            f"timer at 0 again with it out: a second, {sorted(set(second) - set(got1))} (row 2), timer {t2}; with 2 out "
+            f"and the timer at 0 again nothing more launched ({cap}, the timer stays {t3}); with row 2 all dead: enemy "
+            f"{got2} (any Parked enemy)")
 
         # stage3-play: the game left to itself for 1,500 frames, launcher on, the ship invulnerable, sweeping with
         # fire held: pinned sprites never dropped, nothing missing 2 frames running, no overrun
@@ -2287,7 +2319,7 @@ def main() -> int:
             es_most = max(es_most, sum(1 for q in eshots() if q))
             if any(y != MUX_OFF and not 30 <= y <= PLAYER_Y for y in ys):
                 bad.append(f"frame {f}: a sprite at Y {[y for y in ys if y != MUX_OFF and not 30 <= y <= PLAYER_Y]}")
-            if peek("zp_divers_active") != sum(1 for q in st if q in (ST_W, ST_D, ST_R)) or peek("zp_divers_active") > 2:
+            if peek("zp_divers_active") != sum(1 for q in st if q in (ST_W, ST_D, ST_R)) or peek("zp_divers_active") > CAP_P3:
                 bad.append(f"frame {f}: divers active {peek('zp_divers_active')}, states {st}")
         frame(0)
         names = [("mux_pin_drop_count", 1), ("mux_pin_excess_count", 1), ("mux_max_age", 1), ("mux_late_count", 1),
@@ -2299,7 +2331,7 @@ def main() -> int:
         rep("stage3-play", not bad and okc and launched >= 8 and es_most >= 2 and list(mem(sym["mux_flags"], 24)) == [0x80] * 4 + [0] * 20,
             f"1,500 frames of play at pattern 3, loop 0, the ship invulnerable and sweeping with fire held: {launched} "
             f"launches, up to {es_most} enemy shots and {most} sprites at once; every shown sprite's Y in 30-221; divers "
-            f"active always equal to the enemies in WindUp, Dive or Return and never above 2 (errors: {bad[:2] or 'none'}); "
+            f"active always equal to the enemies in WindUp, Dive or Return and never above {CAP_P3} (errors: {bad[:2] or 'none'}); "
             + (", ".join(f"{k} {c}" for k, c in counts.items()) + " (pinned sprites 0-3 never dropped; nothing missing 2 "
                "frames running)" if counts else "no DEBUG counters in this build: drops not measured"))
         safe(False)
@@ -2308,9 +2340,9 @@ def main() -> int:
 
         # ================================================================ stage 4 part A: waves
         WAVE_ROWS = [{2}, {1, 2}, {0, 1, 2}]                                    # by pattern index
-        WAVE_MAX_DIVERS = [[1, 2, 2, 2], [2, 2, 3, 3], [2, 3, 3, 3]]            # by pattern, loop
-        WAVE_INTERVAL = [[150, 120, 100, 80], [120, 100, 80, 64], [100, 80, 64, 50]]
-        WAVE_SHOTS = [1, 2, 2]                                                  # at loop 0; + 1 a loop
+        WAVE_MAX_DIVERS = [[2, 2, 2, 2], [2, 3, 3, 3], [3, 3, 3, 3]]            # by pattern, loop (design "Waves", after the stage 4 tuning)
+        WAVE_INTERVAL = [[100, 80, 64, 50], [80, 64, 50, 40], [64, 50, 40, 32]]
+        WAVE_SHOTS = [2, 3, 3]                                                  # at loop 0; + 1 a loop
 
         def stores():
             return int(f"{peek('zp_wave'):02x}"), peek("zp_pattern"), peek("zp_loop")
@@ -2363,7 +2395,7 @@ def main() -> int:
         before = (phase(), stores(), msg().strip())
         rng0 = tuple(mem(sym["zp_rng_lo"], 2))
         errs, shown_at, launch_at, wave_text, uncovered = [], {}, None, [], True
-        for k in range(0, 152):
+        for k in range(0, FIRST_LAUNCH + 2):
             frame()
             ph, st = phase(), estates()
             fx, fdir, en = enemies()
@@ -2378,7 +2410,7 @@ def main() -> int:
                     errs.append(f"frame {k}: waiting enemy {e} shown")
                 if st[e] == ENEMY_PARKED and (en[e][:2] != home(fx)[e] or en[e][2] != SHAPE_ENEMY + 2 * (e // COLS) + ((k + 1) // ANIM_FRAMES) % 2):
                     errs.append(f"frame {k}: enemy {e} at {en[e][:2]} shape {en[e][2]:#x}")
-            if k < 150 and any(q not in (ENEMY_PARKED, ENEMY_WAITING) for q in st):
+            if k < FIRST_LAUNCH and any(q not in (ENEMY_PARKED, ENEMY_WAITING) for q in st):
                 errs.append(f"frame {k}: states {st}")
             if launch_at is None and ST_W in st:
                 launch_at = k
@@ -2398,13 +2430,13 @@ def main() -> int:
                 errs.append(f"frame 1: the panel's wave '{panel_wave()}'")
             if k == INTRO_FRAMES:
                 t_fight = peek("zp_launch_timer")
-            if k < 150 and tuple(mem(sym["zp_rng_lo"], 2)) != rng0:
+            if k < FIRST_LAUNCH and tuple(mem(sym["zp_rng_lo"], 2)) != rng0:
                 errs.append(f"frame {k}: rng_next was called")
         row9["WAVE nn"] = uncovered and len(shown_at) == ENEMIES
         launched = [e for e in range(ENEMIES) if estates()[e] & 0x80]
         ok = (not errs and before == ((PHASE_CLEAR, CLEAR_PAUSE - 1), (4, 0, 1), "")
               and [shown_at.get(e) for e in range(ENEMIES)] == [2 * e for e in range(ENEMIES)]
-              and wave_text == list(range(INTRO_MSG_FRAMES)) and t_fight == 50 and launch_at == 150
+              and wave_text == list(range(INTRO_MSG_FRAMES)) and t_fight == FIGHT_LAUNCH_DELAY and launch_at == FIRST_LAUNCH
               and len(launched) == 1 and launched[0] // COLS in WAVE_ROWS[1])
         rep("wave-intro", ok,
             f"Clear's last frame {before}, then Intro frame by frame for wave 5: frame 0 has the stores at {(5, 1, 1)}, all "
@@ -2412,8 +2444,9 @@ def main() -> int:
             f"{[shown_at.get(e) for e in range(ENEMIES)]} (design 2k: the last in 34), the others Waiting and hidden; fx 48 "
             f"in frame 0 and + 1 every 2 frames, the shapes swapping every 16; 'WAVE 05' at columns 16-22 in frames "
             f"{wave_text[0]}-{wave_text[-1]}, erased in {wave_text[-1] + 1}; the panel's wave 05 from frame 1; phase Intro "
-            f"through frame 99, Fight in frame 100 with the launch timer at {t_fight}; no rng_next call and no launch "
-            f"before frame {launch_at} (design: 150 frames after the wave appears), enemy {launched} (row "
+            f"through frame {INTRO_FRAMES - 1}, Fight in frame {INTRO_FRAMES} with the launch timer at {t_fight} (design "
+            f"{FIGHT_LAUNCH_DELAY}); no rng_next call and no launch before frame {launch_at} (design: {FIRST_LAUNCH} frames after "
+            f"the wave appears), enemy {launched} (row "
             f"{[e // COLS for e in launched]}, pattern 2's rows 1-2); errors: {errs[:3] or 'none'}")
         repark_all()
 
@@ -2466,12 +2499,12 @@ def main() -> int:
                     errs.append(f"wave {n}, Clear frame {i}: phase {phase()}")
             frame()
             log.append((n, hold_fight, c0, phase(), stores()))
-            if hold_fight != (PHASE_FIGHT, 50, "") or c0 != ((PHASE_CLEAR, 0), 1000, 0, ENEMIES) or phase() != (PHASE_INTRO, 0):
+            if hold_fight != (PHASE_FIGHT, FIGHT_LAUNCH_DELAY, "") or c0 != ((PHASE_CLEAR, 0), 1000, 0, ENEMIES) or phase() != (PHASE_INTRO, 0):
                 errs.append(f"wave {n}: {log[-1]}")
         frame()
         rep("waves-played", not errs and stores() == want_stores(5) and score() == 4000 and panel_score() == "004000"
             and gstate()[0] == GS_PLAY,
-            f"waves 1-4 from a wave 1 Intro, in Play: each ran its Intro to Fight (launch timer 50, row 9 empty), its last "
+            f"waves 1-4 from a wave 1 Intro, in Play: each ran its Intro to Fight (launch timer {FIGHT_LAUNCH_DELAY}, row 9 empty), its last "
             f"explosion ended (17 taken away by the monitor): Clear's frame 0 with + 1,000 in that frame, 74 more frames of "
             f"empty sky, then the next Intro; stores at each wave's end {[q[4] for q in log]}; score {score()}, panel "
             f"{panel_score()}; errors: {errs[:3] or 'none'}")
@@ -2480,13 +2513,16 @@ def main() -> int:
         # 75-frame pause whatever the state, and row 9's one message (Stage 4 rules 4 and 6)
         def clear_case(name, lives, when, want):
             """The player is hit (lives as given before the hit); the last explosion ends in PlayerDying's
-            frame `when` (frame 0 = the hit). want: {frame: (game state, phase, row 9)} to compare."""
+            frame `when` (frame 0 = the hit). want: {frame: (game state, phase, row 9)} to compare; a
+            phase given as PHASE_FIGHT alone is compared without the wave timer (it isn't counted in
+            Fight). got["windup"] is the first frame with an enemy in WindUp, got["launch"] the launch
+            timer by frame."""
             start_wave(4)
             poke("zp_lives", [lives])
             poke("game_score", [0x00, 0x45, 0x00])
             settle()
             hit_player()
-            errs, got = [], {}
+            errs, got = [], {"windup": None, "launch": {}}
             for k in range(1, max(want) + 1):
                 if k == when:
                     last_explosion()
@@ -2494,36 +2530,57 @@ def main() -> int:
                 frame()
                 if k == when:
                     got["clear"] = (gstate()[0], phase(), score() - s0, peek("panel_dirty") & PANEL_DIRTY_SCORE)
+                got["launch"][k] = peek("zp_launch_timer")
+                if got["windup"] is None and ST_W in estates():
+                    got["windup"] = k
                 if k in want:
-                    got[k] = (gstate()[0], phase(), msg().strip())
+                    got[k] = (gstate()[0], PHASE_FIGHT if want[k][1] == PHASE_FIGHT == phase()[0] else phase(), msg().strip())
                     if got[k] != want[k]:
                         errs.append(f"frame {k}: {got[k]}, expected {want[k]}")
                 if msg().strip() not in ("", "READY", "GAME OVER", "WAVE 05"):
                     errs.append(f"frame {k}: row 9 '{msg().strip()}'")
             return errs, got
 
-        # (a) dying, lives left: the Clear in frame 5, Intro's frame 0 in frame 80, Respawn in frame 100 with no READY,
-        # Play in frame 150 = Intro's frame 70 with WAVE nn untouched, erased in Intro's frame 75
+        def by_frame(got):
+            return dict((k, v) for k, v in got.items() if isinstance(k, int))
+
+        # (a) dying, lives left: the Clear in frame 5, Intro's frame 0 in frame 80, Respawn in frame 100 (Intro's
+        # frame 20) with no READY, WAVE nn erased on time in Intro's frame 49 (frame 129, in Respawn), Fight in frame
+        # 130 with the state Respawn, Play in frame 150, whose end erases nothing. Fight came first, so Play's 50
+        # stands (Stage 4 rules 3 and 8): the timer reads 49 at the end of Play's frame 0 and the first wind-up is
+        # Play's frame 49, frame 199. (Until the stage 4 tuning the Intro was 100 frames: Play fell in its frame 70.)
         errs, got = clear_case("dying", 3, 5, {
             79: (GS_DYING, (PHASE_CLEAR, 74), ""), 80: (GS_DYING, (PHASE_INTRO, 0), "WAVE 05"),
-            100: (GS_RESPAWN, (PHASE_INTRO, 20), "WAVE 05"), 149: (GS_RESPAWN, (PHASE_INTRO, 69), "WAVE 05"),
-            150: (GS_PLAY, (PHASE_INTRO, 70), "WAVE 05"), 154: (GS_PLAY, (PHASE_INTRO, 74), "WAVE 05"),
-            155: (GS_PLAY, (PHASE_INTRO, 75), "")})
-        rep("wave-clear-dying", not errs and got["clear"] == (GS_DYING, (PHASE_CLEAR, 0), 1000, PANEL_DIRTY_SCORE),
+            100: (GS_RESPAWN, (PHASE_INTRO, 20), "WAVE 05"), 128: (GS_RESPAWN, (PHASE_INTRO, 48), "WAVE 05"),
+            129: (GS_RESPAWN, (PHASE_INTRO, 49), ""), 130: (GS_RESPAWN, PHASE_FIGHT, ""),
+            149: (GS_RESPAWN, PHASE_FIGHT, ""), 150: (GS_PLAY, PHASE_FIGHT, ""), 200: (GS_PLAY, PHASE_FIGHT, "")})
+        rep("wave-clear-dying", not errs and got["clear"] == (GS_DYING, (PHASE_CLEAR, 0), 1000, PANEL_DIRTY_SCORE)
+            and got["launch"][150] == PLAY_LAUNCH_TIMER - 1 and got["windup"] == 150 + PLAY_LAUNCH_TIMER - 1,
             f"the last explosion ended in PlayerDying's frame 5 (lives left): (state, phase, bonus, score dirty) "
-            f"{got['clear']}; (state, phase, row 9) by frame: {dict((k, v) for k, v in got.items() if k != 'clear')}: the "
-            f"pause ran 75 frames while he was dying, Respawn began in Intro's frame 20 and wrote no READY, and its end "
-            f"(frame 150) erased nothing: WAVE 05 stayed until Intro's frame 75; errors: {errs[:3] or 'none'}")
+            f"{got['clear']}; (state, phase, row 9) by frame (a phase of 0 alone is Fight): {by_frame(got)}: the "
+            f"pause ran 75 frames while he was dying, Respawn began in Intro's frame 20 and wrote no READY, WAVE 05 was "
+            f"erased in Intro's frame 49 (frame 129) and Fight began in frame 130, both in Respawn, whose end (frame "
+            f"150) erased nothing; the launch timer read {got['launch'][130]} at the end of Fight's first frame (not "
+            f"counted: the state is Respawn) and {got['launch'][150]} at the end of Play's first frame (Play's 50, set "
+            f"later, stands); first wind-up in frame {got['windup']} (design: Play's frame 49 = 199); errors: "
+            f"{errs[:3] or 'none'}")
 
-        # (b) Respawn's first frame in a Clear: no READY then or later; WAVE nn written during Respawn stays
+        # (b) Respawn's first frame in a Clear: no READY then or later; WAVE nn written during Respawn stays through
+        # Respawn's end (frame 150 = Intro's frame 15) to Intro's frame 49 (frame 184). This is Stage 4 rule 8's
+        # "other order", Play entered before Fight: Fight's 10 stands, and the first wind-up is 10 frames after
+        # Fight (frame 185): frame 195
         errs, got = clear_case("dying-late", 3, 60, {
             100: (GS_RESPAWN, (PHASE_CLEAR, 40), ""), 134: (GS_RESPAWN, (PHASE_CLEAR, 74), ""),
             135: (GS_RESPAWN, (PHASE_INTRO, 0), "WAVE 05"), 150: (GS_PLAY, (PHASE_INTRO, 15), "WAVE 05"),
-            209: (GS_PLAY, (PHASE_INTRO, 74), "WAVE 05"), 210: (GS_PLAY, (PHASE_INTRO, 75), "")})
-        rep("wave-clear-respawn-in-clear", not errs and got["clear"] == (GS_DYING, (PHASE_CLEAR, 0), 1000, PANEL_DIRTY_SCORE),
+            183: (GS_PLAY, (PHASE_INTRO, 48), "WAVE 05"), 184: (GS_PLAY, (PHASE_INTRO, 49), ""),
+            185: (GS_PLAY, PHASE_FIGHT, ""), 196: (GS_PLAY, PHASE_FIGHT, "")})
+        rep("wave-clear-respawn-in-clear", not errs and got["clear"] == (GS_DYING, (PHASE_CLEAR, 0), 1000, PANEL_DIRTY_SCORE)
+            and got["launch"][185] == FIGHT_LAUNCH_DELAY and got["windup"] == 185 + FIGHT_LAUNCH_DELAY,
             f"the last explosion ended in PlayerDying's frame 60: {got['clear']}; Respawn's frame 0 fell in Clear's frame "
             f"40: row 9 empty through Respawn (no READY); the Intro wrote WAVE 05 in Respawn's frame 35 and Respawn's end "
-            f"left it: {dict((k, v) for k, v in got.items() if k != 'clear')}; errors: {errs[:3] or 'none'}")
+            f"left it, until Intro's frame 49: {by_frame(got)}; Play was entered before Fight (the design's \"other "
+            f"order\"): launch timer {got['launch'][185]} at the end of Fight's first frame (frame 185), first wind-up in "
+            f"frame {got['windup']} (design: 10 frames after Fight = 195); errors: {errs[:3] or 'none'}")
 
         # (c) in Respawn, READY showing (written in Fight): the bonus; READY erased at Respawn's end, the Intro later
         start_wave(4)
@@ -2558,7 +2615,7 @@ def main() -> int:
             and hi == "005500" and estates() == [ENEMY_DEAD] * ENEMIES and peek("zp_lives") == 0,
             f"the last life lost, the last explosion ending in PlayerDying's frame 16: {got['clear']} (+ 1,000 paid to a "
             f"player with no lives); the wave timer stood still from then on: "
-            f"{dict((k, v) for k, v in got.items() if k != 'clear')}; GameOver in frame 100 over an empty sky, no Intro and "
+            f"{by_frame(got)}; GameOver in frame 100 over an empty sky, no Intro and "
             f"no WAVE nn; high score {hi} (score 4,500 + the bonus, taken in GameOver's frame 0); errors: {errs[:3] or 'none'}")
         poke("game_hiscore", [0x00, 0x50, 0x00])
         poke("panel_dirty", [peek("panel_dirty") | 8])
@@ -2609,21 +2666,28 @@ def main() -> int:
                         launch=peek("zp_launch_timer"), inv=peek("zp_player_invuln"))
             if first_w is None and ST_W in estates():
                 first_w = k
+        # Stage 4 rule 8 after the tuning: d + 140 WAVE nn erased, d + 141 Fight (the state is Respawn: the launch
+        # timer isn't counted, and its value there can't be seen in play, so it is printed, not judged), d + 150
+        # Play, which sets the timer to 50 (it reads 49 at that frame's end, as built in stage 3), d + 199 the
+        # first launch. (As first built: erased d + 166, Fight d + 191, launch d + 241.)
         ok = (d0 == ((GS_DYING, 0), ENEMY_EXPLODING, 100, 2)
               and t[15]["ph"][0] == PHASE_FIGHT and t[16]["ph"] == (PHASE_CLEAR, 0) and (t[15]["score"], t[16]["score"]) == (100, 1100)
               and t[90]["ph"] == (PHASE_CLEAR, 74) and t[91]["ph"] == (PHASE_INTRO, 0) and (t[90]["msg"], t[91]["msg"]) == ("", "WAVE 04")
               and t[99]["gs"] == (GS_DYING, 99) and t[100]["gs"] == (GS_RESPAWN, 0) and t[100]["ship"] == (X_START, PLAYER_Y)
-              and t[100]["msg"] == "WAVE 04" and t[149]["gs"][0] == GS_RESPAWN and t[150]["gs"][0] == GS_PLAY
-              and t[150]["msg"] == "WAVE 04" and t[165]["msg"] == "WAVE 04" and t[166]["msg"] == ""
-              and t[190]["ph"] == (PHASE_INTRO, 99) and t[191]["ph"][0] == PHASE_FIGHT and t[191]["launch"] == 50
-              and first_w == 241 and t[248]["inv"] == 1 and t[249]["inv"] == 0)
+              and t[100]["msg"] == "WAVE 04" and t[139]["msg"] == "WAVE 04" and t[140]["msg"] == ""
+              and t[140]["ph"] == (PHASE_INTRO, 49) and t[141]["ph"][0] == PHASE_FIGHT and t[141]["gs"][0] == GS_RESPAWN
+              and t[149]["gs"][0] == GS_RESPAWN and t[150]["gs"][0] == GS_PLAY and t[150]["msg"] == ""
+              and t[150]["launch"] == PLAY_LAUNCH_TIMER - 1
+              and first_w == 199 and t[248]["inv"] == 1 and t[249]["inv"] == 0)
         rep("wave-timeline", ok,
             f"the design's worked case: the last enemy rams in frame d (state, enemy, score, lives {d0}); d + 16: Clear "
             f"{t[16]['ph']}, score {t[15]['score']} -> {t[16]['score']}; d + 91: Intro {t[91]['ph']}, row 9 '{t[91]['msg']}'; "
             f"d + 100: Respawn {t[100]['gs']}, the ship at {t[100]['ship']}, row 9 still '{t[100]['msg']}' (no READY); "
-            f"d + 150: Play {t[150]['gs']}; WAVE nn last shown in d + 165, erased in d + 166; d + 191: Fight, launch timer "
-            f"{t[191]['launch']}; first launch in d + {first_w} (design 241); invulnerability timer {t[248]['inv']} at the "
-            f"end of d + 248 and {t[249]['inv']} at the end of d + 249: the first frame he can be hit is d + 250")
+            f"WAVE nn last shown in d + 139, erased in d + 140; d + 141: Fight, in Respawn {t[141]['gs']}, the launch "
+            f"timer {t[141]['launch']} and not counted (still {t[149]['launch']} in d + 149); d + 150: Play {t[150]['gs']}, "
+            f"launch timer {t[150]['launch']} (set to 50, counted once in that frame); first launch in d + {first_w} "
+            f"(design 199); invulnerability timer {t[248]['inv']} at the end of d + 248 and {t[249]['inv']} at the end of "
+            f"d + 249: the first frame he can be hit is d + 250")
         safe(True)
         repark_all()
 
@@ -2647,6 +2711,9 @@ def main() -> int:
             start_wave(n)
             pat, loop = want_stores(n)[1:]
             safe(True)
+            poke("zp_launch_timer", [200])                    # Fight's own first launch (10 frames in) is held off
+                                                              # through the 17 measuring frames: every launch below
+                                                              # is one the script asks for
             fxs = [peek("zp_fx")] + [(frame(), peek("zp_fx"))[1] for _ in range(8)]
             drift = sum(1 for a_, b_ in zip(fxs, fxs[1:]) if a_ != b_)
             two = sum((frame(), peek("diver_two") >> 7)[1] for _ in range(8))
@@ -2704,7 +2771,9 @@ def main() -> int:
         safe(False)
 
         # seed: two games started in different title frames get different seeds and launch different enemies
-        # (wave 1: a launch every 150 frames from Intro's frame 150, each a row 2 enemy)
+        # (wave 1: a launch every 100 frames from wave frame 60, each a row 2 enemy: 8 in 760 frames, at 60, 160, ...
+        # 760. A Hook is out for 114 frames, so never 2 out when the timer runs out. Until the stage 4 tuning: every
+        # 150 from frame 150, 5 launches)
         seqs = {}
         for tap in (TITLE_FIRE_FRAME, 41):
             safe(False)
@@ -2712,20 +2781,23 @@ def main() -> int:
             pressed = start_game(tap_frame=tap)
             seed = tuple(mem(sym["zp_rng_lo"], 2))
             safe(True)
-            picks, prev = [], estates()
-            for f in range(760):
+            picks, at, prev = [], [], estates()
+            for f in range(1, 761):                           # f = the wave's frame (the new game's frame is 0)
                 frame()
                 st = estates()
-                picks += [e for e in range(ENEMIES) if prev[e] == ENEMY_PARKED and st[e] == ST_W]
+                new = [e for e in range(ENEMIES) if prev[e] == ENEMY_PARKED and st[e] == ST_W]
+                picks += new
+                at += [f] * len(new)
                 prev = st
-            seqs[tap] = (pressed, seed, picks)
+            seqs[tap] = (pressed, seed, picks, at)
         safe(False)
         a_, b_ = seqs[TITLE_FIRE_FRAME], seqs[41]
-        rep("seed", (a_[0], b_[0]) == (TITLE_FIRE_FRAME, 41) and a_[1] != b_[1] and a_[2] != b_[2] and len(a_[2]) == len(b_[2]) == 5
-            and all(e // COLS == 2 for e in a_[2] + b_[2]),
+        rep("seed", (a_[0], b_[0]) == (TITLE_FIRE_FRAME, 41) and a_[1] != b_[1] and a_[2] != b_[2] and len(a_[2]) == len(b_[2]) == 8
+            and all(e // COLS == 2 for e in a_[2] + b_[2]) and a_[3] == b_[3] == [FIRST_LAUNCH + 100 * i for i in range(8)],
             f"a game started by a press in the title's frame {a_[0]}: generator state after the press {a_[1]}, the first "
-            f"five enemies launched {a_[2]}; one started in the title's frame {b_[0]}: {b_[1]}, {b_[2]} (different "
-            f"seeds, different launch sequences; all row 2, wave 1's)")
+            f"eight enemies launched {a_[2]}; one started in the title's frame {b_[0]}: {b_[1]}, {b_[2]} (different "
+            f"seeds, different launch sequences; all row 2, wave 1's); launched in wave frames {a_[3]} in both (design: "
+            f"the first wind-up in frame 60, then every 100)")
 
         rep("row9-uncovered", row9 == {"READY": True, "GAME OVER": True, "WAVE nn": True},
             f"with all 18 enemies Parked, no Parked enemy's lines (Y + 1 to Y + 21) touch row 9's (123-130), while each "
@@ -2756,7 +2828,7 @@ def main() -> int:
                 if hold["n"] <= 0:
                     for label, value in hold["set"].items():
                         mon.mem_set(sym[label], bytes([value]))
-                    hold["n"] = 32
+                    hold["n"] = HOLD_EVERY
             if pressed is not None:
                 mon.joyport_set(PORT2, ~pressed & 0x1F)
             while True:
