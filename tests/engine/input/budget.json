@@ -1,0 +1,41 @@
+{
+  "spike": "input",
+  "src_dir": "tests/engine/input",
+  "warmup_frames": 50,
+  "notes": "Checks from the contract's table (engine/input.md#spike-testsengineinput, Technical Director 2026-10-01). The profile check is a lock: input_read is straight-line code called on a top-border line with no DMA and no IRQ inside it, so the measured figure is exact and min_cycles = max_cycles = that figure (as tests/engine/irq_chain). A change to engine/input.asm that moves it must re-baseline deliberately. make test can't press buttons: directions, fire, combinations, edges, port 1 and the $DC02 cases are tests/engine/input/check.py. Schema: engine/README.md#budget-files.",
+  "checks": [
+    {
+      "name": "input_read",
+      "kind": "profile",
+      "routine": [
+        "input_read",
+        "input_read_end"
+      ],
+      "max_cycles": 28,
+      "min_cycles": 28,
+      "samples": 50,
+      "basis": "measured",
+      "source": "engine/input.md#cycle-budget: contract estimate 40 (a lock once measured). Measured 28 in every pass (2026-10-02), equal to the instruction count; the span ends at the rts, so jsr 6 + rts 6 are on top (40 for the call)"
+    },
+    {
+      "name": "idle stick reads as nothing pressed",
+      "kind": "memory",
+      "address": "zp_joy",
+      "size": 1,
+      "after_frames": 0,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/input.md#spike-testsengineinput"
+    },
+    {
+      "name": "no late chain entries",
+      "kind": "memory",
+      "address": "irq_late_count",
+      "size": 1,
+      "after_frames": 500,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/README.md#handler-conventions: any late run means a budget was blown"
+    }
+  ]
+}

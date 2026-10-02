@@ -1,8 +1,9 @@
 # Joystick input: `engine/input.asm`
 
-Design contract for M4 (Technical Director, 2026-10-01). Status: **not implemented**. The
-raster-engineer builds it in M4 stage 1 with the spike below; measured costs replace the estimates
-here and in the routine headers. Conventions (figures marked **measured** / *estimate*, budget
+Design contract for M4 (Technical Director, 2026-10-01). Status: **implemented and measured**
+(raster-engineer, M4 stage 1, 2026-10-02): `engine/input.asm`, spike `tests/engine/input/`, 3 checks
+in `make test`, 17 joystick cases in `tests/engine/input/check.py` (all pass, DEBUG and release).
+The costs below are measured; the API is as designed. Conventions (figures marked **measured** / *estimate*, budget
 files, spikes) are [engine/README.md](README.md)'s.
 
 ## Purpose
@@ -26,7 +27,7 @@ input_init:
 // Out: zp_joy = the stick now; zp_joy_pressed = bits that are 1 now and were 0 at the last call;
 //      A = zp_joy
 // Uses: A
-// Cost: estimate 30 CPU cycles + jsr/rts 12
+// Cost: measured 28 raster cycles to its rts (no DMA) + jsr/rts 12 = 40
 input_read:
 ```
 
@@ -55,7 +56,12 @@ invert and a mask.
 
 `$DC00` (CIA 1 port A, read) and `$DC02` (its direction register), which `input_init` sets to
 `$00` (all inputs) so the keyboard-scan value left in the port can't mask the stick. That this is
-needed, and that it's enough, is *unverified*: the spike shows it. Nothing else may write `$DC00`
+enough is **measured** (`tests/engine/input/check.py`, the `ddr` cases, 2026-10-02): with `$DC02=$00`
+an output latch of `$00` changes nothing. That it's needed is conditional, also **measured**: with
+`$DC02=$FF` and the latch `$00` an idle stick reads `$1F`, but with the latch at `$7F` (what the
+KERNAL's scan leaves at rest, and what a program started with `RUN` inherits) the stick reads
+correctly even without the write. So the write protects against a latch with a 0 in bits 0–4,
+not against a normal BASIC start. With `$DC02=$00` the keyboard can't be scanned. Nothing else may write `$DC00`
 or `$DC02`. The module never touches `$DC0D` (the IRQ framework's).
 
 ## Data the game provides
@@ -75,8 +81,9 @@ Not read or written by any IRQ. `input.asm` checks both labels are in zero page 
 
 | Routine | Budget | Basis |
 |---|---|---|
-| `input_read` → `input_read_end` (its `rts`) | **40** raster cycles, a lock once measured | *estimate*: read 4, invert 2, mask 2, edge (load old, invert, and new, two stores) about 20, `rts` 6. Constant path, and the spike calls it in the top border where there's no DMA, so the measured figure is exact |
-| Size | 60 bytes | *estimate* |
+| `input_read` → `input_read_end` (its `rts`) | **28** raster cycles, locked (`min_cycles` = `max_cycles`) | **measured** 28 in every pass (`make test`, and `vice_profile` over 50 passes, 2026-10-02), equal to the instruction count. The estimate was 40 including the `rts`; the span stops at the `rts`, so the like-for-like figure is 34. The spike calls it on lines 17–18 (top border, no DMA, the frame's IRQ already over). With `jsr` and `rts`: 40 |
+| `input_init` | not budgeted (called once) | 16 + `rts` 6, counted |
+| Size | 32 bytes (`input_init` 10, `input_read` 22) | **measured** (estimate was 60) |
 
 In Swarm's frame budget the row is 75 (the call and DMA allowance):
 [memory-map.md](../docs/games/swarm/memory-map.md#frame-budget).
@@ -106,6 +113,21 @@ Director re-baselines after measurement):
 
 | Check | Kind | Labels | Limit | Basis |
 |---|---|---|---|---|
-| `input_read` | `profile` | `input_read` → `input_read_end` | `max_cycles` 40 (then `min_cycles` = `max_cycles` = the measured figure) | estimate |
+| `input_read` | `profile` | `input_read` → `input_read_end` | `min_cycles` = `max_cycles` = 28 (the estimate was 40) | measured |
 | no late chain entries | `memory` | `irq_late_count` | equals 0 after 500 frames | requirement |
 | idle stick reads as nothing pressed | `memory` | `zp_joy` | equals 0 after 0 frames | requirement |
+
+### Results (raster-engineer, 2026-10-02)
+
+`uv run --package budget-runner python tests/engine/input/check.py` (about 2 s; the script's header
+lists the cases). All 17 pass in the DEBUG and the release build:
+
+| Spike item | Cases | Result |
+|---|---|---|
+| 1 | `single` ×5, `combos` (13, with left+right, up+down and all five), `port1`, `idle` | Each input sets its own bit and no other; release clears it; port 1 changes nothing. Idle raw `$DC00` is `$1F` under VICE's I/O simulation device (bits 5–7 low), so the mask is exercised |
+| 2 | `hold-50`, `press-10`, `edge-add` | Fire held 50 frames: one edge, `spike_fire_presses` +1. Ten one-frame presses: +10. Left added while fire is held: `zp_joy_pressed` = left only |
+| 3 | `start`, `ddr` ×4 | Started with `RUN`, then `irq_init` (`$01=$35`): works. The `$DC02` findings are under [Hardware it owns](#hardware-it-owns) |
+| 4 | `make test ARGS=input` | `input_read` 28, every pass |
+
+Not covered: `input_init` called *after* `irq_init` (the spike calls it before; the routine touches
+nothing `irq_init` does), and switch bounce on real hardware.
