@@ -51,8 +51,7 @@ game_new:
 #endif
         sta zp_loop
         jsr formation_init              // after zp_loop: the drift's period depends on it
-        lda #0                          // step 2: diver_init
-        sta zp_divers_active
+        jsr diver_init                  // no diver: formation_init has parked them all
         jsr eshot_init
         jsr pshot_init
         jsr player_init

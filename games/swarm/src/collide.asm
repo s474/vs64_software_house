@@ -63,15 +63,18 @@ collide_update:
                 jsr collide_enemy_hit
 !next:
         }
-        // (b) The player against the enemy shots (design Stage 3 rules, step 6b). Only in Play
-        // with the invulnerability timer at 0; the budget build tests in every frame.
+        // (b) and (c): the player against the enemy shots, then against the diving enemies
+        // (design Stage 3 rules, step 6). Only in Play with the invulnerability timer at 0; the
+        // budget build tests in every frame.
 #if !AUTOPLAY
         lda zp_game_state               // 3
         ora zp_player_invuln            // 3
-        bne collide_update_end          // 2 / 3   dying, respawning, game over or invulnerable
+        beq !+                          // 3 / 2
+        jmp collide_update_end          // dying, respawning, game over or invulnerable
+!:
 #endif
-        // The Y guard (memory-map.md "The collision budget", rule 3): a shot can touch the ship
-        // only at Y >= 207. MUX_OFF passes the first compare, so it is excluded by the second.
+        // (b) The Y guard (memory-map.md "The collision budget", rule 3): a shot can touch the
+        // ship only at Y >= 207. MUX_OFF passes the first compare, so the second excludes it.
         .for (var i = 0; i < SPR_ESHOT_COUNT; i++) {
                 lda mux_y + SPR_ESHOT + i       // 4
                 cmp #PLAYER_HIT_ESHOT_Y         // 2
@@ -89,13 +92,49 @@ collide_update:
         jsr collision_range
         bcc !divers+
 #if AUTOPLAY
-        jsr autoplay_count_hit          // counted, not answered: the shot is left alone
-#else
+        jsr autoplay_count_hit          // counted, not answered: the shot is left alone, and (c)
+#else                                   // still runs (the longer frame)
         jsr player_hit                  // at most one player hit a frame: (c) is skipped
         jmp collide_update_end
 #endif
+        // (c) The same guard for the divers: an enemy can touch the ship only at Y >= 210, and
+        // only a diver gets there. (A diver is never hidden; the MUX_OFF test is the rule's.)
 !divers:
-        // (c) The player against the diving enemies: step 2.
+        .for (var s = 0; s < DIVER_SLOTS; s++) {
+                ldx diver_enemy + s             // 4
+                bmi !no+                        // 3 / 2   free slot
+                lda mux_y + SPR_ENEMY,x         // 4
+                cmp #PLAYER_HIT_ENEMY_Y         // 2
+                bcc !no+                        // 3 / 2
+                cmp #MUX_OFF                    // 2
+                bne !ram+                       // 2 / 3
+!no:
+        }
+        jmp collide_update_end          // 3   no diver low enough: the usual frame
+!ram:   ldx #SPR_PLAYER
+        ldy #COL_PAIR_PLAYER_ENEMY
+        jsr collision_begin
+        .for (var s = 0; s < DIVER_SLOTS; s++) {
+                ldx diver_enemy + s
+                bmi !no+
+                lda mux_y + SPR_ENEMY,x
+                cmp #PLAYER_HIT_ENEMY_Y
+                bcc !no+
+                txa
+                clc
+                adc #SPR_ENEMY
+                tax                             // the diver's virtual sprite
+                jsr collision_one               // never with X = the player: X is 6-23
+                bcc !no+
+#if AUTOPLAY
+                jsr autoplay_count_hit          // counted; the diver flies on
+#else
+                jsr collide_enemy_hit           // a ram: the enemy is hit (its diving value, the
+                jsr player_hit                  // explosion, its diver slot freed) and so is the
+                jmp collide_update_end          // player. One player hit a frame
+#endif
+!no:
+        }
 collide_update_end:
         rts
 
@@ -137,8 +176,14 @@ collide_enemy_hit:
         ora #PANEL_DIRTY_SCORE
         sta panel_dirty
 #if AUTOPLAY
-        rts                             // the enemy stays: the formation is always full
+        rts                             // the enemy stays (a diver carries on): the formation is always full
 #else
-        jmp enemy_explode               // X = the virtual sprite
+        lda enemy_state - SPR_ENEMY,x
+        bpl !+                          // Parked
+        txa                             // a diver (WindUp, Dive or Return): divers active - 1 in
+        sec                             // the hit's frame, its slot free at once (Stage 3 rule 5)
+        sbc #SPR_ENEMY
+        jsr diver_free                  // X preserved
+!:      jmp enemy_explode               // X = the virtual sprite. It explodes where it is
 #endif
 .errorif SCORE_DIVING != 3, "collide_enemy_hit steps to the diving values with three iny"

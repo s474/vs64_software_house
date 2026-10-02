@@ -127,8 +127,9 @@ game_update:
         jsr pshot_update                // the shots move first, in the border ...
         jsr eshot_update                // ... so a shot fired this frame stays at its spawn position
         jsr game_state_update           // the state's timer and changes; the formation's return
-        jsr formation_update            // every mover has moved before the collisions ...
-        jsr collide_update
+        jsr formation_update            // this frame's home X, the animation, the explosions
+        jsr diver_update                // the launcher, wind-up, dive paths (and their shots), return
+        jsr collide_update              // every mover has moved before the collisions ...
         jsr player_update               // ... and the player moves and fires after them
 game_update_end:
         jsr mux_update
@@ -229,6 +230,7 @@ game_idle_warm:         .byte 0         // frames left before game_idle_min star
 #import "eshot.asm"
 #import "player.asm"
 #import "formation.asm"
+#import "diver.asm"                     // after formation.asm: it uses the ENEMY_* states
 #import "game.asm"
 #import "collide.asm"                   // after formation.asm: it uses the ENEMY_* states
 #if AUTOPLAY

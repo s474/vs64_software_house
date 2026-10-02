@@ -1,7 +1,8 @@
 // Swarm: game tables, $3800-$3FFF (docs/games/swarm/memory-map.md#game-tables). Imported by
 // main.asm at GAME_TABLES. Only colour_table's address is fixed; the rest follow in the memory
 // map's order and are found by label. So far: colours, stars, custom glyphs, collision pairs,
-// the formation's tables, scores, explosion shapes, strings.
+// the formation's tables, scores, explosion shapes, the respawn flash, dive paths, fire steps,
+// wave tables, strings.
 
 // ------------------------------------------------------------------------------------------
 // Colours. EVERY colour the game writes comes from here, indexed by a COL_* constant
@@ -159,6 +160,80 @@ player_flash:           .fill PLAYER_INVULN_FRAMES + 1, ((i & 4) != 0) ? COL_RES
 // Enemy shots: Y step a frame by loop 0-3 (design "What faster means").
 eshot_dy:               .byte 2, 2, 3, 3
 .errorif * - eshot_dy != GAME_LOOP_MAX + 1, "eshot_dy: one entry per loop"
+
+// ------------------------------------------------------------------------------------------
+// Dive paths (design.md "Dive paths"; memory-map.md "Dive paths as data"). One path per row:
+// Plunge (row 0), Sweep (row 1), Hook (row 2). A path is a list of segments (dx, dy, steps): add
+// (dx, dy) to the position once per step. steps = 0: repeat until X reaches 0 or 344, then wrap.
+// Each path is stored twice, as authored (heading right) and mirrored (dx negated), so a diver's
+// mirror choice is only which copy its segment index starts in. Each copy ends with a
+// PATH_END_RETURN entry: when the last counted segment runs out the diver goes to Return (the
+// Hook; the other two never get past their steps = 0 segment).
+// Three parallel arrays indexed by segment number; path_first,(row * 2 + mirror) is a copy's
+// first segment.
+.const PATH_END_RETURN = $ff            // in path_steps: not a segment, the path's end
+.var path_plunge = List().add(List().add(0, -1, 6), List().add(1, 2, 20), List().add(2, 3, 20), List().add(1, 3, 16),
+                              List().add(0, 2, 9), List().add(2, -1, 24), List().add(2, 0, 0))
+.var path_sweep  = List().add(List().add(-1, 1, 8), List().add(1, 2, 16), List().add(2, 2, 14), List().add(2, 0, 0))
+.var path_hook   = List().add(List().add(1, 1, 8), List().add(2, 2, 12), List().add(1, 3, 12), List().add(0, 2, 6),
+                              List().add(-2, 0, 12), List().add(-1, -2, 8))
+.var path_rows   = List().add(path_plunge, path_sweep, path_hook)       // by row 0-2
+.var path_dx_list    = List()
+.var path_dy_list    = List()
+.var path_steps_list = List()
+.var path_first_list = List()
+.for (var r = 0; r < FORM_ROWS; r++) {
+        .for (var m = 0; m < 2; m++) {
+                .eval path_first_list.add(path_dx_list.size())
+                .for (var g = 0; g < path_rows.get(r).size(); g++) {
+                        .var seg = path_rows.get(r).get(g)
+                        .eval path_dx_list.add(m == 0 ? seg.get(0) : -seg.get(0))
+                        .eval path_dy_list.add(seg.get(1))
+                        .eval path_steps_list.add(seg.get(2))
+                }
+                .eval path_dx_list.add(0)
+                .eval path_dy_list.add(0)
+                .eval path_steps_list.add(PATH_END_RETURN)
+        }
+}
+// The design's totals, so a mistyped segment stops the build: fixed steps and the offset after them.
+.function PathSum(path, field) {
+        .var t = 0
+        .for (var g = 0; g < path.size(); g++) .eval t = t + (field == 2 ? path.get(g).get(2) : path.get(g).get(field) * path.get(g).get(2))
+        .return t
+}
+.errorif PathSum(path_hook, 2) != 58 || PathSum(path_hook, 0) != 12 || PathSum(path_hook, 1) != 64, "Hook: 58 steps, ending at offset (12, 200 - 136)"
+.errorif PathSum(path_sweep, 2) != 38 || PathSum(path_sweep, 0) != 36 || PathSum(path_sweep, 1) != 68, "Sweep: 38 fixed steps to offset (36, 164 - 96)"
+.errorif PathSum(path_plunge, 2) != 95 || PathSum(path_plunge, 0) != 124 || PathSum(path_plunge, 1) != 136, "Plunge: 95 fixed steps to offset (124, 192 - 56)"
+path_dx:        .fill path_dx_list.size(), mod(path_dx_list.get(i) + 256, 256)  // signed
+path_dy:        .fill path_dy_list.size(), mod(path_dy_list.get(i) + 256, 256)  // signed
+path_steps:     .fill path_steps_list.size(), path_steps_list.get(i)
+path_first:     .fill path_first_list.size(), path_first_list.get(i)
+.errorif path_dx_list.size() > 255, "segment numbers are one byte"
+
+// Fire steps (steps are numbered from 1 through the whole path), one list per row, each ended
+// by 0, which no step number matches. path_fire_first,row is a list's first entry; PATH_FIRE_NONE
+// is the index of a 0: where a diver's fire index is put when its shots are used up.
+path_fire:      .byte 26, 36, 46, 0             // Plunge
+                .byte 24, 38, 62, 86, 0         // Sweep
+                .byte 8, 16, 0                  // Hook
+path_fire_first: .byte 0, 4, 9
+.const PATH_FIRE_NONE = 3
+
+// Waves (design.md "Waves"), by pattern index 0-2 and loop 0-3: entry pattern * 4 + loop.
+wave_max_divers:        .byte 1, 2, 2, 2,  2, 2, 3, 3,  2, 3, 3, 3      // most diving at once
+wave_interval:          .byte 150, 120, 100, 80,  120, 100, 80, 64,  100, 80, 64, 50   // launch interval, frames
+.errorif * - wave_interval != 3 * (GAME_LOOP_MAX + 1), "wave tables: 3 patterns x 4 loops"
+// By pattern: the rows that dive (bit r = row r) and the shots per dive at loop 0 (+ 1 a loop).
+wave_rows:              .byte %100, %110, %111
+wave_shots:             .byte 1, 2, 2
+diver_row_bit:          .fill FORM_ROWS, 1 << i
+// By loop: the wind-up's length, and the frames in which every diver takes 2 path steps: those
+// whose frame number AND the mask equals the compare value (never at loop 0, every 4th at loop
+// 1, every 2nd from loop 2).
+windup_frames:          .byte 24, 20, 16, 12
+diver_extra_mask:       .byte 0, 3, 1, 1
+diver_extra_cmp:        .byte 1, 0, 0, 0
 
 // ------------------------------------------------------------------------------------------
 // Strings. Stored as glyph codes 0-63 and written to the play area as they are; the panel

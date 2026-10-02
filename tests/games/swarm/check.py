@@ -175,8 +175,37 @@ def main() -> int:
             shots = [None if ys[i] == MUX_OFF else (xl[i] + 256 * xh[i], ys[i]) for i in range(2)]
             return x[0] + 256 * x[1], shots
 
+        # Values the script holds through the monitor while a case needs a stage 3 feature out of
+        # the way: re-written every 32 frames (see launcher() and safe()).
+        hold = {"n": 0, "set": {}}
+
+        def launcher(on):
+            """Off: zp_launch_timer is kept above 190, so no dive is ever launched (the cases written
+            for stages 1 and 2 assume a formation that stays Parked). On: the game's own timer."""
+            if on:
+                hold["set"].pop("zp_launch_timer", None)
+            else:
+                hold["set"]["zp_launch_timer"] = 255
+                hold["n"] = 0
+
+        def safe(on):
+            """On: zp_player_invuln is kept above 100, so the ship can't be hit (it flashes)."""
+            if on:
+                hold["set"]["zp_player_invuln"] = 149
+                hold["n"] = 0
+            else:
+                hold["set"].pop("zp_player_invuln", None)
+                mon.mem_set(sym["zp_player_invuln"], bytes([0]))
+                mon.mem_set(sym["mux_col"], mon.mem_get(sym["colour_table"] + 3, sym["colour_table"] + 3))
+
         def frame(pressed=None):
             """Optionally set the stick (active-high mask), run to the next game_update_end."""
+            if hold["set"]:
+                hold["n"] -= 1
+                if hold["n"] <= 0:
+                    for label, value in hold["set"].items():
+                        mon.mem_set(sym[label], bytes([value]))
+                    hold["n"] = 32
             if pressed is not None:
                 mon.joyport_set(PORT2, ~pressed & 0x1F)
             mon.exit()
@@ -205,6 +234,7 @@ def main() -> int:
         def home(fx):
             return [(FORM_X0 + fx + COL_DX * (e % COLS), ROW_Y[e // COLS]) for e in range(ENEMIES)]
 
+        launcher(False)                           # until the stage 3 cases: nothing dives
         frame(0)
         first = enemies()                         # after the first formation_update
         frame()
@@ -1070,6 +1100,10 @@ def main() -> int:
                 stick = 0
             if k == 60:
                 put_eshot(0, x, 199, 0)                       # falls through the invulnerable ship (Y 207-221 in R + 63-70)
+            if k == 45:
+                launcher(True)                                # the game's own timer when Play is entered
+            if k == 51:
+                launcher(False)
             if k == 148:
                 put_eshot(1, x, 207, 0)                       # over the ship in R + 148, 149 (invulnerable) and R + 150
             x, shots = frame(stick)
@@ -1096,11 +1130,11 @@ def main() -> int:
         moved = xs[5] - xs[4], xs[14] - xs[4]
         ok_thr = through == [(xs[59], 201 + 2 * i) for i in range(1, 11)] + [None, None]
         rep("respawn", not errs and cols == want_cols and ready_frames == 50 and play_at == 50 and moved == (3, 30)
-            and n_shots >= 1 and ok_thr and launch_at_play in (49, 50) and (ct[3], ct[12]) == (3, 11),
+            and n_shots >= 1 and ok_thr and launch_at_play == 49 and (ct[3], ct[12]) == (3, 11),
             f"frame 100 of PlayerDying = Respawn's frame R: ship at X {xs[0]}, READY at columns 17-21; stick right from "
             f"R + 5: X + {moved[0]} in that frame, + {moved[1]} after 10 (controllable during READY), fire at R + 15: "
             f"{n_shots} shot; READY shown {ready_frames} frames, Play in R + {play_at} with the launch timer at "
-            f"{launch_at_play}; colour by frame cyan/dark grey by the timer, 4 frames each: {cols == want_cols} (first 12: "
+            f"{launch_at_play} (set to 50, counted once in that frame); colour by frame cyan/dark grey by the timer, 4 frames each: {cols == want_cols} (first 12: "
             f"{cols[:12]}, last 6: {cols[-6:]}); a shot dropped on the ship (Y 207-221 in R + 63-70) passed through to Y 221 and was removed: {ok_thr}; "
             f"a shot over the ship in R + 148 and R + 149 did nothing, the same shot hit in R + 150: invulnerable for "
             f"exactly 150 frames; errors: {errs[:3] or 'none'}")
@@ -1139,6 +1173,7 @@ def main() -> int:
             if gstate() != (GS_OVER, k):
                 errs.append(f"frame G + {k} with fire held since the hit: state {gstate()}")
         frame(0)                                              # G + 80: released
+        launcher(True)
         frame(BITS["fire"])                                   # G + 81: a new press
         gs_press = gstate()
         frame()                                               # G + 82: the new game
@@ -1151,8 +1186,9 @@ def main() -> int:
         ok_new = (new["state"] == GS_PLAY and new["score"] == 0 and new["lives"] == 3 and new["hi"] == "006150"
                   and new["row12"] == "" and new["ship"][:3] == (X_START, PLAYER_Y, 0xC0) and new["ship"][3] == ct[3]
                   and new["invuln"] == 0 and new["fx"] == FX_START and new["parked"] and new["home"]
-                  and new["launch"] in (49, 50) and new["eshots"] == [None] * 3 and new["divers"] == 0
+                  and new["launch"] == 49 and new["eshots"] == [None] * 3 and new["divers"] == 0
                   and new["expl"] == [0xFF] * 4)
+        launcher(False)
         frame(0)
         row = "".join("^" if c == SHIP + PANEL_BG else chr((c & 63) + 64) if (c & 63) < 27 else chr(c & 63)
                       for c in mem(SCREEN + 960, 40))
@@ -1190,6 +1226,646 @@ def main() -> int:
             f"stayed through frame 199; frame 200 is the new game (state {gstate()[0]}, lives {peek('zp_lives')}, score "
             f"{score()}, high score kept {mem(sym['game_hiscore'], 3).hex()}); errors: {errs[:3] or 'none'}")
         poke("game_hiscore", [0x00, 0x50, 0x00])
+
+
+        # ================================================================ stage 3, step 2: divers
+        ST_W, ST_D, ST_R = 0x80, 0x81, 0x82
+        PATHS = {0: [(0, -1, 6), (1, 2, 20), (2, 3, 20), (1, 3, 16), (0, 2, 9), (2, -1, 24), (2, 0, 0)],   # Plunge
+                 1: [(-1, 1, 8), (1, 2, 16), (2, 2, 14), (2, 0, 0)],                                      # Sweep
+                 2: [(1, 1, 8), (2, 2, 12), (1, 3, 12), (0, 2, 6), (-2, 0, 12), (-1, -2, 8)]}             # Hook
+        FIRE = {0: [26, 36, 46], 1: [24, 38, 62, 86], 2: [8, 16]}
+        PATH_NAME = ["Plunge", "Sweep", "Hook"]
+        WINDUP, EXTRA, ESHOT_DY, SHOTS_P3 = [24, 20, 16, 12], [0, 4, 2, 2], [2, 2, 3, 3], 2
+        DIVE_SCORE = [300, 160, 100]
+        DX_MAX, WRAP_Y, LETHAL_Y = 344, 30, 210
+
+        class Dive:
+            """The design's diver, stepped one frame at a time beside the game (design.md "Enemy
+            behaviour", "Dive paths", "Firing", Stage 3 rules 2-4). Pattern 3: 2 shots at loop 0."""
+
+            def __init__(self, e, loop):
+                self.e, self.loop = e, loop
+                self.row, self.col = divmod(e, COLS)
+                self.st, self.t, self.white, self.step = ST_W, 0, True, 0
+                self.shots = FIRE[self.row][:SHOTS_P3 + loop]
+                self.x = self.y = None
+
+            def frame(self, fx, px, gf):
+                """One frame: fx as formation_update left it, px the player's X as diver_update sees
+                it, gf the frame number. Returns the positions at which a fire step was taken."""
+                hx, hy = FORM_X0 + fx + COL_DX * self.col, ROW_Y[self.row]
+                fires = []
+                if self.st == ST_W:
+                    if self.t < WINDUP[self.loop]:
+                        self.x, self.y = hx + (1 if self.t % 4 < 2 else -1), hy
+                        self.white = self.t % 8 < 4
+                        self.t += 1
+                        return fires
+                    self.st, self.x, self.y, self.mirror = ST_D, hx, hy, px < hx
+                    self.seg, self.left = 0, PATHS[self.row][0][2]
+                self.white = False
+                if self.st == ST_D:
+                    for _ in range(2 if EXTRA[self.loop] and gf % EXTRA[self.loop] == 0 else 1):
+                        if self.st != ST_D:
+                            break
+                        dx, dy, cnt = PATHS[self.row][self.seg]
+                        self.x = max(0, min(DX_MAX, self.x + (-dx if self.mirror else dx)))
+                        self.y += dy
+                        self.step += 1
+                        if self.step in self.shots:
+                            fires.append((self.x, self.y))
+                        if cnt == 0:
+                            if self.x in (0, DX_MAX):
+                                self.st, self.x, self.y = ST_R, hx, WRAP_Y
+                        else:
+                            self.left -= 1
+                            if self.left == 0:
+                                self.seg += 1
+                                if self.seg == len(PATHS[self.row]):
+                                    self.st = ST_R
+                                else:
+                                    self.left = PATHS[self.row][self.seg][2]
+                elif self.st == ST_R:
+                    self.x += max(-2, min(2, hx - self.x))
+                    self.y += max(-2, min(2, hy - self.y))
+                    if (self.x, self.y) == (hx, hy):
+                        self.st = ENEMY_PARKED
+                return fires
+
+        def aim_dx(d):
+            return 0 if abs(d) <= 15 else 1 if d > 0 else -1
+
+        def only(keep):
+            """Every enemy but those in `keep` is taken away (monitor): Dead and hidden."""
+            st = [ENEMY_PARKED if e in keep else ENEMY_DEAD for e in range(ENEMIES)]
+            ys = mem(sym["mux_y"] + ENEMY0, ENEMIES)
+            poke("enemy_state", st)
+            poke("mux_y", [ys[e] if e in keep else MUX_OFF for e in range(ENEMIES)], ENEMY0)
+            poke("zp_enemies_alive", [len(keep)])
+
+        def set_player_x(x):
+            poke("zp_player_x_lo", [x & 255, x >> 8])
+            poke("mux_x_lo", [x & 255])
+            poke("mux_x_hi", [x >> 8])
+
+        def put_pshot(i, x, y):
+            poke("mux_x_lo", [x & 255], 4 + i)
+            poke("mux_x_hi", [x >> 8], 4 + i)
+            poke("mux_y", [y], 4 + i)
+
+        def fly(e, loop=0, player_x=None, before=None, until=None, max_frames=420, invulnerable=True):
+            """A full formation back, every enemy but e taken away, the launcher let go for one frame:
+            e is launched by the game and followed frame by frame beside the model. `before(k, m)` is
+            called at the stop before frame k (frame 0 = the launch) and may poke; `until(k, m, rec)`
+            ends the run early. Returns (records, errors, model): a record per frame is a dict."""
+            respawn()
+            if player_x is not None:
+                walk_to(player_x)
+            only({e})
+            poke("zp_loop", [loop])
+            safe(invulnerable)
+            launcher(True)
+            poke("zp_launch_timer", [1])
+            m, recs, errs = Dive(e, loop), [], []
+            dy = ESHOT_DY[loop]
+            for k in range(max_frames):
+                if before:
+                    before(k, m)
+                px = state()[0]
+                gs_before = gstate()[0]
+                es0, dxs = eshots(), [b - 256 if b > 127 else b for b in mem(sym["eshot_dx"], 3)]
+                moved = [None if q is None or q[1] + dy > PLAYER_Y else (max(0, min(DX_MAX, q[0] + dxs[i])), q[1] + dy)
+                         for i, q in enumerate(es0)]
+                frame()
+                if k == 0:
+                    launcher(False)                           # one launch only
+                fx, gf = peek("zp_fx"), peek("zp_game_frame")
+                was = (m.st, m.x, m.y)
+                fires = m.frame(fx, px, gf)
+                got = (estates()[e], epos(e), peek("mux_col", ENEMY0 + e) & 15)
+                rec = dict(k=k, st=got[0], pos=got[1], col=got[2], step=m.step, fx=fx, es=eshots(), new=[], px=px,
+                           home=(FORM_X0 + fx + COL_DX * m.col, ROW_Y[m.row]), t=m.t, fires=fires)
+                es1 = rec["es"]
+                rec["new"] = [(i, es1[i], peek("eshot_dx", i)) for i in range(3) if es1[i] != moved[i] and es1[i]]
+                hit = got[0] == ENEMY_EXPLODING or gstate()[0] != gs_before
+                if not hit and any(es1[i] is None and moved[i] for i in range(3)):
+                    errs.append(f"frame {k}: an enemy shot vanished: {es0} -> {es1}")
+                if not hit:
+                    want_col = ct[8] if m.white else ct[5 + m.row]
+                    if got != (m.st, (m.x, m.y), want_col):
+                        errs.append(f"frame {k}: enemy {got}, the design ({m.st:#x}, ({m.x}, {m.y}), {want_col})")
+                    want_new = []
+                    for fpos in fires:                        # at most one fire step a frame in these paths
+                        free = [i for i in range(3) if moved[i] is None]
+                        if gs_before == GS_PLAY and 24 <= fpos[0] <= 320 and free:
+                            want_new.append((free[0], fpos, aim_dx(px - fpos[0]) & 255))
+                    if rec["new"] != want_new:
+                        errs.append(f"frame {k} (step {m.step}): new enemy shots {rec['new']}, expected {want_new}")
+                recs.append(rec)
+                if (until and until(k, m, rec)) or (not until and (hit or m.st == ENEMY_PARKED)):
+                    break
+            poke("zp_loop", [0])
+            return recs, errs, m
+
+        # dive-*: each path end to end, unmirrored (ship at the right clamp) and mirrored (at the left)
+        windup_rec = None
+        for e, px0, mirrored in ((14, X_MAX, False), (15, X_MIN, True), (8, X_MAX, False), (9, X_MIN, True),
+                                 (2, X_MAX, False), (3, X_MIN, True)):
+            recs, errs, m = fly(e, player_x=px0)
+            row = e // COLS
+            dive = [r for r in recs if r["st"] == ST_D or (r["step"] and r["st"] == ST_R and r["k"] == recs[[q["st"] for q in recs].index(ST_R)]["k"])]
+            first_d = next(r["k"] for r in recs if r["step"] >= 1)
+            first_r = next((r["k"] for r in recs if r["st"] == ST_R), None)
+            steps = recs[first_r]["step"] if first_r is not None else None
+            start = recs[first_d - 1]["home"] if first_d else None
+            start_home = (FORM_X0 + recs[first_d]["fx"] + COL_DX * (e % COLS), ROW_Y[row])
+            path_recs = [r for r in recs if first_d <= r["k"] <= first_r]
+            lethal = [r["step"] for r in path_recs if r["pos"][1] >= LETHAL_Y and (r["k"] < first_r or PATHS[row][-1][2])]
+            shots_seen = [(r["step"], r["new"][0][1], r["new"][0][2]) for r in path_recs if r["new"]]
+            ret = recs[first_r + 1:]
+            drift = sorted({r["home"][0] for r in ret})
+            end_ok = (recs[-1]["st"] == ENEMY_PARKED and recs[-1]["pos"] == recs[-1]["home"] and peek("zp_divers_active") == 0
+                      and list(mem(sym["diver_enemy"], 3)) == [0xFF] * 3)
+            last_fixed = path_recs[sum(n for _, _, n in PATHS[row]) - 1]["pos"]
+            off = (last_fixed[0] - start_home[0], last_fixed[1])
+            want_off = {0: (124, 192), 1: (36, 164), 2: (12, 200)}[row]
+            want_off = (-want_off[0] if mirrored else want_off[0], want_off[1])
+            want_lethal = {0: list(range(68, 78)), 1: [], 2: list(range(35, 54))}[row]
+            wraps = PATHS[row][-1][2] == 0
+            wrap_ok = (not wraps) or (recs[first_r]["pos"] == (recs[first_r]["home"][0], WRAP_Y)
+                                      and recs[first_r - 1]["pos"][0] in (2, DX_MAX - 2, 1, DX_MAX - 1))
+            want_ret = {0: 13, 1: 33, 2: 32}[row]
+            fire_ok = [q[0] for q in shots_seen] == [f for f in FIRE[row][:2]
+                                                     if 24 <= next(r for r in path_recs if r["step"] == f)["pos"][0] <= 320]
+            ok = (not errs and end_ok and first_d == WINDUP[0] and off == want_off and lethal == want_lethal and wrap_ok
+                  and len(ret) == want_ret and fire_ok and (steps == 58 if row == 2 else steps > sum(n for _, _, n in PATHS[row])))
+            rep(f"dive-{PATH_NAME[row].lower()}{'-mirrored' if mirrored else ''}", ok,
+                f"enemy {e} (row {row}) launched by the launcher with the ship at X {px0}: wind-up frames 0-{first_d - 1}, "
+                f"step 1 in frame {first_d} from its home then {start_home}, {'mirrored' if mirrored else 'as authored'}; "
+                f"every frame's position, state and colour as the design's table ({len(errs)} differences); after the "
+                f"fixed steps at offset {off} (design {want_off}); lethal (Y >= 210) on steps "
+                f"{(str(lethal[0]) + '-' + str(lethal[-1])) if lethal else 'none'} (design: "
+                f"{(str(want_lethal[0]) + '-' + str(want_lethal[-1])) if want_lethal else 'none'}); {steps} steps; "
+                + (f"X reached {recs[first_r - 1]['pos'][0]} -> wrapped to (home X, {WRAP_Y}): {wrap_ok}; " if wraps else
+                   "the path ended: Return; ")
+                + f"Return took {len(ret)} frames (design {want_ret}) following a home X that drifted {drift[0]}-{drift[-1]}; "
+                f"Parked at its home, diver slots free: {end_ok}; shots fired at steps "
+                f"{[(q[0], q[1], q[2] - 256 if q[2] > 127 else q[2]) for q in shots_seen]} (step, position, dx); "
+                f"errors: {errs[:2] or 'none'}")
+            if e == 14:
+                windup_rec = recs
+
+        # windup: the wobble and the flash, frame by frame (enemy 14's launch above)
+        w = windup_rec[:WINDUP[0] + 1]
+        offs = [r["pos"][0] - r["home"][0] for r in w]
+        cols = [r["col"] for r in w]
+        want_offs = [1 if t % 4 < 2 else -1 for t in range(WINDUP[0])] + [None]
+        want_cols = [ct[8] if t % 8 < 4 else ct[7] for t in range(WINDUP[0])] + [ct[7]]
+        ok = (offs[:WINDUP[0]] == want_offs[:WINDUP[0]] and cols == want_cols and ct[8] == 1
+              and all(r["st"] == ST_W and r["pos"][1] == ROW_Y[2] for r in w[:WINDUP[0]]) and w[WINDUP[0]]["st"] == ST_D)
+        rep("windup", ok, f"enemy 14, frames t = 0-23 from the launch frame: X - home X {offs[:WINDUP[0]]} (+ 1 when t mod 4 "
+            f"is 0 or 1, - 1 when 2 or 3), colour {cols[:WINDUP[0]]} (white when t mod 8 is 0-3, else light green), Y "
+            f"{ROW_Y[2]}, state WindUp; frame 24: Dive, its own colour")
+
+        # dive-loop1 / dive-loop3: the extra path steps (2 in frames whose number mod 4 / mod 2 is 0), the shorter
+        # wind-up, the extra shots and the faster shots, against the same model
+        for loop, e in ((1, 13), (3, 16), (3, 6)):
+            recs, errs, m = fly(e, loop=loop, player_x=X_MAX)
+            first_d = next(r["k"] for r in recs if r["step"] >= 1)
+            per_frame = [b["step"] - a["step"] for a, b in zip(recs, recs[1:]) if a["st"] == ST_D and b["st"] == ST_D]
+            shots_seen = [r["step"] for r in recs if r["new"]]
+            rep(f"dive-loop{loop}-{PATH_NAME[e // COLS].lower()}", not errs and first_d == WINDUP[loop] and recs[-1]["st"] == ENEMY_PARKED
+                and set(per_frame) == {1, 2} and len(shots_seen) == min(len(FIRE[e // COLS]), SHOTS_P3 + loop),
+                f"zp_loop {loop}, enemy {e}: wind-up {first_d} frames (design {WINDUP[loop]}); steps a frame "
+                f"{sorted(set(per_frame))}, 2 in {per_frame.count(2)} of {len(per_frame)} frames (every "
+                f"{EXTRA[loop]}{'th' if loop == 1 else 'nd'} by the frame number); shots at fire steps {shots_seen} "
+                f"(design: the first {SHOTS_P3 + loop} of {FIRE[e // COLS]}), each fired after a step of a 2-step frame "
+                f"included; shot dy {ESHOT_DY[loop]}; every frame as the model: {len(errs)} differences {errs[:2] or ''}")
+
+        # aim-*: the shot's dx is fixed when fired, from d = ship X - shot X: 0 if |d| <= 15, else its sign.
+        # The ship is put (monitor) at the wanted d from where the Hook will be at its fire steps 8 and 16.
+        for d1, d2 in ((15, 16), (-15, -16), (0, -200)):
+            wanted = {8: d1, 16: d2}
+
+            def place(k, m, wanted=wanted):
+                if m.st == ST_D and m.step + 1 in wanted:
+                    dx = PATHS[2][m.seg][0] * (-1 if m.mirror else 1)
+                    set_player_x(max(X_MIN, min(X_MAX, m.x + dx + wanted[m.step + 1])))
+
+            recs, errs, m = fly(15, player_x=174, before=place, until=lambda k, m, r: m.step >= 40)
+            got = [(r["step"], r["px"] - r["new"][0][1][0], r["new"][0][2] - 256 if r["new"][0][2] > 127 else r["new"][0][2],
+                    r["new"][0][1]) for r in recs if r["new"]]
+            flown = []
+            for stp, d, dx, pos in got:                         # the shots then fly by that dx
+                pass
+            ok = (not errs and [(g[0], aim_dx(g[1])) for g in got] == [(8, aim_dx(d1)), (16, aim_dx(d2))]
+                  and [g[2] for g in got] == [aim_dx(g[1]) for g in got]
+                  and (abs(d2) > 100 or [g[1] for g in got] == [d1, d2]))
+            rep(f"aim-{d1}-{d2}", ok, f"Hook, enemy 15: shots at (fire step, ship X - shot X, dx, position) {got}: dx 0 "
+                f"within 15 pixels, else 1 pixel a frame toward the ship; each shot then moved by its dx and + 2 a frame "
+                f"(checked every frame by the model: {len(errs)} differences {errs[:2] or ''})")
+            clear_eshots()
+
+        # fire-lost: all three shot slots taken (monitor) at fire step 8: that fire step is lost, not kept for later.
+        # Slots freed before step 16: exactly one shot, at step 16
+        def block(k, m):
+            if m.st == ST_D and m.step == 6:
+                for i in range(3):
+                    put_eshot(i, 40 + 20 * i, 60, 0)
+            if m.st == ST_D and m.step == 12:
+                clear_eshots()
+
+        recs, errs, m = fly(14, player_x=X_MAX, before=block, until=lambda k, m, r: m.st == ST_R)
+        fired = [(r["step"], r["new"]) for r in recs if r["new"]]
+        full_at_8 = next(r for r in recs if r["step"] == 8)["es"]
+        rep("fire-lost", not errs and [f[0] for f in fired] == [16] and all(full_at_8),
+            f"Hook, enemy 14: three shots in flight at fire step 8 ({full_at_8}): no shot there; slots freed at step 12; "
+            f"one shot at step 16 and none after ({[(f[0], f[1][0][1]) for f in fired]}): the lost fire step wasn't "
+            f"kept; errors: {errs[:2] or 'none'}")
+        clear_eshots()
+
+        # fire-dying / dying-waits: the player is hit just after a Sweep is launched. No diver fires while he is
+        # dying; the diver carries on to Parked; the launch timer stops; PlayerDying ends in the first frame, 100 or
+        # later, after the frame the last diver parked
+        marks = {}
+
+        def kill_player(k, m):
+            if k == 30:
+                safe(False)
+                put_eshot(0, state()[0], 205, 0)
+                hold["set"].pop("zp_launch_timer")           # the game's own timer: it must stop by itself
+                poke("zp_launch_timer", [77])
+            if k == 31:
+                marks["hit"] = gstate()
+                marks["lives"] = peek("zp_lives")
+
+        def note(k, m, r):
+            r["gs"], r["launch"], r["active"] = gstate(), peek("zp_launch_timer"), peek("zp_divers_active")
+            return r["gs"][0] == GS_RESPAWN
+
+        poke("zp_lives", [3])
+        recs, errs, m = fly(9, player_x=X_MIN, before=kill_player, until=note, invulnerable=True, max_frames=500)
+        dying = [r for r in recs if r["gs"][0] == GS_DYING]
+        parked_k = next(r["k"] for r in recs if r["st"] == ENEMY_PARKED)
+        fire_steps_passed = [f for f in FIRE[1][:2] if any(r["step"] >= f for r in dying)]
+        shots_while = [r["step"] for r in dying if r["new"]]
+        ok = (not errs and marks["hit"] == (GS_DYING, 0) and dying[0]["k"] == 30 and len(fire_steps_passed) == 2
+              and not shots_while and {r["launch"] for r in dying} == {76} and recs[-1]["gs"] == (GS_RESPAWN, 0)
+              and recs[-1]["k"] == parked_k + 1 and recs[-2]["gs"] == (GS_DYING, parked_k - 30) and parked_k - 30 >= 100
+              and all(r["active"] == 1 for r in dying[:-1]) and dying[-1]["active"] == 0)
+        rep("dying-divers", ok,
+            f"Sweep (enemy 9) launched, the player hit in its frame 30 (lives {marks['lives']}): the diver flew its whole "
+            f"path as the model ({len(errs)} differences), passing fire steps {fire_steps_passed} with no shot "
+            f"({shots_while or 'none fired'}); launch timer held at {sorted({r['launch'] for r in dying})}; it Parked in "
+            f"PlayerDying's frame {parked_k - 30} (divers active 1 until then) and Respawn began in frame "
+            f"{recs[-1]['k'] - 30}: the first frame, 100 or later, with no diver out; errors: {errs[:2] or 'none'}")
+        launcher(False)
+        revive()
+
+        # game-over-diving: with no lives left PlayerDying ends at frame 100 whatever is diving; the diver flies on
+        # through GameOver and nothing is launched or fired there
+        def last_life(k, m):
+            if k == 30:
+                safe(False)
+                poke("zp_lives", [1])
+                put_eshot(0, state()[0], 205, 0)
+                hold["set"].pop("zp_launch_timer")
+                poke("zp_launch_timer", [77])
+
+        def note2(k, m, r):
+            r["gs"], r["active"], r["launch"] = gstate(), peek("zp_divers_active"), peek("zp_launch_timer")
+            return r["st"] == ENEMY_PARKED
+
+        recs, errs, m = fly(9, player_x=X_MIN, before=last_life, until=note2, max_frames=500)
+        over_k = next(r["k"] for r in recs if r["gs"][0] == GS_OVER)
+        in_over = [r for r in recs if r["gs"][0] == GS_OVER]
+        ok = (not errs and over_k == 130 and recs[129]["gs"] == (GS_DYING, 99) and recs[130]["active"] == 1
+              and not any(r["new"] for r in recs if r["k"] >= 30) and recs[-1]["gs"][0] == GS_OVER
+              and {r["launch"] for r in in_over} == {76} and msg().strip() == "GAME OVER")
+        launcher(False)
+        rep("game-over-diving", ok,
+            f"the last life lost in a Sweep's frame 30: GameOver in PlayerDying's frame {over_k - 30} with the diver "
+            f"still out (divers active {recs[130]['active']}); it flew on as the model ({len(errs)} differences) and "
+            f"Parked in GameOver's frame {recs[-1]['gs'][1]}; no shot fired, launch timer unchanged "
+            f"({sorted({r['launch'] for r in in_over})}); errors: {errs[:2] or 'none'}")
+        # game-over-50: a new press in GameOver's frame 50 exactly ends it (frames 20 and 49 didn't, above)
+        while gstate()[1] < 49:
+            frame(0)
+        frame(BITS["fire"])                                   # frame 50
+        g50 = gstate()
+        frame(0)
+        rep("game-over-50", g50[0] == GS_OVER and gstate()[0] == GS_PLAY and peek("zp_lives") == 3
+            and peek("zp_divers_active") == 0 and estates() == [ENEMY_PARKED] * ENEMIES,
+            f"a new press of fire in GameOver's frame 50: still GameOver in that frame (state {g50}), a new game in the "
+            f"next (state {gstate()[0]}, lives {peek('zp_lives')}, all 18 Parked, divers active {peek('zp_divers_active')})")
+
+        # diver-hit-*: a diver shot in WindUp, Dive and Return: the diving value, the explosion where it is,
+        # divers active - 1 in the hit's frame, its shot in flight carries on
+        for name, e, when in (("windup", 14, lambda m: m.st == ST_W and m.t == 10),
+                              ("dive", 14, lambda m: m.st == ST_D and m.step == 20),
+                              ("dive-plunge", 2, lambda m: m.st == ST_D and m.step == 50),
+                              ("dive-sweep", 8, lambda m: m.st == ST_D and m.step == 45),
+                              ("return", 14, lambda m: m.st == ST_R and m.y < 180)):
+            box = {}
+
+            def shoot(k, m, when=when, box=box):
+                if "k" not in box and when(m):
+                    box["k"], box["score"], box["at"] = k, score(), (m.x, m.y)
+                    put_pshot(0, m.x, m.y + 14)               # after its move: 6 lines below the diver's Y
+
+            poke("game_score", [0, 0, 0])
+            recs, errs, m = fly(e, player_x=X_MAX, before=shoot)
+            r = recs[-1]
+            row = e // COLS
+            at_hit = dict(state=r["st"], pos=r["pos"], col=r["col"], score=score() - box.get("score", 0),
+                          active=peek("zp_divers_active"), slots=list(mem(sym["diver_enemy"], 3)),
+                          pshot=state()[1][0], alive=peek("zp_enemies_alive"), timer=peek("enemy_timer", e))
+            es_at_hit = eshots()
+            stay = []
+            for i in range(1, EXPLOSION_FRAMES):
+                frame()
+                stay.append((estates()[e], epos(e)))
+            es_later = eshots()
+            frame()
+            ok = (not errs and r["k"] == box.get("k") and at_hit["state"] == ENEMY_EXPLODING
+                  and abs(at_hit["pos"][0] - box["at"][0]) <= 2 and abs(at_hit["pos"][1] - box["at"][1]) <= 3
+                  and at_hit["col"] == ORANGE and at_hit["score"] == DIVE_SCORE[row] and at_hit["active"] == 0
+                  and at_hit["slots"] == [0xFF] * 3 and at_hit["pshot"] is None and at_hit["alive"] == 1
+                  and at_hit["timer"] == EXPLOSION_FRAMES and set(stay) == {(ENEMY_EXPLODING, at_hit["pos"])}
+                  and estates()[e] == ENEMY_DEAD and peek("zp_enemies_alive") == 0
+                  and all(b is not None and b[1] == a[1] + 2 * (EXPLOSION_FRAMES - 1) and abs(b[0] - a[0]) in (0, EXPLOSION_FRAMES - 1)
+                          for a, b in zip(es_at_hit, es_later) if a and a[1] < 190))
+            rep(f"diver-hit-{name}", ok,
+                f"enemy {e} shot in its frame {box.get('k')} ({['WindUp', 'Dive', 'Return'][recs[-2]['st'] - ST_W]}, at "
+                f"{box.get('at')} the frame before): Exploding at {at_hit['pos']} in orange, + {at_hit['score']} (diving value "
+                f"{DIVE_SCORE[row]}), divers active {at_hit['active']} and its slot free in that frame, the shot gone, alive "
+                f"still {at_hit['alive']}; stationary for 16 frames, then Dead (alive {peek('zp_enemies_alive')}); its own "
+                f"shots in flight {es_at_hit} carried on: {es_later}; errors: {errs[:2] or 'none'}")
+            clear_eshots()
+
+        # ram-*: the Hook against the ship. Its box (columns 4-19) against the ship's (6-17): |diver X - ship X| <= 13,
+        # and only from diver Y 210 (step 35)
+        def ram_case(name, offs, want_step, invulnerable=False):
+            """offs: {step: ship X - diver X at that step}: the ship is put there (monitor) the frame before."""
+            box = {}
+
+            def place(k, m):
+                if k == 0 and not invulnerable:
+                    safe(False)
+                clear_eshots()                                # its own shots are taken away: only the ram is tested
+                if m.st == ST_D and m.step + 1 in offs:
+                    dx, dy, _ = PATHS[2][m.seg]
+                    set_player_x(m.x + (-dx if m.mirror else dx) + offs[m.step + 1])
+
+            def stop(k, m, r):
+                r["gs"] = gstate()[0]
+                if r["gs"] != GS_PLAY and "k" not in box:
+                    box.update(k=k, step=m.step, pos=r["pos"], st=r["st"], px=r["px"])
+                return "k" in box or m.step >= 56
+
+            poke("zp_lives", [3])
+            poke("game_score", [0, 0, 0])
+            recs, errs, m = fly(14, player_x=X_MAX, before=place, until=stop, invulnerable=invulnerable)
+            res = dict(step=box.get("step"), state=box.get("st"), score=score(), lives=peek("zp_lives"),
+                       active=peek("zp_divers_active"), gs=gstate())
+            if want_step is None:
+                ok = not errs and "k" not in box and res["lives"] == 3 and res["score"] == 0 and recs[-1]["st"] == ST_D
+            else:
+                ok = (not errs and res == dict(step=want_step, state=ENEMY_EXPLODING, score=DIVE_SCORE[2], lives=2,
+                                               active=0, gs=(GS_DYING, 0)))
+            near = [(r["step"], r["px"] - r["pos"][0], r["pos"][1]) for r in recs if r["step"] in offs or r["step"] == box.get("step")]
+            near = near if len(near) <= 6 else near[:3] + ["..."] + near[-2:]
+            rep(name, ok, f"Hook, enemy 14, ship put at (step, ship X - diver X, diver Y) {near}: "
+                + (f"rammed at step {res['step']}: the player hit (lives {res['lives']}, state {res['gs']}), the enemy "
+                   f"Exploding, + {res['score']} (its diving value), divers active {res['active']}" if "k" in box else
+                   f"no ram through step {recs[-1]['step']}: lives {res['lives']}, score {res['score']}, the diver flew on")
+                + f"; expected {'a ram at step ' + str(want_step) if want_step else 'no ram'}; errors: {errs[:2] or 'none'}")
+            if "k" in box:
+                revive()
+
+        skim = range(36, 41)                                                    # Y 212-216, dx 0 then - 2
+        ram_case("ram-y-guard", {33: 0, 34: 0, 35: 0}, 35)                      # Y 206, 208: above the box; 210: a ram
+        ram_case("ram-edge-right-in", {**{q: 14 for q in skim}, 41: 13}, 41)    # 14 outside for 5 steps, then 13: inside
+        ram_case("ram-edge-right-out", {q: 14 for q in range(36, 56)}, None)    # 14 at every lethal step
+        ram_case("ram-edge-left-in", {**{q: -14 for q in skim}, 41: -13}, 41)
+        ram_case("ram-edge-left-out", {q: -14 for q in range(36, 56)}, None)
+        ram_case("ram-invulnerable", {q: 0 for q in range(34, 56)}, None, invulnerable=True)   # flies through the ship
+
+        # ram-shot-wins: a diver shot in the frame it would ram is Exploding before 6c: the player lives
+        box = {}
+
+        def both(k, m):
+            if k == 0:
+                safe(False)
+            if m.st == ST_D and m.step == 34:
+                set_player_x(m.x)
+                put_pshot(0, m.x, m.y + 2 + 14)
+                box["score"] = score()
+
+        poke("zp_lives", [3])
+        recs, errs, m = fly(14, player_x=X_MAX, before=both)
+        rep("ram-shot-wins", not errs and recs[-1]["st"] == ENEMY_EXPLODING and recs[-1]["step"] == 35 and gstate()[0] == GS_PLAY
+            and peek("zp_lives") == 3 and score() - box["score"] == DIVE_SCORE[2],
+            f"Hook at step 35 (Y 210) over the ship with a player shot inside its box in the same frame: the enemy "
+            f"Exploding ({recs[-1]['st']:#x}), + {score() - box['score']}, the player not hit (state {gstate()[0]}, lives "
+            f"{peek('zp_lives')}); errors: {errs[:2] or 'none'}")
+
+        # fifth-explosion: 4 explosions running (monitor), a fifth enemy hit: scored, dead at once, no explosion
+        respawn()
+        safe(True)
+        for i, e in enumerate((0, 1, 2, 3)):
+            poke("enemy_state", [ENEMY_EXPLODING], e)
+            poke("enemy_timer", [12], e)
+        poke("explosion_enemy", [0, 1, 2, 3])
+        s0 = score()
+        ex, ey = epos(15)
+        poke("zp_drift_timer", [2])
+        put_pshot(0, ex, ey + 14)
+        frame()
+        rep("fifth-explosion", estates()[15] == ENEMY_DEAD and epos(15)[1] == MUX_OFF and score() == s0 + 50
+            and peek("zp_enemies_alive") == ENEMIES - 1 and sorted(mem(sym["explosion_enemy"], 4)) == [0, 1, 2, 3]
+            and state()[1][0] is None,
+            f"4 explosion slots taken, enemy 15 shot: state {estates()[15]} (Dead) and hidden in the hit's frame, + "
+            f"{score() - s0}, alive {peek('zp_enemies_alive')}, the 4 explosions untouched "
+            f"({sorted(mem(sym['explosion_enemy'], 4))})")
+        for _ in range(14):
+            frame()
+
+        # launcher: a full formation, pattern 3 at loop 0 as the game starts it: launches 100 frames apart from the
+        # 50th frame, never more than 2 out, and never more than 2 rng_next calls a frame. The generator is
+        # modelled (engine/rng.asm: 16-bit xorshift 7, 9, 8) to count the calls and to check the pick
+        def rng_step(lo, hi):
+            v = lo | hi << 8
+            v ^= (v << 7) & 0xFFFF
+            v ^= v >> 9
+            v ^= (v << 8) & 0xFFFF
+            return v & 255, v >> 8
+
+        respawn()
+        safe(True)
+        launcher(True)
+        poke("zp_launch_timer", [50])
+        store = (peek("zp_pattern"), peek("zp_loop"))
+        launches, errs, calls_hist, most_out, blocked, waits = [], [], {0: 0, 1: 0, 2: 0}, 0, 0, []
+        for f in range(1, 1201):
+            r0, st0, act0, tm0 = tuple(mem(sym["zp_rng_lo"], 2)), estates(), peek("zp_divers_active"), peek("zp_launch_timer")
+            frame()
+            r1, st1, act1 = tuple(mem(sym["zp_rng_lo"], 2)), estates(), peek("zp_divers_active")
+            n, r, draws = 0, r0, []
+            while r != r1 and n < 3:
+                r = rng_step(*r)
+                draws.append(r[1])
+                n += 1
+            if r != r1:
+                errs.append(f"frame {f}: more than 2 rng_next calls (or the state was written)")
+                continue
+            calls_hist[n] += 1
+            new = [e for e in range(ENEMIES) if st0[e] == ENEMY_PARKED and st1[e] == ST_W]
+            due = tm0 <= 1
+            most_out = max(most_out, act1)
+            if due and act0 >= 2:
+                blocked += 1
+            if due and act0 < 2:
+                want_r = draws[0] & 31 if draws else None
+                if want_r is not None and want_r >= ENEMIES:
+                    want_r = draws[1] & 31 if n == 2 else None
+                    if want_r is not None and want_r >= ENEMIES:
+                        want_r -= ENEMIES
+                pick = next(((want_r + i) % ENEMIES for i in range(ENEMIES) if st0[(want_r + i) % ENEMIES] == ENEMY_PARKED), None) \
+                    if want_r is not None else None
+                if new != [pick] or n not in (1, 2) or (n == 2 and draws[0] & 31 < ENEMIES):
+                    errs.append(f"frame {f}: launched {new}, draws {draws}, the pick by the rule {pick}")
+                elif peek("zp_launch_timer") != 100:
+                    errs.append(f"frame {f}: timer reloaded with {peek('zp_launch_timer')}")
+                else:
+                    launches.append(f)
+                    waits.append(blocked)
+                    blocked = 0
+            elif new or n:
+                errs.append(f"frame {f}: launched {new} with {n} rng calls, timer {tm0}, {act0} out")
+        gaps = [b - a for a, b in zip(launches, launches[1:])]
+        free_gaps = [g for g, wt in zip(gaps, waits[1:]) if wt == 0]
+        ok = (not errs and launches[0] == 50 and most_out == 2 and set(free_gaps) == {100} and len(free_gaps) >= 2
+              and all(g == 100 + wt for g, wt in zip(gaps, waits[1:])) and calls_hist[1] + calls_hist[2] == len(launches)
+              and store == (2, 0))
+        rep("launcher", ok,
+            f"1,200 frames from a formation's return, pattern and loop stores {store} (pattern 3, loop 0): first launch in "
+            f"frame {launches[0]}, {len(launches)} launches, gaps {gaps} (100 when fewer than 2 were out; longer by the "
+            f"frames the timer waited at 0 with 2 out: {waits[1:]}); never more than {most_out} out; rng_next calls a "
+            f"frame: {calls_hist} (0 with no launch, 1 or 2 with one); every launched enemy was the first Parked at or "
+            f"after the drawn index; errors: {errs[:3] or 'none'}")
+
+        # launcher-halved: the interval is halved with 4 or fewer alive (100 with 5)
+        res = {}
+        for alive in (5, 4):
+            respawn()
+            safe(True)
+            only(set(range(12, 12 + alive)))
+            launcher(True)
+            poke("zp_launch_timer", [1])
+            frame()
+            t_after = peek("zp_launch_timer")
+            first = [e for e in range(ENEMIES) if estates()[e] == ST_W]
+            n = 0
+            while len([e for e in range(ENEMIES) if estates()[e] & 0x80]) < 2 and n < 150:
+                frame()
+                n += 1
+            res[alive] = (t_after, n, first)
+            launcher(False)
+        rep("launcher-halved", res[5][:2] == (100, 100) and res[4][:2] == (50, 50) and len(res[5][2]) == len(res[4][2]) == 1,
+            f"5 enemies alive: the timer reloaded with {res[5][0]} and the next launch came {res[5][1]} frames later; 4 "
+            f"alive: {res[4][0]} and {res[4][1]} (design: the interval halved with 4 or fewer)")
+
+        # launcher-rows: with none Parked in the wave's rows the pick falls back to any Parked enemy; pattern 1
+        # (monitor: the pattern store) launches only row 2 while it has one
+        respawn()
+        safe(True)
+        poke("zp_pattern", [0])
+        launcher(True)
+        poke("zp_launch_timer", [1])
+        frame()
+        launcher(False)
+        got1 = [e for e in range(ENEMIES) if estates()[e] == ST_W]
+        t1, cap = peek("zp_launch_timer"), None
+        poke("zp_launch_timer", [1])
+        hold["set"].pop("zp_launch_timer")
+        frame()
+        cap = [e for e in range(ENEMIES) if estates()[e] == ST_W]
+        respawn()
+        safe(True)
+        only(set(range(0, 12)))
+        poke("zp_pattern", [0])
+        launcher(True)
+        poke("zp_launch_timer", [1])
+        frame()
+        launcher(False)
+        got2 = [e for e in range(ENEMIES) if estates()[e] == ST_W]
+        poke("zp_pattern", [2])
+        rep("launcher-rows", len(got1) == 1 and got1[0] >= 12 and t1 == 150 and cap == got1 and len(got2) == 1 and got2[0] < 12,
+            f"pattern store 0 (Hooks: row 2, 1 at once, interval 150): launched enemy {got1} (row 2), timer {t1}; with it "
+            f"out and the timer at 0 again nothing more launched ({cap}); with row 2 all dead: enemy {got2} (any Parked "
+            f"enemy)")
+
+        # clear-while-dying: the formation's return runs on its own timer whatever the game state (Stage 3 rule 12)
+        respawn()
+        safe(False)
+        launcher(False)
+        x = settle()
+        put_eshot(0, x, 205, 0)
+        frame()
+        empty_sky()
+        poke("zp_enemies_alive", [0])
+        poke("zp_clear_timer", [3])
+        hold["set"].pop("zp_launch_timer")
+        seen = []
+        for _ in range(3):
+            frame()
+            seen.append((gstate()[0], estates().count(ENEMY_PARKED), peek("zp_launch_timer")))
+        launcher(False)
+        rep("clear-while-dying", seen[1][1] == 0 and seen[2] == (GS_DYING, ENEMIES, 50),
+            f"the pause timer set to 3 while the player is dying: (state, Parked, launch timer) over 3 frames {seen}: all "
+            f"18 back in the third, in PlayerDying, with the launch timer at 50 (it counts only in Play)")
+        revive()
+
+        # stage3-play: the game left to itself for 1,500 frames, launcher on, the ship invulnerable, sweeping with
+        # fire held: pinned sprites never dropped, nothing missing 2 frames running, no overrun
+        respawn()
+        safe(True)
+        launcher(True)
+        stick, most, es_most, launched, bad = BITS["right"] | BITS["fire"], 0, 0, 0, []
+        x, shots = frame(stick)
+        prev = estates()
+        for f in range(1500):
+            if x >= X_MAX:
+                stick = BITS["left"] | BITS["fire"]
+            elif x <= X_MIN:
+                stick = BITS["right"] | BITS["fire"]
+            x, shots = frame(stick)
+            st = estates()
+            launched += sum(1 for a, b in zip(prev, st) if a == ENEMY_PARKED and b == ST_W)
+            prev = st
+            ys = mem(sym["mux_y"], 24)
+            most = max(most, sum(1 for y in ys if y != MUX_OFF))
+            es_most = max(es_most, sum(1 for q in eshots() if q))
+            if any(y != MUX_OFF and not 30 <= y <= PLAYER_Y for y in ys):
+                bad.append(f"frame {f}: a sprite at Y {[y for y in ys if y != MUX_OFF and not 30 <= y <= PLAYER_Y]}")
+            if peek("zp_divers_active") != sum(1 for q in st if q in (ST_W, ST_D, ST_R)) or peek("zp_divers_active") > 2:
+                bad.append(f"frame {f}: divers active {peek('zp_divers_active')}, states {st}")
+        frame(0)
+        names = [("mux_pin_drop_count", 1), ("mux_pin_excess_count", 1), ("mux_max_age", 1), ("mux_late_count", 1),
+                 ("irq_late_count", 1), ("game_overrun_count", 1), ("game_flicker_frames", 2)]
+        counts = {k: int.from_bytes(mem(sym[k], n), "little") for k, n in names if k in sym}
+        okc = (not counts) or (counts["mux_pin_drop_count"] == 0 and counts["mux_pin_excess_count"] == 0
+                               and counts["mux_max_age"] <= 1 and counts["mux_late_count"] == 0
+                               and counts["irq_late_count"] == 0 and counts["game_overrun_count"] == 0)
+        rep("stage3-play", not bad and okc and launched >= 8 and es_most >= 2 and list(mem(sym["mux_flags"], 24)) == [0x80] * 4 + [0] * 20,
+            f"1,500 frames of play at pattern 3, loop 0, the ship invulnerable and sweeping with fire held: {launched} "
+            f"launches, up to {es_most} enemy shots and {most} sprites at once; every shown sprite's Y in 30-221; divers "
+            f"active always equal to the enemies in WindUp, Dive or Return and never above 2 (errors: {bad[:2] or 'none'}); "
+            + (", ".join(f"{k} {c}" for k, c in counts.items()) + " (pinned sprites 0-3 never dropped; nothing missing 2 "
+               "frames running)" if counts else "no DEBUG counters in this build: drops not measured"))
+        safe(False)
+        launcher(False)
 
         mon.checkpoint_delete(cp.number)
     finally:
