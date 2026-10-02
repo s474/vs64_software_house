@@ -21,7 +21,8 @@ What it does:
      so every enemy sprite is already counted in every frame.
   5. The play-area text (design.md "Text cells and the star rule"): which text rows no parked
      enemy and no ship covers, at every drift position; what can pass over the message row and
-     when; the title's sprites against the title's text; the star bands and the free cells.
+     when; the title's sprites against each other and the title's text cells, each enemy centred
+     on its line; every text cell inside a star band, and the free cells.
   6. The difficulty curve: launches and enemy shots a minute per wave, counted in the play
      simulation of 3 (a formation that stays full: the most the launcher can do).
 
@@ -421,12 +422,18 @@ def explosion_checks():
 MSG_ROW = 9                         # READY, GAME OVER, WAVE nn
 OLD_MSG_ROW = 12                    # where they were until stage 3 found the bug
 # (screen, row, text): every text is centred, first column (40 - n) div 2, but the scores
-TEXTS = [("Title", 5, "SWARM"), ("Title", 9, "150 PTS"), ("Title", 11, " 80 PTS"),
-         ("Title", 13, " 50 PTS"), ("Title", 16, "DIVING SCORES DOUBLE"), ("Title", 19, "PRESS FIRE"),
+TEXTS = [("Title", 5, "SWARM"), ("Title", 9, "150 PTS"), ("Title", 12, " 80 PTS"),
+         ("Title", 15, " 50 PTS"), ("Title", 18, "DIVING SCORES DOUBLE"), ("Title", 21, "PRESS FIRE"),
          ("Game", MSG_ROW, "WAVE 01"), ("Game", MSG_ROW, "READY"), ("Game", MSG_ROW, "GAME OVER")]
 TEXT_COL = {"150 PTS": 17, " 80 PTS": 17, " 50 PTS": 17}
 BAND_COLS = (10, 29)
-TITLE_SPRITES = [(120, 119), (120, 135), (120, 151)]
+BAND_ROWS = [5, 9, 12, 15, 18, 21]  # the star rule: no star in BAND_COLS of these rows
+# (X, Y, the text row it sits beside). Y = 43 + 8 * row: see title_checks(). Until 2026-10-02
+# (stage 4 part A as first built) these were Y 119 / 135 / 151 beside rows 9 / 11 / 13: 16 lines
+# apart with art 19 lines tall, so the three touched.
+TITLE_SPRITES = [(120, 115, 9), (120, 139, 12), (120, 163, 15)]
+OLD_TITLE_SPRITES = [(120, 119, 9), (120, 135, 11), (120, 151, 13)]
+GLYPH_LINES = 7                     # the ROM's capitals and digits use the top 7 lines of a cell
 STARS = 48
 ENEMY_ART = (2, 21, 1, 19)          # the enemy art area: columns 2-21, rows 1-19 of the cell
 PSHOT_ART = (11, 12, 0, 7)
@@ -566,29 +573,73 @@ def layout_checks():
         print(f"a player shot is over the row for {len(ys)} frames (Y {ys}), 2 pixels wide; over {text!r} only "
               f"when fired from ship X {tx[0] - PSHOT_ART[1]}-{tx[1] - PSHOT_ART[0]}")
 
-    print("\n== Title: its three sprites against its text (no formation on screen) ==")
+    title_checks()
+
+
+def title_checks():
+    """The title screen (design.md "Title and game-over screens"): no title sprite overlaps
+    another or any title text cell, each enemy is centred on its score line, the three fit the
+    multiplexer, and every title text cell is inside a star band."""
+    print("\n== Title: its three sprites against each other and its text (no formation on screen) ==")
+    old = [sprite_lines(y, ENEMY_ART) for _, y, _ in OLD_TITLE_SPRITES]
+    print("as first built (Y " + " / ".join(str(y) for _, y, _ in OLD_TITLE_SPRITES) + "): art lines "
+          + ", ".join(f"{a}-{b}" for a, b in old) + f": neighbours share {old[0][1] - old[1][0] + 1} lines (the bug)")
+    assert overlap(old[0], old[1]) and overlap(old[1], old[2])
+    texts = [(row, text) for scr, row, text in TEXTS if scr == "Title"]
+    assert len(texts) == 6
+    for row, text in texts:
+        c, (a, b) = col_of(text), row_lines(row)
+        print(f"   {text!r}: row {row}, lines {a}-{b}, columns {c}-{c + len(text) - 1}")
     hits = 0
-    for sx, sy in TITLE_SPRITES:
+    for i, (sx, sy, row) in enumerate(TITLE_SPRITES):
+        cell, art = sprite_lines(sy), sprite_lines(sy, ENEMY_ART)
         cols = ((sx - 24) // 8, (sx + 23 - 24) // 8)
-        rows = ((sy + 1 - 51) // 8, (sy + 21 - 51) // 8)
-        print(f"sprite at ({sx}, {sy}): lines {sy + 1}-{sy + 21}, text rows {rows[0]}-{rows[1]}, columns {cols[0]}-{cols[1]}")
-        for scr, row, text in TEXTS:
-            if scr == "Title" and overlap((sx, sx + 23), text_x(text)) and overlap(sprite_lines(sy), row_lines(row)):
+        rows = ((cell[0] - 51) // 8, (cell[1] - 51) // 8)
+        tl = row_lines(row)
+        art_mid, cell_mid = (art[0] + art[1]) / 2, (tl[0] + tl[1]) / 2
+        glyph_mid = (tl[0] + tl[0] + GLYPH_LINES - 1) / 2
+        print(f"sprite at ({sx}, {sy}): cell lines {cell[0]}-{cell[1]} (text rows {rows[0]}-{rows[1]}, columns "
+              f"{cols[0]}-{cols[1]}), art lines {art[0]}-{art[1]}, centre {art_mid:g}; its text row {row}: centre "
+              f"{cell_mid:g}, of the letters' {GLYPH_LINES} lines {glyph_mid:g}")
+        assert sy == 43 + 8 * row and art_mid == glyph_mid and abs(art_mid - cell_mid) <= 0.5
+        assert MUX_Y_MIN <= sy <= MUX_Y_MAX and VISIBLE_X[0] <= sx <= VISIBLE_X[1]
+        for sx2, sy2, _ in TITLE_SPRITES[i + 1:]:                     # sprite against sprite, by cell
+            assert not (overlap((sx, sx + 23), (sx2, sx2 + 23)) and overlap(cell, sprite_lines(sy2)))
+        for trow, text in texts:                                      # sprite cell against text cells
+            if overlap((sx, sx + 23), text_x(text)) and overlap(cell, row_lines(trow)):
                 hits += 1
-    print(f"title texts covered by a title sprite: {hits} (the nearest text starts at column 17). No title row moves")
-    assert hits == 0
+    ys = [y for _, y, _ in TITLE_SPRITES]
+    gaps = [ys[i + 1] - ys[i] for i in range(2)]
+    print(f"sprites {gaps} lines apart: {min(gaps) - 21} empty lines between cells, "
+          f"{min(gaps) - (ENEMY_ART[3] - ENEMY_ART[2] + 1)} between the art of one enemy and the next")
+    assert min(gaps) >= 21
+    above = sprite_lines(ys[0])[0] - row_lines(5)[1] - 1
+    below = row_lines(18)[0] - sprite_lines(ys[2])[1] - 1
+    sx = TITLE_SPRITES[0][0]
+    print(f"empty lines between SWARM and the first sprite's cell: {above}; between the last sprite's cell and "
+          f"DIVING SCORES DOUBLE: {below}; pixels from the art's right edge (X {sx + ENEMY_ART[1]}) to the scores' "
+          f"first cell (X {text_x('150 PTS')[0]}): {text_x('150 PTS')[0] - (sx + ENEMY_ART[1]) - 1}")
+    print(f"title text cells covered by a title sprite's cell: {hits}; title sprites overlapping each other: 0")
+    assert hits == 0 and above > 0 and below > 0
+    print(f"multiplexer: 3 sprites at Y {ys}, all kept by the selection model: {all_fit(ys)}")
+    assert all_fit(ys)
 
     print("\n== Star bands ==")
-    bands = sorted({row for _, row, _ in TEXTS})
+    outside = 0
     for _, row, text in TEXTS:
         c = col_of(text)
-        assert BAND_COLS[0] <= c and c + len(text) - 1 <= BAND_COLS[1], text
+        if not (row in BAND_ROWS and BAND_COLS[0] <= c and c + len(text) - 1 <= BAND_COLS[1]):
+            outside += len(text)
+    print(f"text cells outside a star band (rows {BAND_ROWS}, columns {BAND_COLS[0]}-{BAND_COLS[1]}), "
+          f"all {len(TEXTS)} texts: {outside}")
+    assert outside == 0
+    bands = sorted({row for _, row, _ in TEXTS})
     width = BAND_COLS[1] - BAND_COLS[0] + 1
     cells = 24 * 40 - len(bands) * width
     print(f"text rows {bands}: {len(bands)} bands of {width} columns = {len(bands) * width} cells; "
-          f"{cells} of 960 play-area cells free for {STARS} stars (was 7 bands, 820 free: row {OLD_MSG_ROW} "
-          f"is no longer a text row and row {MSG_ROW} already was one)")
-    assert bands == [5, 9, 11, 13, 16, 19] and cells == 840 and STARS <= cells
+          f"{cells} of 960 play-area cells free for {STARS} stars (the same count as with the bands on rows "
+          f"5, 9, 11, 13, 16, 19; four bands moved, so the star table is rebuilt from this list)")
+    assert bands == BAND_ROWS and cells == 840 and STARS <= cells
 
 
 # ---- The difficulty curve ----

@@ -53,14 +53,25 @@ longest enemy shot life (fired at Y 90, 2 a frame, shown one frame at its spawn)
 a player shot is over the row for 2 frames (Y [125, 117]), 2 pixels wide; over 'WAVE 01' only when fired from ship X 140-196
 a player shot is over the row for 2 frames (Y [125, 117]), 2 pixels wide; over 'READY' only when fired from ship X 148-188
 
-== Title: its three sprites against its text (no formation on screen) ==
-sprite at (120, 119): lines 120-140, text rows 8-11, columns 12-14
-sprite at (120, 135): lines 136-156, text rows 10-13, columns 12-14
-sprite at (120, 151): lines 152-172, text rows 12-15, columns 12-14
-title texts covered by a title sprite: 0 (the nearest text starts at column 17). No title row moves
+== Title: its three sprites against each other and its text (no formation on screen) ==
+as first built (Y 119 / 135 / 151): art lines 121-139, 137-155, 153-171: neighbours share 3 lines (the bug)
+   'SWARM': row 5, lines 91-98, columns 17-21
+   '150 PTS': row 9, lines 123-130, columns 17-23
+   ' 80 PTS': row 12, lines 147-154, columns 17-23
+   ' 50 PTS': row 15, lines 171-178, columns 17-23
+   'DIVING SCORES DOUBLE': row 18, lines 195-202, columns 10-29
+   'PRESS FIRE': row 21, lines 219-226, columns 15-24
+sprite at (120, 115): cell lines 116-136 (text rows 8-10, columns 12-14), art lines 117-135, centre 126; its text row 9: centre 126.5, of the letters' 7 lines 126
+sprite at (120, 139): cell lines 140-160 (text rows 11-13, columns 12-14), art lines 141-159, centre 150; its text row 12: centre 150.5, of the letters' 7 lines 150
+sprite at (120, 163): cell lines 164-184 (text rows 14-16, columns 12-14), art lines 165-183, centre 174; its text row 15: centre 174.5, of the letters' 7 lines 174
+sprites [24, 24] lines apart: 3 empty lines between cells, 5 between the art of one enemy and the next
+empty lines between SWARM and the first sprite's cell: 17; between the last sprite's cell and DIVING SCORES DOUBLE: 10; pixels from the art's right edge (X 141) to the scores' first cell (X 160): 18
+title text cells covered by a title sprite's cell: 0; title sprites overlapping each other: 0
+multiplexer: 3 sprites at Y [115, 139, 163], all kept by the selection model: True
 
 == Star bands ==
-text rows [5, 9, 11, 13, 16, 19]: 6 bands of 20 columns = 120 cells; 840 of 960 play-area cells free for 48 stars (was 7 bands, 820 free: row 12 is no longer a text row and row 9 already was one)
+text cells outside a star band (rows [5, 9, 12, 15, 18, 21], columns 10-29), all 9 texts: 0
+text rows [5, 9, 12, 15, 18, 21]: 6 bands of 20 columns = 120 cells; 840 of 960 play-area cells free for 48 stars (the same count as with the bands on rows 5, 9, 11, 13, 16, 19; four bands moved, so the star table is rebuilt from this list)
 
 == Difficulty by wave (launches and shots counted over 6000 frames of the play simulation: a full formation that never dies, so the most the launcher can do) ==
 wave pattern loop | interval, max divers, shots a dive (hook/sweep/plunge), wind-up, diver speed, shot dy | launches/min, enemy shots/min | Hook: launch to first lethal frame, s | shot from Y 164 to the ship, s

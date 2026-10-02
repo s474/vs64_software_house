@@ -29,7 +29,10 @@ covered row 12: [Text cells and the star rule](#text-cells-and-the-star-rule)); 
 stage 3 plays. The playtest is recorded (feel targets 3, 4, 7 and 9, and
 [Stage 3 playtest and the difficulty curve](#stage-3-playtest-and-the-difficulty-curve)), the
 wind-up's wording says what it does (a 2-pixel swing), and stage 4 is specified to the frame
-([Stage 4 rules](#stage-4-rules)).
+([Stage 4 rules](#stage-4-rules)). **2026-10-02, after stage 4 part A's build:** built as designed,
+the build's five choices confirmed ([as built](#stage-4-part-a-as-built)); one layout change, **the
+title's rows and sprite Y** (its three enemies overlapped:
+[Title](#title-and-game-over-screens)), which moves four star bands.
 
 Every number that can be checked without the game is checked by
 [tests/games/swarm/check_design.py](../../../tests/games/swarm/check_design.py)
@@ -97,9 +100,9 @@ first column (40 − n) div 2). Text row r is raster lines 51 + 8r to 58 + 8r.
 | Screen | Row | Raster lines | Text | Columns |
 |---|---|---|---|---|
 | Title | 5 | 91–98 | `SWARM` | 17–21 |
-| Title | 9 / 11 / 13 | 123–130 / 139–146 / 155–162 | `150 PTS` / ` 80 PTS` / ` 50 PTS` (right-aligned) | 17–23 |
-| Title | 16 | 179–186 | `DIVING SCORES DOUBLE` | 10–29 |
-| Title | 19 | 203–210 | `PRESS FIRE` | 15–24 |
+| Title | **9 / 12 / 15** | 123–130 / 147–154 / 171–178 | `150 PTS` / ` 80 PTS` / ` 50 PTS` (right-aligned) | 17–23 |
+| Title | **18** | 195–202 | `DIVING SCORES DOUBLE` | 10–29 |
+| Title | **21** | 219–226 | `PRESS FIRE` | 15–24 |
 | Game | **9** | 123–130 | `WAVE nn` | 16–22 |
 | Game | **9** | 123–130 | `READY` | 17–21 |
 | Game over | **9** | 123–130 | `GAME OVER` | 15–23 |
@@ -118,7 +121,7 @@ columns don't change.** Row 12 (lines 147–154) is inside formation row 2 (137�
 | `WAVE nn` | Row 12, columns 16–22 | Row **9**, columns 16–22 |
 | `READY` | Row 12, columns 17–21 | Row **9**, columns 17–21 |
 | `GAME OVER` | Row 12, columns 15–23 | Row **9**, columns 15–23 |
-| Every title text | – | Unchanged: no formation is on screen at the title, and the title's three sprites are in columns 12–14, left of every text (first column 17 on their rows) |
+| Every title text | – | Unchanged by this; four title rows moved later the same day for another reason ([Title](#title-and-game-over-screens)) |
 
 Row 9 against everything that could cover it (lines 123–130):
 
@@ -148,18 +151,18 @@ is over `READY` only when fired from ship X 148–188 (`WAVE nn`: 140–196), wh
 X 171. It is his own shot, it is 2 pixels of one letter for 2 frames, and no row above the ship
 avoids it. So in every case the letters are whole apart from that.
 
-**The star rule: no star in columns 10–29 of rows 5, 9, 11, 13, 16 and 19.** That is one 20-column
-band on each of the **six** text rows (120 of the 960 play-area cells), wide enough for the longest
-text, so the same test serves every row. Row 12 is no longer a text row and leaves the list; row 9
-was already in it for the title. The 48 stars are drawn from the other **840** cells (it was 820);
-the count doesn't change. Because of the rule, a text is written and erased (with spaces) without
-looking at the star table, and the twinkle's colour write never lands on a letter.
+**The star rule: no star in columns 10–29 of rows 5, 9, 12, 15, 18 and 21** (changed 2026-10-02
+with the title layout: it was rows 5, 9, 11, 13, 16, 19). That is one 20-column band on each of the
+**six** text rows (120 of the 960 play-area cells), wide enough for the longest text, so the same
+test serves every row. The 48 stars are drawn from the other **840** cells: the same counts as
+before. Because of the rule, a text is written and erased (with spaces) without looking at the star
+table, and the twinkle's colour write never lands on a letter.
 
-**The 48-entry star table is rebuilt from the six-band list** (the generator's list drops row 12),
-so the code's list is this one. Still 48 stars; some move, because row 12's 20 cells are open to
-them again. The table as built in stage 3 doesn't break the new rule (its seven bands include
-these six), so nothing is wrong on screen until it is rebuilt: the rebuild is to keep one list, not
-to fix a fault.
+**The 48-entry star table must be regenerated from this band list** (same seed, same generator, the
+list of rows changed). Unlike the last rebuild this one fixes a fault: the table as built in stage
+4 part A may have stars in columns 10–29 of rows 12, 15, 18 and 21, where a title text would
+overwrite them and its erase would leave a hole. Still 48 stars; some move. `check_design.py`,
+"Star bands": 0 of the nine texts' cells outside a band.
 
 **If a text is added, moved or lengthened:** it must stay inside those bands, or the band list
 (rows, columns 10–29) changes here first and the star table is rebuilt from it; and a text shown
@@ -168,11 +171,34 @@ written down as above. The title's parked sprites may pass over stars, as sprite
 
 ### Title and game-over screens
 
-- **Title:** the star field and panel (showing the high score) stay. `SWARM` on row 5; rows 9, 11
-  and 13 show one parked enemy sprite of each type (X 120, Y 119 / 135 / 151: three sprites, 16 lines
-  apart, far below any limit) with `150 PTS`, `80 PTS`, `50 PTS` beside them; `DIVING SCORES DOUBLE`
-  on row 16; `PRESS FIRE` on row 19, on for 32 frames and off for 32. A new press of fire starts a
-  game. No formation, ship or shot is shown. To the frame: [Stage 4 rules](#stage-4-rules) 9–12.
+- **Title:** the star field and panel (showing the high score) stay. No formation, ship or shot is
+  shown. `PRESS FIRE` is on for 32 frames and off for 32; a new press of fire starts a game. To the
+  frame: [Stage 4 rules](#stage-4-rules) 9–12. The layout (**changed 2026-10-02 after stage 4 part
+  A's build**: every third text row from row 9, where it was every second):
+
+  | Text | Row | Raster lines | Columns | Sprite beside it | Sprite X, Y | Sprite's lines (art rows 1–19) |
+  |---|---|---|---|---|---|---|
+  | `SWARM` | 5 | 91–98 | 17–21 | | | |
+  | `150 PTS` | 9 | 123–130 | 17–23 | Type A | 120, **115** | 116–136 (117–135) |
+  | ` 80 PTS` | **12** | 147–154 | 17–23 | Type B | 120, **139** | 140–160 (141–159) |
+  | ` 50 PTS` | **15** | 171–178 | 17–23 | Type C | 120, **163** | 164–184 (165–183) |
+  | `DIVING SCORES DOUBLE` | **18** | 195–202 | 10–29 | | | |
+  | `PRESS FIRE` | **21** | 219–226 | 15–24 | | | |
+
+  - **Why:** as first built the sprites were at Y 119 / 135 / 151, 16 lines apart, and enemy art is
+    19 lines tall: each shared 3 lines with the next and the three read as one column. Text rows are
+    8 lines apart, so 2 rows (16) can't hold a 19-line enemy and 3 rows (24) can.
+  - **Sprite Y = 43 + 8 × its text row.** The art's 19 lines (Y + 2 to Y + 20) are centred on line
+    Y + 11 = 126 / 150 / 174: exactly the centre of the letters' 7 lines (the ROM's capitals and
+    digits use the top 7 of a cell's 8: 123–129, centre 126) and half a line above the cell's centre.
+  - **Nothing overlaps:** sprites 24 lines apart, so 3 empty lines between one sprite's cell and the
+    next and 5 between their art. The sprites are in columns 12–14 (X 120–143, art to 141); the
+    scores start at column 17 (X 160): 18 clear pixels. `SWARM` ends 17 lines above the first sprite
+    and `DIVING SCORES DOUBLE` starts 10 lines below the last.
+  - Three sprites, 24 lines apart: no multiplexer limit is near. X and the columns don't change, and
+    neither do the texts, the order they are drawn in or the blink.
+  - The star bands move with the rows ([the star rule](#text-cells-and-the-star-rule)).
+  - Checked by `check_design.py`, "Title".
 - **Game over:** `GAME OVER` on row 9 for 200 frames (a new press of fire skips it after 50), then
   the title. The high score is updated when GameOver starts.
 
@@ -648,7 +674,7 @@ says "replaces".
 
 | # | Rule | Why |
 |---|---|---|
-| 9 | **Entering the title** (power-on, and when GameOver ends): every sprite hidden, row 9's message erased, the three title enemies shown (X 120, Y 119 / 135 / 151, types A / B / C in their colours, swapping shape every 16 frames; they can't be hit), the six title texts written. The panel is left as the last game ended (its score and wave, no ship markers, `HI`); at power-on score 000000, `HI 005000`, `WAVE 01`, lives 0 and no markers. Stars twinkle; a sound still playing finishes. `PRESS FIRE` is shown when the title's frame count mod 64 is 0–31 and erased when 32–63, from frame 0. The title's drawing may be spread over its first 8 frames; **fire is read from frame 8** | The parked formation and any diver left from the game vanish at once: the title is a clean screen |
+| 9 | **Entering the title** (power-on, and when GameOver ends): every sprite hidden, row 9's message erased, the three title enemies shown (X 120, **Y 115 / 139 / 163**, types A / B / C in their colours, swapping shape every 16 frames; they can't be hit), the six title texts written. The panel is left as the last game ended (its score and wave, no ship markers, `HI`); at power-on score 000000, `HI 005000`, `WAVE 01`, lives 0 and no markers. Stars twinkle; a sound still playing finishes. `PRESS FIRE` is shown when the title's frame count mod 64 is 0–31 and erased when 32–63, from frame 0. The title's drawing may be spread over its first 8 frames; **fire is read from frame 8**. Rows and to-the-frame order: [as built](#stage-4-part-a-as-built) | The parked formation and any diver left from the game vanish at once: the title is a clean screen |
 | 10 | **A new press of fire** starts a game. In the frame of the press: the random numbers are seeded (rule 11), the start sound, the title's texts and sprites removed (the erase may take up to 8 frames: the next step waits for it). Then the **new game**, all in one frame, which is Intro's frame 0: score 0; lives 3 and 2 markers; shown wave 01, pattern 0, loop 0; no enemy shot, player shot or explosion; divers active 0 and every diver slot free; the ship at X 171, shown, invulnerability 0, **fire cooldown 25**; game state Play; all four panel fields redrawn; the high score kept | The cooldown: the press that started the game is still held, and without it the ship fires in its first frame. 25 frames is a held press let go |
 | 11 | **Seeding:** `rng_seed` with a frame counter that has run since power-on (its low byte) and the raster line read at the press (`$D012`), as `engine/rng.md` already says. Nothing else reseeds. Under `AUTOPLAY` a constant. The stars' table is fixed and doesn't use it | Which enemy dives is the only random thing in the game; a constant seed makes every game from power-on the same. A scripted test presses fire in the same frame every run, so it still repeats |
 | 12 | **"A new press"** everywhere (the title, skipping GameOver): fire down in this frame and up in the frame before. At power-on the frame before counts as down. So the press that skips GameOver can't start a game, and a button held through GameOver and the title starts nothing until it is let go | One rule for both screens; it is what stage 3's GameOver already does |
@@ -656,6 +682,31 @@ says "replaces".
 | 14 | **The high score** is as Stage 2 rule 5: compared and copied once, in GameOver's frame 0; the panel's `HI` changes then. It starts at 5,000, lasts until power-off, and nothing else marks a new high score | |
 
 **Sound** is in [Sound effects](#sound-effects): the table says the frame each effect starts in.
+
+### Stage 4 part A, as built
+
+Built as designed (rules 1–14 less sound): `check.py`, 106 cases, all pass
+([results](../../../tests/games/swarm/check_results.txt)). Where the rules were silent or could be
+read two ways the build chose; **all five confirmed, no behaviour change.** Every number here is
+**the value read at the frame's end** (what a monitor or a test sees after the frame's update), and
+"frame 0" of a state is the frame it is entered in.
+
+| # | As built | Verdict | Why |
+|---|---|---|---|
+| a | **Launch timer at Fight:** reads **50 at the end of Fight's frame 0**, 0 at the end of Fight's frame 50, and the launch is in that frame (the code stores 51 and the launcher counts it once in the same frame). Fight is Intro's frame 100, so the first launch is frame 150 of the wave | Confirmed | It is rule 3's "150 frames after the wave appears" and rule 8's d + 191 and d + 241 |
+| b | **Fire cooldown at a new game:** reads **25 at the end of the new game's frame 0**; no shot in frames 0–24; fire held, the first shot is in **frame 25** (the code stores 26, counted once that frame) | Confirmed | The same reading as Stage 1 rule 4: a cooldown of n read at a frame's end means the next shot n frames later. 25 whole frames of hold, as rule 10 meant |
+| c | **Title frame 0 is the frame the title is entered in:** at power-on the first frame shown; after GameOver, the frame after GameOver's last (GameOver's frame 200, or the frame after the skipping press). The frame count reads 0 at its end | Confirmed | One counter serves the drawing, the blink (count mod 64) and "fire is read from frame 8" |
+| d | **Drawing:** frame 0: the sprites and `PRESS FIRE`; frames 1–5: `SWARM`, `150 PTS`, ` 80 PTS`, ` 50 PTS`, `DIVING SCORES DOUBLE`, one a frame; frames 6 and 7: nothing; fire read from frame 8 | Confirmed | `PRESS FIRE` first so the blink is on in frames 0–31 as rule 9 says, with no special case. One text a frame is at most 20 cells |
+| e | **After a new press in frame p:** the three sprites hidden, the seed and (part B) the start sound in p; the six texts erased one a frame, `PRESS FIRE` in p and `DIVING SCORES DOUBLE` last in p + 5; **the new game (Intro's frame 0) is p + 6.** Fire isn't read in p + 1 to p + 5 | Confirmed | Inside rule 10's "up to 8 frames". 6 frames is 0.12 s: the press feels immediate, and the erase never writes more than 20 cells a frame |
+
+Also as built, from stage 3 and unchanged: **entering Play from Respawn** stores 50 and counts it in
+the same frame, so the launch timer reads **49 at the end of Play's frame 0** and the first launch
+is Play's frame 49, one frame sooner than at Fight (a). Left alone: it is what Simon played in
+stage 3, and one frame in 50 can't be felt. The same store is used at a new game, where (a)
+overwrites it at Fight before it can reach 0.
+
+**The one change after the build is the title's layout** (rows and sprite Y:
+[Title](#title-and-game-over-screens)), not its timing.
 
 ## Worst case per frame
 
@@ -898,7 +949,7 @@ the warning, deaths and the level of difficulty:
 
 | # | Question | Recommendation |
 |---|---|---|
-| 10 | The messages are now on row 9, between formation rows 1 and 2, 5 and 6 lines clear of them. Does `READY` / `WAVE nn` read well there, or does it look squeezed? | **Keep row 9:** it is the only place nothing but the player's own shot ever crosses. If it looks squeezed, `WAVE nn` and `READY` can go to row 16 in open sky (already a star band: nothing flies during either), with `GAME OVER` staying on row 9 because divers do fly during it |
+| 10 | The messages are now on row 9, between formation rows 1 and 2, 5 and 6 lines clear of them. Does `READY` / `WAVE nn` read well there, or does it look squeezed? | **Keep row 9:** it is the only place nothing but the player's own shot ever crosses. If it looks squeezed, `WAVE nn` and `READY` can go to row 18 in open sky (already a star band: nothing flies during either), with `GAME OVER` staying on row 9 because divers do fly during it |
 | 11 | Are waves 1 and 2 too gentle now that wave 3 is "quite easy"? | **Play stage 4 first.** If they drag: pattern 1 at loop 0, interval 150 to 120 and 1 diver to 2 |
 | 12 | Wave start and wave clear sounds on voice 3 so the player's shots are never silenced: agreed? | **Yes** |
 | 13 | A new game holds fire for 25 frames so the press that started it doesn't shoot. Right length? | **Yes, 25** (half a second, under `WAVE 01`, before anything can be hit that matters) |
