@@ -1,0 +1,21 @@
+release build, 13 effects, 40 steps; voices [0, 0, 2, 1, 1, 2, 2, 2, 0, 0, 0, 1, 2], priorities [1, 1, 1, 2, 3, 3, 2, 2, 3, 3, 1, 1, 1], lengths [8, 6, 30, 16, 60, 60, 30, 40, 10, 50, 40, 40, 40]
+[PASS] init: $D418 = $0f, $D415-$D417 = 00 00 00, pulse width low registers 0
+[PASS] alone: 13 effects, each to its end + 2 frames (469 frames); each idle and gate clear on tick N = its frames, not before
+[PASS] pairs: 59 ordered pairs on one voice, the second 3 ticks after the first ({'equal replaces': 25, 'higher replaces': 17, 'lower dropped': 17}), an effect on another voice running through each (3741 frames)
+[PASS] same-frame: 77 sets of two or three requests for one voice in one frame, every order: the highest priority starts, the later call on a tie (2944 frames)
+[PASS] end-frame: 81 cases: an equal or lower request on the tick before an effect's end, on its end tick N and on N + 1 (a lower one on tick N is dropped: the request is looked at first) (3996 frames)
+[PASS] triple: 3 frames with a start on every voice [(10, 11, 12), (0, 3, 2), (1, 4, 5, 0)]: 21 writes each, in order (139 frames)
+[PASS] random: 3000 frames, seed 20261002, 2462 requests, every frame equal to the model
+       play: nothing pending: 1827
+       play: pending equal or lower, replaced: 421
+       play: pending higher, kept: 214
+       tick: end: 75
+       tick: request dropped (lower than what is playing): 1053
+       tick: slide: 7170
+       tick: start: 77
+       tick: start (cutting an effect off): 697
+       tick: step change: 101
+       tick: three starts: 7
+[PASS] untouched: no write to the pulse width low registers or $D415-$D418 in 14289 frames (49142 register writes checked)
+
+ALL PASS (release build, 14289 frames, 49142 register writes compared)

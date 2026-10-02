@@ -1,0 +1,30 @@
+control (the module as it is): check.py exit 0: ALL PASS (DEBUG build, 14289 frames, 49142 register writes compared)
+control with room (a far jump for the tick's first branch, no fault): check.py exit 0: ALL PASS (DEBUG build, 14289 frames, 49142 register writes compared)
+equal-priority: the tick: an equal priority no longer replaces what is playing
+    KILLED (check.py exit 1): [FAIL] pairs: 0 then 0: frame 3 (requests [0]): writes differ.
+tie-first-wins: sfx_play: on a tie the earlier request is kept
+    KILLED (check.py exit 1): [FAIL] same-frame: (0, 1): frame 0 (requests [0, 1]): writes differ.
+lower-overwrites: sfx_play: a lower priority overwrites the pending request
+    KILLED (check.py exit 1): [FAIL] same-frame: (8, 0): frame 0 (requests [8, 0]): writes differ.
+no-control-0: a start leaves out the control-0 write (the registers end the tick the same)
+    KILLED (check.py exit 1): [FAIL] alone: effect 0: frame 0 (requests [0]): writes differ.
+write-order: a start writes sustain/release before attack/decay
+    KILLED (check.py exit 1): [FAIL] alone: effect 0: frame 0 (requests [0]): writes differ.
+one-tick-long: a step lasts one tick too many
+    KILLED (check.py exit 1): [FAIL] alone: effect 0: frame 8 (requests []): writes differ.
+gate-left-on: the end marker leaves the gate set
+    KILLED (check.py exit 1): [FAIL] alone: effect 0: frame 8 (requests []): writes differ.
+queued: a dropped request stays pending (queued) instead of being dropped
+    KILLED (check.py exit 1): [FAIL] pairs: 8 then 0: frame 3 (requests [0]): state differs: sfx_cur [9, 5, 0] (model [9, 5, 0]), sfx_request [1, 0, 0] (model [0, 0, 0])
+slide-high: the slide's high byte comes from the low table
+    KILLED (check.py exit 1): [FAIL] alone: effect 0: frame 1 (requests []): writes differ.
+slide-first-tick: the slide is already applied on a step's first tick
+    KILLED (check.py exit 1): [FAIL] alone: effect 2: frame 0 (requests [2]): writes differ.
+voice-2-skipped: voice 2 is never serviced (voice 1 twice)
+    KILLED (check.py exit 2): FAIL (jam/hang): the spike's voices never went idle
+shadow-only: DEBUG: a frequency write reaches the shadow but not the SID register ($D40F)
+    KILLED (check.py exit 1): [FAIL] alone: effect 0: frame 0 (requests [0]): sfx_shadow differs.
+volume-click: the tick rewrites $D418 every frame (same value: the registers look the same)
+    KILLED (check.py exit 1): [FAIL] alone: effect 0: frame 0 (requests [0]): writes differ.
+
+13 mutants, 13 killed

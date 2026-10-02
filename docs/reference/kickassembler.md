@@ -101,6 +101,24 @@ player wasn't pinned. No build message and no budget check sees it; a behaviour 
 line at the bottom of the cell (found in the same stage). Screen text takes capitals, digits and
 the punctuation of screen codes 32–63 only.
 
+**A `.const` can't be used before the line that defines it; a `.label` can** (checked with 5.25,
+M4 stage 4). `lda #SFX_START` above the effect data fails with "Reference to not yet defined
+symbol" if `SFX_START` is a `.const`, and assembles if it is a `.label`. So numbers that code
+imported earlier needs (effect numbers, table sizes) are `.label`s.
+
+**A macro can't define a symbol whose name is one of its arguments; a function can return the
+value for a `.label`.** `engine/sfx.asm` does this: `.label SFX_START = SfxEffect(0, 3, $09, $00, 4)`,
+where `SfxEffect` is a `.function` that adds the effect to assembly-time lists (`.eval list.add(…)`
+works inside a function, as inside a macro) and returns its index. `.error "text"` works inside a
+function (`.errorif` is for macros and the top level). The function runs once: the lists come out
+right with forward references elsewhere in the program.
+
+**`#import "engine/x.asm"` looks beside the importing file and in the working directory before
+the `-libdir`s.** A `-libdir` put first does not override a file that exists relative to where
+the assembler was started. `tests/engine/sfx/mutate.py` wanted to swap one engine file for a
+modified copy and got the original until it copied the importing files beside the copy and ran
+the assembler there.
+
 ## Assets at build time
 
 KickAssembler scripts can import data directly, so converters aren't always needed:

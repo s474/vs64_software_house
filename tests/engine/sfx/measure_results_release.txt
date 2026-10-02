@@ -1,0 +1,34 @@
+engine/sfx.asm in tests/engine/sfx: sfx.prg, release build. Raster cycles.
+Code 490 bytes (sfx_update 439, sfx_play 27, sfx_init 24), state 21; effect tables 319 bytes (13 effects, 40 steps).
+
+PHASES, 400 frames (spike_triple_count 6, irq_late_count None)
+  the tick: whole call (jsr sfx_update to the label after it) | profile span (sfx_update -> sfx_update_end)
+    spike_tick_idle    54 every pass (105)                        | 42 every pass (105)   lines 251-252
+    spike_tick_slide   189 every pass (195)                       | 177 every pass (195)   lines 251-254
+    spike_tick_start3  345 every pass (5)                         | 333 every pass (5)   lines 251-257
+    spike_tick_other   min 99, avg 109.3, max 191 (95 passes)     | min 87, avg 97.3, max 179 (95 passes)   lines 251-254
+      spike_tick_other's profile spans: {87: 80, 139: 10, 179: 5}
+    sfx_update -> sfx_update_end, every tick: min 42, avg 124.6, max 333 (400 passes)
+  sfx_play, top border: whole call | profile span (sfx_play -> sfx_play_end)
+    spike_play_take    34 every pass (25)                         | 22 every pass (25)   lines 19-21
+    spike_play_replace 49 every pass (5)                          | 37 every pass (5)   lines 20-20
+    spike_play_keep    37 every pass (5)                          | 25 every pass (5)   lines 20-20
+  the sound tick IRQ: spike_bottom -> irq_exit_rti, by the call site it took
+    spike_tick_idle    122 every pass (105)
+    spike_tick_slide   261 every pass (195)
+    spike_tick_start3  427 every pass (5)
+    spike_tick_other   min 172, avg 182.3, max 264 (95 passes)
+    every tick: min 122, avg 207.9, max 427 (400 passes)
+  spike_bottom starts on line 251-251, cycle 26-29; sfx_update starts on line 251-251; its rts is reached on line 252-257 (latest: line 257 cycle 3)
+
+DISPLAY, 256 frames: sfx_play called on lines 100-110 (badline 107: 43 cycles stolen), no sprites
+  whole call | profile span | start line
+    spike_disp_take      min 34, avg 36.7, max 77 (259 passes)    | min 22, avg 24.7, max 65 (259 passes)   lines 100-109
+      whole calls: {34: 243, 77: 16}
+    spike_disp_replace   min 49, avg 52.5, max 92 (259 passes)    | min 37, avg 38.3, max 80 (259 passes)   lines 100-110
+      whole calls: {49: 238, 90: 2, 92: 19}
+    spike_disp_keep      min 37, avg 42.3, max 80 (259 passes)    | min 25, avg 28.3, max 68 (259 passes)   lines 102-111
+      whole calls: {37: 227, 80: 32}
+  IRQs dispatched on lines 100-111 during the trace: 0 (the spans above hold no IRQ)
+
+OK
