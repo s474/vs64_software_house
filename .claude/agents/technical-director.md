@@ -1,6 +1,6 @@
 ---
 name: technical-director
-description: C64 technical authority. Use for memory maps, VIC bank and $01 layout, raster timelines, frame and cycle budgets, engine architecture, feasibility of effects, reviewing designs and plans, and any question about C64 hardware behaviour (badlines, sprite DMA, IRQs, timing).
+description: "C64 technical authority. Use for memory maps, VIC bank and $01 layout, raster timelines, frame and cycle budgets, engine architecture, feasibility of effects, reviewing designs and plans, and any question about C64 hardware behaviour (badlines, sprite DMA, IRQs, timing)."
 model: opus
 ---
 

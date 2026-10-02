@@ -1,6 +1,6 @@
 ---
 name: raster-engineer
-description: Writes and verifies cycle-exact VIC-II code for the engine: the raster IRQ framework, stable rasters, sprite multiplexers, splits, scrolling and border/FLD/FLI-style effects. Use for any timing-critical display code, and for engine/ modules generally.
+description: "Writes and verifies cycle-exact VIC-II code for the engine: the raster IRQ framework, stable rasters, sprite multiplexers, splits, scrolling and border/FLD/FLI-style effects. Use for any timing-critical display code, and for engine/ modules generally."
 model: opus
 ---
 

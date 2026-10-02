@@ -1,6 +1,6 @@
 ---
 name: qa-tester
-description: Plays and tests C64 builds in VICE through the MCP tools. Use for verifying features and fixes, regression passes, soak tests, and writing reproducible bug reports with screenshots and memory evidence. Does not fix game code.
+description: "Plays and tests C64 builds in VICE through the MCP tools. Use for verifying features and fixes, regression passes, soak tests, and writing reproducible bug reports with screenshots and memory evidence. Does not fix game code."
 model: sonnet
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: tools-engineer
-description: Builds the studio's tooling in Python and make: asset converters (PNG to sprites/charsets/bitmaps with C64 constraint checks), map and data tools, build targets, and test harnesses that drive VICE. Use for any tooling or pipeline work.
+description: "Builds the studio's tooling in Python and make: asset converters (PNG to sprites/charsets/bitmaps with C64 constraint checks), map and data tools, build targets, and test harnesses that drive VICE. Use for any tooling or pipeline work."
 model: sonnet
 ---
 

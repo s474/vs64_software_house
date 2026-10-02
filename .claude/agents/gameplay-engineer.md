@@ -1,6 +1,6 @@
 ---
 name: gameplay-engineer
-description: Implements C64 game features in 6502 assembly (KickAssembler): player control, enemies, collisions, scoring, game states and the main loop. Use for writing or fixing game code, and verifying it in VICE.
+description: "Implements C64 game features in 6502 assembly (KickAssembler): player control, enemies, collisions, scoring, game states and the main loop. Use for writing or fixing game code, and verifying it in VICE."
 model: inherit
 ---
 
