@@ -22,9 +22,9 @@
 .const TITLE_STEP_WAIT  = 8             // the first frame fire is read in (Stage 4 rule 9)
 .const TITLE_STEP_ERASE = 9
 .const TITLE_STEP_NEW   = TITLE_STEP_ERASE + TITLE_TEXTS
-.const TITLE_SPRITE_X   = 120           // the three title enemies: X 120, Y 119 / 135 / 151,
-.const TITLE_SPRITE_Y   = 119           // beside rows 9, 11 and 13's scores
-.const TITLE_SPRITE_DY  = 16
+.const TITLE_SPRITE_X   = 120           // the three title enemies: X 120, Y 115 / 139 / 163,
+.const TITLE_SPRITE_Y   = 115           // beside rows 9, 12 and 15's scores: Y = 43 + 8 x the row,
+.const TITLE_SPRITE_DY  = 24            // so the art is centred on the letters and 24 lines apart
 .const TITLE_BLINK      = 32            // PRESS FIRE: on for 32 frames, off for 32
 .const VIC_RASTER       = $d012         // read only here: writing it is the IRQ framework's
 

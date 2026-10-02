@@ -69,8 +69,8 @@ Cases (PASS/FAIL each, exit code 1 on any failure):
                against known ROM bytes, the three custom glyphs against one-pixel / ship shapes)
   panel        all 40 cells of row 24 hold a code in $40-$7F with white colour RAM; SCORE, HI and
                WAVE at the design's columns; 000000, 005000, 01; ships at 35-36, blank at 37
-  stars        exactly 48 star glyphs in rows 0-23, none in columns 10-29 of rows 5, 9, 11, 13,
-               16, 19 (the six text rows); every star's colour is one of white / light grey / grey / dark grey
+  stars        exactly 48 star glyphs in rows 0-23, none in columns 10-29 of rows 5, 9, 12, 15,
+               18, 21 (the six text rows); every star's colour is one of white / light grey / grey / dark grey
   twinkle      over 96 frames exactly one colour RAM cell changes each frame, always a star's,
                each star changes every 48 frames, stepping white > light grey > grey > dark grey
   idle         nothing pressed for 10 frames: X stays 171, no shot
@@ -214,7 +214,7 @@ SHOT_Y0, SHOT_SPEED, SHOT_KILL, COOLDOWN = 213, 8, 46, 10
 MUX_OFF = 0xFF
 SCREEN, COLOUR = 0x0400, 0xD800
 STAR_HI, STAR_LO, SHIP, SPACE, PANEL_BG = 27, 28, 29, 32, 0x40
-BAND_ROWS, BAND_COLS = {5, 9, 11, 13, 16, 19}, range(10, 30)
+BAND_ROWS, BAND_COLS = {5, 9, 12, 15, 18, 21}, range(10, 30)
 MSG_ROW = 9                     # WAVE nn, READY, GAME OVER (design "Text cells and the star rule"; row 12 until stage 4)
 ENEMY0, ENEMIES, COLS = 6, 18, 6
 FORM_X0, COL_DX, ROW_Y, FX_MAX, FX_START = 34, 36, [56, 96, 136], 96, 48
@@ -225,9 +225,9 @@ INTRO_FRAMES, INTRO_MSG_FRAMES = 100, 75
 ROW9_LINES = range(51 + 8 * MSG_ROW, 59 + 8 * MSG_ROW)     # raster lines 123-130
 GS_PLAY, GS_RESPAWN, GS_DYING, GS_OVER, GS_TITLE = 0, 1, 2, 3, 4
 # The title's texts in the order it draws them (text 0 in its frame 0, then one a frame): text, row, first column
-TITLE_TEXTS = [("PRESS FIRE", 19, 15), ("SWARM", 5, 17), ("150 PTS", 9, 17), (" 80 PTS", 11, 17), (" 50 PTS", 13, 17),
-               ("DIVING SCORES DOUBLE", 16, 10)]
-TITLE_FIRE_FRAME, TITLE_SPRITES, NEW_GAME_COOLDOWN = 8, [(120, 119), (120, 135), (120, 151)], 25
+TITLE_TEXTS = [("PRESS FIRE", 21, 15), ("SWARM", 5, 17), ("150 PTS", 9, 17), (" 80 PTS", 12, 17), (" 50 PTS", 15, 17),
+               ("DIVING SCORES DOUBLE", 18, 10)]
+TITLE_FIRE_FRAME, TITLE_SPRITES, NEW_GAME_COOLDOWN = 8, [(120, 115), (120, 139), (120, 163)], 25
 ENEMY_DEAD, ENEMY_EXPLODING, SHAPE_EXPLOSION, EXPLOSION_FRAMES, ORANGE = 0, 0x83, 0xC9, 16, 8
 FLIGHT = [18, 13, 8]            # frames from the fire frame to the first frame inside row 0 / 1 / 2's box
 ROW_SCORE = [150, 80, 50]
@@ -549,10 +549,10 @@ def main() -> int:
               and len(stars_now) == 48)
         rep("title", ok,
             f"power-on, frames 1-{PRESS - 1}: state Title, the frame count in zp_state_timer; SWARM on row 5 from frame 1, "
-            f"150 PTS / 80 PTS / 50 PTS on rows 9, 11, 13 from frames 2, 3, 4, DIVING SCORES DOUBLE on row 16 from frame 5 "
+            f"150 PTS / 80 PTS / 50 PTS on rows 9, 12, 15 from frames 2, 3, 4, DIVING SCORES DOUBLE on row 18 from frame 5 "
             f"(one text a frame; nothing else in the play area but the 48 stars, {len(under)} of them under a text); the "
-            f"only sprites are 6, 12, 18 at (120, 119 / 135 / 151) in purple / yellow / light green, shapes swapping "
-            f"every 16 frames; PRESS FIRE (row 19) changes at (frame, shown) {blink}: on 32, off 32; rng_next once a "
+            f"only sprites are 6, 12, 18 at (120, 115 / 139 / 163) in purple / yellow / light green, shapes swapping "
+            f"every 16 frames; PRESS FIRE (row 21) changes at (frame, shown) {blink}: on 32, off 32; rng_next once a "
             f"frame ({rng_bad} frames otherwise); panel '{power_on[0]}', lives {power_on[1]} (no markers); a tap of fire "
             f"in frame 3 and fire held from frame 6 to 139 started nothing; errors: {errs[:2] or 'none'}")
 

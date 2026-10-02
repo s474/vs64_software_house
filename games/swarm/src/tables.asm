@@ -35,15 +35,15 @@ colour_table:
 // ------------------------------------------------------------------------------------------
 // Stars: 48 fixed cells in rows 0-23, generated at assembly time from a fixed seed, so every
 // build has the same sky. The band rule (design.md "Text cells and the star rule"): no star in
-// columns 10-29 of rows 5, 9, 11, 13, 16 and 19 (the six text rows; row 12 left the list when the
-// messages moved to row 9), and no two stars in one cell. The generator
+// columns 10-29 of rows 5, 9, 12, 15, 18 and 21 (the six text rows: the title's layout of
+// 2026-10-02, every third row from 9), and no two stars in one cell. The generator
 // rejects such cells and draws again; the checks below run over the finished lists, so an edited
 // generator or a hand-made list can't break the rule silently.
 // Generator: the Lehmer sequence seed = (seed * 75 + 74) mod 65537 (exact in KickAssembler's
 // arithmetic); cell = seed mod 960, glyph = the next value's bit 3.
 .const STAR_SEED = 4711
 .var star_band_rows = Hashtable()
-.for (var r = 0; r < 6; r++) .eval star_band_rows.put(List().add(5, 9, 11, 13, 16, 19).get(r), true)
+.for (var r = 0; r < 6; r++) .eval star_band_rows.put(List().add(5, 9, 12, 15, 18, 21).get(r), true)
 
 .function StarCellAllowed(cell) {
         .var row = floor(cell / SCREEN_COLS)
@@ -289,12 +289,12 @@ panel_template:
 .const TEXT_COUNT      = 9
 .const TITLE_TEXTS     = 6
 .var text_list = List()         // (string, row, first column; -1 = centred)
-.eval text_list.add(List().add("PRESS FIRE", 19, -1))
+.eval text_list.add(List().add("PRESS FIRE", 21, -1))
 .eval text_list.add(List().add("SWARM", 5, -1))
 .eval text_list.add(List().add("150 PTS", 9, 17))
-.eval text_list.add(List().add(" 80 PTS", 11, 17))
-.eval text_list.add(List().add(" 50 PTS", 13, 17))
-.eval text_list.add(List().add("DIVING SCORES DOUBLE", 16, -1))
+.eval text_list.add(List().add(" 80 PTS", 12, 17))
+.eval text_list.add(List().add(" 50 PTS", 15, 17))
+.eval text_list.add(List().add("DIVING SCORES DOUBLE", 18, -1))
 .eval text_list.add(List().add("READY", MSG_ROW, -1))
 .eval text_list.add(List().add("GAME OVER", MSG_ROW, -1))
 .eval text_list.add(List().add("WAVE 00", MSG_ROW, -1))
