@@ -1,8 +1,9 @@
 # What a game needs from the engine
 
-A page and a half for a gameplay engineer starting a game on engine v1. **This is a guide, not a source of
-truth**: every figure is copied from [README.md](README.md) or a module contract
-([input.md](input.md), [rng.md](rng.md), [collision.md](collision.md), [sfx.md](sfx.md)), and if
+Two pages for a gameplay engineer starting a game on engine v1. **This is a guide, not a source of
+truth**: every figure is copied from [README.md](README.md), a module contract
+([input.md](input.md), [rng.md](rng.md), [collision.md](collision.md), [sfx.md](sfx.md)) or,
+where it says Swarm, [Swarm's memory map](../docs/games/swarm/memory-map.md), and if
 they disagree, they are right and this page gets fixed. Read the game's own
 `docs/games/<title>/memory-map.md` first; a worked example is `games/swarm/src/main.asm`.
 
@@ -25,8 +26,9 @@ BasicUpstart2(start)
         IrqChainEnd()
 ```
 
-`sfx.asm` is a contract only until the README's status table says otherwise. `collision.asm` needs
-a `col_pairs` label in the game (section 5).
+`sfx.asm` is a contract only until the README's status table says otherwise; when it exists, the
+`$fb` handler is `jsr sfx_update` and nothing else, and the main loop asks for sounds with
+`sfx_play` ([sfx.md](sfx.md)). `collision.asm` needs a `col_pairs` label in the game (section 5).
 Chain: 1–16 entries, ascending lines 0–255, each handler ends with `IrqDone()`; with the
 multiplexer, none before line 16 and none from there to `MUX_Y_MAX + 2` (`+ 3` when `MUX_Y_MAX` is
 243 or less): [Declaring the chain](README.md#declaring-the-chain), [Raster timeline](README.md#raster-timeline).
@@ -50,7 +52,7 @@ start:  ...                     // anything needing sei or a $01 write: here, be
         jsr mux_init            // hides all 24 sprites
         ...                     // write mux_flags once, all 24 entries
         jsr input_init
-        jsr rng_seed            // A = low, X = high
+        jsr rng_seed            // A = low, X = high. A constant here; see below
         jsr irq_init            // $01 = $35, chain running, interrupts on. Last
 main:   jsr irq_wait_frame      // A = frame number
 main_frame:
@@ -65,6 +67,15 @@ A DEBUG build replaces the last line with: compare `zp_irq_frame` with `zp_game_
 differ the frame overran (count it, `jmp main`); otherwise count idle-loop iterations until
 `zp_irq_frame` changes, then **`jmp main_frame`, not `main`**: the idle loop has already waited
 for the tick, and a second wait halves the frame rate. Copy Swarm's.
+
+- **Order the frame so that short, fixed work comes first**, in the top border (the tick is at
+  line 16, the first badline at 51, no sprite before line 30): input, panel, anything that
+  depends on nothing else. There its cost is its CPU count. Then the movers, then the collisions.
+- **Seed when the player starts, and step the generator while the title waits** (`jsr rng_next`
+  once a title frame). `$D012` read by main-loop code on a title screen is the same line every
+  frame (by count: the title does the same work each frame; Swarm measures it in stage 4), so
+  "frame counter and raster line" alone is about 256 different games
+  ([Swarm's rule](../docs/games/swarm/memory-map.md#stage-4-what-must-be-done-to-stay-in-budget), (d)).
 
 ## 4. Sprites: the multiplexer's arrays
 
@@ -126,6 +137,14 @@ col_pairs:                                   // the game's label; one row per pa
   (`ColPair` stops the build otherwise).
 - Budget the whole frame's calls with [the formula](collision.md#what-a-frame-of-calls-costs),
   then × 1.27 to 1.35 through the display. Swarm's 42 tests: 1,813, about 2,335 in the display.
+- **Objects that stand on a fixed grid don't need a scan.** Find the one cell the object is over
+  by arithmetic and test that candidate with the same box; keep the module for what moves freely.
+  Swarm's player shots against 18 parked enemies (**measured**, stage 3): the average frame went
+  from 938 to 434 and the worst sampled frame from 2,004 to 1,399.
+- **Changing the algorithm moves the worst frame: find it again from the new code's paths.**
+  Swarm's worst frame for the scan (2,836) read 1,846 after the change, but the lookup's own worst
+  frame, a diver in each shot's Y band, is 2,469, and in that frame the lookup is dearer than the
+  scan was ([the collision budget](../docs/games/swarm/memory-map.md#the-collision-budget)).
 
 ## 6. Rules that must not be broken
 
@@ -159,9 +178,20 @@ The four conditions engine v1 was measured under ([verdict](README.md#verdict-sa
 | `jsr collision_begin` / a target rejected / a target tested / `jsr collision_one` | 95 / 17 / 39 / up to 52 |
 | A chain entry of your own | 93 + its work |
 
-Budget the game against 7,200, sound included. Code that runs through the display costs about
-1.27 times its CPU count; a routine's profile span leaves out its `jsr` and `rts` (12):
+Budget the game against 7,200, sound included. A **long** routine (thousands of cycles) that runs
+through the display costs about 1.27 times its CPU count, up to 1.36 across a row of 8 sprites. A
+**short** one (up to a few hundred) doesn't scale: it either misses every badline or loses a whole
+one, so budget CPU + 43 + (2 × sprites + 3) for each line it touches, or better, run it in the
+border ([Swarm's table](../docs/games/swarm/memory-map.md#short-routines-in-the-display)). A
+routine's profile span leaves out its `jsr` and `rts` (12):
 [Which span a figure is](README.md#which-span-a-figure-is).
+
+**Frames that aren't frames of play.** A frame in which the state machine sets something up (a
+new game, a formation re-parked) can run thousands of cycles of set-up before the routines the
+border rows assume come first. Budget such a frame as a whole, not row by row, and only if
+nothing that makes a frame of play expensive can be in it; measure its idle time, not just its
+routines; and spread set-up that grows with the number of objects over several frames (Swarm:
+[one-off frames](../docs/games/swarm/memory-map.md#one-off-frames)).
 
 ## 8. Limits ([v1 limits](README.md#v1-limits))
 
@@ -184,6 +214,13 @@ Budget the game against 7,200, sound included. Code that runs through the displa
 - Stick-driven behaviour is checked by a script beside the budget file (Swarm:
   `tests/games/swarm/check.py`). `make test` runs it as a `script` check in the budget file
   (DEBUG build); run it by hand with `--prg` on the release build.
+- **A budget build in which nothing dies can't measure what dying costs**, and a scripted run
+  doesn't place a worst frame. Those are measured on the game's DEBUG build, with the state set
+  through the monitor, by a script beside the budget file whose output is committed (Swarm:
+  `tests/games/swarm/stage3_costs.py`).
+- **A sampled maximum of a routine that runs in the display is a look, not a bound**: it lands on
+  a different raster line every frame. Its limit is the counted worst case; a border routine's
+  sampled maximum is its maximum once the samples cover its own state's cycle.
 - A failing budget check is reported with the measured figure. Limits aren't edited to pass.
 - `"stage"` and `from_stage` are whole numbers: a stage built in parts can't switch on half its
   checks. Number a new game's stages in tens; Swarm's way round it is in its

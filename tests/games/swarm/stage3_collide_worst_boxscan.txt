@@ -1,0 +1,5 @@
+# uv run --package budget-runner python tests/games/swarm/stage3_collide_worst.py --prg /tmp/swarm_boxscan/build/swarm/swarm.prg   (the game at commit 039ad26, the box scan of all 18, built in a git worktree: the script's header has the commands; VICE 3.10 x64sc PAL, DEBUG, 2026-10-02)
+A  stage3_costs.py's placed worst frame (shots on enemies 0 and 6, 3 divers at Y 216, the last rams): 8 frames, min 2833, max 2836 raster cycles; started on lines 40-40, ended on 97-97; score 000000 -> 000330; divers active after: 2
+B  a diver in each shot's band, missed; 2 parked hits; the third diver rams: 8 frames, min 2592, max 2595 raster cycles; started on lines 40-40, ended on 95-95; score 000000 -> 000300; divers active after: 2
+C  a diver under each shot, over a parked enemy: 2 diver hits; the third diver rams: 8 frames, min 2125, max 2125 raster cycles; started on lines 40-40, ended on 74-74; score 000000 -> 000300; divers active after: 0
+after all of the above: game_overrun_count 0, mux_late_count 0, irq_late_count 0, mux_pin_drop_count 0 (all required 0)

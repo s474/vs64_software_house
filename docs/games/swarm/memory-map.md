@@ -5,7 +5,10 @@ and the engine README on 2026-10-02: panel decided, character set, colour and st
 measured costs, the panel budget decision and the main loop as built added the same day, then
 stage 2's: the collision budget raised from measurement, [Stage 2 part A, measured](#stage-2-part-a-measured);
 then the stage 3 budget decisions: [Stage 2 part B, measured](#stage-2-part-b-measured), `stars_update`
-moved, rows 3, 4 and 10 re-set, [Stage 3: what the gameplay-engineer must do](#stage-3-what-the-gameplay-engineer-must-do-to-stay-in-budget)) for the approved
+moved, rows 3, 4 and 10 re-set, [Stage 3: what the gameplay-engineer must do](#stage-3-what-the-gameplay-engineer-must-do-to-stay-in-budget);
+then, after stage 3 was built: [Stage 3, measured](#stage-3-measured), the collision budget for the
+grid lookup as built, the ruling on [one-off frames](#one-off-frames), the zero page as built, the
+budget table re-set, and [Stage 4: what must be done](#stage-4-what-must-be-done-to-stay-in-budget)) for the approved
 [game design](design.md) and the [M4 brief](../../milestones/M4-training-game.md). The
 gameplay-engineer builds to this page; changing the layout means changing this page in the same
 commit ([coding standards](../../standards/coding-standards.md#memory)).
@@ -23,23 +26,35 @@ replaces it with a measurement at the stage named.
 ## Verdict
 
 **The approved design fits the machine and engine v1.** The one correction this page asked for
-(the panel's colours) is decided and in the design: [The panel](#the-panel). Budgeted game logic and sound: **6,575** raster cycles a frame against the engine's promise
+(the panel's colours) is decided and in the design: [The panel](#the-panel). Budgeted game logic and sound: **6,550** raster cycles a frame against the engine's promise
 of **7,200** ([engine/README.md](../../../engine/README.md#the-v1-promise-and-its-one-exception),
-**measured**): **625 of headroom (8.7%)**. It was 6,265 and 935 until the collision module was
-**measured** in stage 2: its 42 tests cost more than counted and row 8 rose by 350
-([The collision budget](#the-collision-budget)), which made 6,615 and 585; the stage 3 decisions
-(2026-10-02) raised row 3 by 90 and lowered rows 4 and 10 by 130 between them
-([Short routines in the display](#short-routines-in-the-display)). In a normal frame
-the game has about 11,600 available, so the headroom there is about 5,000. The one place the
-budget no longer fits is the engine's excepted case (about 6,400 left), which the model says this
-design doesn't reach: [Risks](#risks-in-order), item 1. Stage 1's routines and stage 2's formation
-are **measured** and inside their rows ([Stage 1, measured](#stage-1-measured),
-[Stage 2 part A, measured](#stage-2-part-a-measured),
-[Stage 2 part B, measured](#stage-2-part-b-measured)) with one exception, `stars_update`, which met
-a badline after the collisions (129 against 100) and moves back to the border. Almost everything
-measured so far ran above the display's first badline, so the display allowance for long routines
-is tested only by the collision spike (× 1.23–1.29 **measured** against the 1.27 assumed).
-**The stage 3 design fits**: [Does stage 3 fit?](#does-stage-3-fit-yes-by-count).
+**measured**): **650 of headroom (9.0%)**. History of the two figures: 6,265 and 935 at stage 0;
+6,615 and 585 when the collision module was **measured** in stage 2 (row 8 + 350:
+[The collision budget](#the-collision-budget)); 6,575 and 625 after the stage 3 decisions
+([Short routines in the display](#short-routines-in-the-display)); 6,550 and 650 now, with stage 3
+built and **measured**: the separate row for `sfx_play` calls (100) is gone, each call being inside
+its caller's row, and row 3 rose by 75 for the one that has no room.
+
+**Stage 3 as built is measured and fits with room** ([Stage 3, measured](#stage-3-measured)): in
+the `AUTOPLAY` worst case (wave 12, nothing dies) `game_update` is at most **3,455** of its 6,050,
+the worst frame has **6,288** cycles idle (floor 650), 9.6% of frames flicker (the model said
+10.5%), nothing is missing two frames running, and no frame overran. Every row of the budget now
+rests on a measurement except row 1 (*counted*) and the sound (stage 4, *estimate*). Two things the
+measurements changed:
+
+- **`collide_update` is the grid lookup, not the box scan** (the fallback's trigger fired at
+  2,833–2,836 against 2,825). Its own worst frame is **2,469**, not the 1,846 first reported: the
+  frame placed for the box scan isn't the lookup's worst
+  ([The collision budget](#the-collision-budget)). Row 8 stays 2,825: 2,600 for the collisions as
+  built and 225 for stage 4's three `sfx_play` calls there.
+- **Two one-off frames run `formation_update` below the first badline** (a formation's return, a
+  new game). Accepted, on conditions: [One-off frames](#one-off-frames).
+
+In a normal frame the game has about 11,600 available. The one place the budget doesn't fit is the
+engine's excepted case (about 6,400 left: **150 short**, it was 175), which this design doesn't
+reach: the worst `mux_update` **measured** in Swarm's worst case is 8,142 against the 12,342 that
+case comes from ([Risks](#risks-in-order), item 3).
+**The stage 4 design fits by count**: [Stage 4](#stage-4-what-must-be-done-to-stay-in-budget).
 
 ## Configuration
 
@@ -133,12 +148,12 @@ against the next block's start.
 | `$0400–$07E7` | Screen: play area rows 0–23, panel row 24 | 1,000 B | Game (panel, stars, messages) |
 | `$07F8–$07FF` | Sprite pointers | 8 B | Multiplexer only |
 | `$0801–$080F` | BASIC upstart | | |
-| `$0810–$27FF` | **Engine block**: `irq.asm`, `multiplexer.asm` (+ `multiplexer_flicker.asm`), `input.asm`, `rng.asm`, `collision.asm`, `sfx.asm`, then the chain tables | 8,176 B reserved. IRQ + multiplexer: **6,045 measured** (DEBUG, [README](../../../engine/README.md#zero-page)); the four new modules: about 720 (sfx 500 *estimate*; collision 148 with 150 reserved, input 32 and rng 37 are **measured**) | raster-engineer |
+| `$0810–$27FF` | **Engine block**: `irq.asm`, `multiplexer.asm` (+ `multiplexer_flicker.asm`), `input.asm`, `rng.asm`, `collision.asm`, `sfx.asm`, then the chain tables | 8,176 B reserved. **6,293 measured** in the stage 3 DEBUG build (`$0810–$20A4`, the chain tables included; each module's own size is in the [README](../../../engine/README.md)); + `sfx.asm` about 600 (*estimate*, [engine/sfx.md](../../../engine/sfx.md#cycle-budget)): about 1,280 spare | raster-engineer |
 | `$2800–$29FF` | Charset: 64 glyphs ([above](#character-set)). Copied from the character ROM at init (`$01=$33`, interrupts off, **before** `irq_init`), then codes 27–29 patched: star high, star low, ship | 512 B (zeros in the PRG) | Game init |
 | `$2A00–$2FFF` | Unused: the rest of the charset slot. In ECM the VIC-II never fetches a glyph above code 63, so nothing is shown from here. Kept empty | 1,536 B | |
 | `$3000–$37FF` | Sprite shapes, pointers `$C0–$DF`. 13 used (`$C0–$CC`, `$3000–$333F`) from `png2sprites`; 19 spare for art changes | 2 KB | tools-engineer (art), game |
-| `$3800–$3FFF` | Game tables ([below](#game-tables)): colour table at `$3800`, then stars, glyphs, collision pairs, column X, dive paths, waves, strings, sound effect data | 2 KB reserved, about 840 *estimate* | gameplay-engineer |
-| `$4000–$5FFF` | Game code and variables (per-enemy arrays: 18 × about 10 B) | 8 KB reserved, 4–5 KB *estimate* | gameplay-engineer |
+| `$3800–$3FFF` | Game tables ([below](#game-tables)): colour table at `$3800`, then stars, glyphs, collision pairs, column X, dive paths, waves, strings, sound effect data | 2 KB reserved. **941 measured** at stage 3 (`$3800–$3BAC`); + waves, the title's strings and the sound data in stage 4: about 1,350 (*estimate*) | gameplay-engineer |
+| `$4000–$5FFF` | Game code and variables (per-enemy arrays: 18 × about 10 B) | 8 KB reserved. **4,054 measured** at stage 3 (`$4000–$4FD5`, DEBUG); about 5 KB with stage 4 (*estimate*) | gameplay-engineer |
 | `$6000–$CFFF` | Free | 28 KB | |
 | `$D000–$DFFF` | I/O. Colour RAM `$D800–$DBE7`: star colours, panel text colour | | Game |
 | `$FFFA–$FFFF` | NMI / RESET / IRQ vectors (RAM under the KERNAL) | 6 B | IRQ framework only |
@@ -166,8 +181,8 @@ labels find them.
 | Dive paths and fire steps | | about 75 B | [Below](#dive-paths-as-data) |
 | Wave tables | | about 40 B | |
 | Strings | | about 150 B | 81 characters in 11 texts, with row, column and length; codes 0–63 |
-| Sound effect data | | about 350 B | [engine/sfx.md](../../../engine/sfx.md) |
-| **Total** | | **about 840 of 2,048** (*estimate*) | |
+| Sound effect data | `sfx_*` tables | about 280 B | [engine/sfx.md](../../../engine/sfx.md#data-the-game-provides): tables by effect and by step, not a byte stream |
+| **Total** | | **941 measured** at stage 3 (the dive paths are two mirrored copies); **about 1,350 of 2,048** with stage 4's waves, title strings and sound (*estimate*) | |
 
 **Colour table.** Every colour the game writes comes from `colour_table`, indexed by a `COL_*`
 constant: no colour number appears anywhere else in the code. It is the code's copy of the design's
@@ -199,9 +214,11 @@ screen, `$D800` for colour RAM), `star_glyph` is `GLYPH_STAR_HI` or `GLYPH_STAR_
   fixed seed, so every build and screenshot has the same sky and init has nothing to compute.
 - It is built under the design's **band rule**
   ([Text cells and the star rule](design.md#text-cells-and-the-star-rule)): rows 0–23 only, **no
-  star in columns 10–29 of rows 5, 9, 11, 12, 13, 16 and 19**, and no two stars in one cell. The
-  generator rejects such cells and draws again, and an `.errorif` over the finished table checks
-  all three conditions, so a hand-edited table can't break the rule silently.
+  star in columns 10–29 of any text row** (the design's list of rows is the only copy: seven rows
+  when stage 3 was built, six since the messages moved off the row the formation covers), and no
+  two stars in one cell. The generator rejects such cells and draws again, and an `.errorif` over
+  the finished table checks all three conditions, so a hand-edited table can't break the rule
+  silently.
 - What the rule buys, and the code relies on: text is written and erased with spaces without
   consulting the star table, and the twinkle's one colour RAM write a frame
   (`stars_update`, budget row 10) never lands on a letter. If the band list changes in the design,
@@ -239,8 +256,8 @@ All 24 virtual sprites and all 4 pins are used (the design's split, confirmed).
 
 ## Zero page
 
-`games/swarm/src/zp.asm` declares all of it. Addresses of the engine labels are the README's
-suggested ones; the game's are ranges by owner, and the gameplay-engineer names the bytes.
+`games/swarm/src/zp.asm` declares all of it, and this table is that file **as built at stage 3**
+(commit d5586da). Addresses of the engine labels are the README's suggested ones.
 
 | Range | Name(s) | Owner | Notes |
 |---|---|---|---|
@@ -253,18 +270,33 @@ suggested ones; the game's are ranges by owner, and the gameplay-engineer names 
 | `$10` | `zp_joy` | `input.asm`, main loop | Stick state this frame ([engine/input.md](../../../engine/input.md)) |
 | `$11` | `zp_joy_pressed` | `input.asm`, main loop | Bits that went from up to down this frame |
 | `$12–$13` | `zp_rng_lo`, `zp_rng_hi` | `rng.asm`, main loop | Generator state ([engine/rng.md](../../../engine/rng.md)) |
-| `$14–$15` | `zp_sfx_ptr` | `sfx.asm`, **IRQ only** (`sfx_update`) | Pointer into the effect data. The main loop never touches it |
+| `$14–$15` | `zp_sfx_ptr` | Reserved for `sfx.asm`, **IRQ only** | The stage 4 contract's design needs no pointer ([engine/sfx.md](../../../engine/sfx.md#zero-page)); the two bytes stay the module's until it is built and measured. The main loop never touches them |
 | `$16–$17` | reserved for the engine | | |
-| `$18–$1F` | Main loop and state machine: `zp_game_frame` (the value `irq_wait_frame` returned), `zp_game_state`, `zp_state_timer` (2), `zp_idle_lo`, `zp_idle_hi`, `game_idle_min` (2, DEBUG) | Game core | [Labels the game must provide](#labels-the-game-must-provide) |
-| `$20–$2F` | Player, shots, formation: player X (2), cooldown, invulnerability timer, lives, `fx`, drift direction, launch timer, divers active, enemies alive, wave, loop | Game | **`zp_wave` is BCD** (`$01`–`$99`, the number as shown), like `game_score` and `game_hiscore` (3 bytes each, most significant first): the panel prints nibbles. Code that needs the wave as an index (pattern, loop) uses `zp_loop` and its own binary counter, not `zp_wave` |
-| `$30–$3F` | Pointers and per-call scratch for game routines (path pointer, screen pointer, star index) | Game | |
-| `$40–$FF` | Free | | Per-object arrays (18 enemies, 5 shots) are absolute, not zero page |
+| `$18` | `zp_game_frame` | Game core | The value `irq_wait_frame` returned for the frame being worked on |
+| `$19` | `zp_game_state` | Game core | `GAME_STATE_*`: Play 0, Respawn 1, PlayerDying 2, GameOver 3; stage 4 adds Title |
+| `$1A` | `zp_state_timer` | Game core | **One byte, counting up**: frames the state has run, 0 in its first frame, stopping at 255; not counted in Play. (Stage 0 planned two bytes counting down.) Stage 4: the title's blink needs a count that wraps, so in Title it wraps or the blink uses `zp_game_frame` |
+| `$1B` | `zp_clear_timer` | Game core | Frames left of the pause after the last explosion (0 = none), whatever the game state. Until stage 3 this was the timer's second byte. **Stage 4: this byte is the wave phase's timer** (the engineer renames it) |
+| `$1C–$1D` | `zp_idle_lo`, `zp_idle_hi` | Main loop, DEBUG | Idle-loop iterations this frame |
+| `$1E–$1F` | `game_idle_min` (2) | Main loop, DEBUG | Fewest idle iterations in a frame: [Labels the game must provide](#labels-the-game-must-provide) |
+| `$20–$21` | `zp_player_x_lo`, `zp_player_x_hi` | Player | X 24–318, bit 8 in bit 0 of the high byte |
+| `$22–$24` | `zp_player_cooldown`, `zp_player_invuln`, `zp_lives` | Player | Frames until the next shot; invulnerable frames left; lives, the ship in play included |
+| `$25–$26` | `zp_fx`, `zp_drift_dir` | Formation | Drift offset 0–96; 1 or `$FF` |
+| `$27–$28` | `zp_launch_timer`, `zp_divers_active` | Divers | |
+| `$29` | `zp_enemies_alive` | Formation | Every enemy that isn't Dead, an exploding one included |
+| `$2A` | `zp_wave` | Game core | **BCD** (`$01`–`$99`, the number as shown), like `game_score` and `game_hiscore` (3 bytes each, most significant first, absolute): the panel prints nibbles |
+| `$2B` | `zp_loop` | Game core | Difficulty loop 0–3: a store, read wherever a loop changes something. Counted from stage 4, never derived from `zp_wave` |
+| `$2C–$2E` | `zp_drift_timer`, `zp_anim_timer`, `zp_anim_frame` | Formation | |
+| `$2F` | `zp_pattern` | Game core | Wave pattern index 0–2: a store, as `zp_loop`. It took the last free byte of this block in stage 3 |
+| `$30–$32` | `zp_star_ptr` (2), `zp_star_idx` | Stars | Colour RAM cell of the star being twinkled; its index 0–47 |
+| `$33` | free: **stage 4's wave phase** (`zp_wave_phase`: Intro, Fight, Clear) | Game core | The design's second state machine ([Game flow](design.md#game-flow)); its timer is `$1B` |
+| `$34–$3F` | Free for the game | | 12 bytes. Nothing in stage 4's plan needs more than `$33` |
+| `$40–$FF` | Free | | Per-object arrays (18 enemies, 5 shots, 3 diver slots, 4 explosion slots) are absolute, not zero page |
 
 **Sharing rules.** The only bytes shared between IRQs and the main loop are the three marked
 above, all the engine's, all one byte. The game's one IRQ handler (`game_irq_bottom`) calls
 `sfx_update` and nothing else; `sfx.asm`'s request bytes are the only game-side data that cross
-(one byte per voice, written by the main loop, consumed by the IRQ:
-[engine/sfx.md](../../../engine/sfx.md)). No multi-byte value is shared.
+(one byte per voice, absolute, written by the main loop, consumed by the IRQ:
+[engine/sfx.md](../../../engine/sfx.md#zero-page)). No multi-byte value is shared.
 
 ## Raster timeline (PAL, 312 lines)
 
@@ -290,7 +322,7 @@ flowchart TB
 | 16 (`$10`) | `mux_irq_top`, entry 0, `IrqNormal` | Frame tick, swap, slots 0–7 | 378 / 381 / 393 + 32 before it + 6 `rti` (**measured**, README) | Border: no DMA |
 | ≈ 31–221, dynamic | `mux_irq_zone`, re-armed | Slots 8–23 | ≤ 2,950 an IRQ (**measured** max 2,763) + 30 framework | Engine's |
 | 77–79, some frames | `mux_irq_park`, re-armed | Disable hardware sprites whose last slot is at Y ≤ 55 (a Plunge rising to Y 50, a wrap re-entering from Y 30) | 80 + 30 (**measured**) | Engine's |
-| 251 (`$FB`) | `game_irq_bottom`, entry 1, `IrqNormal` | `jsr sfx_update`, `IrqDone()` | 93 framework (**measured**) + 6 `jsr` + `sfx_update` ≤ 500 (*estimate*, [engine/sfx.md](../../../engine/sfx.md)) | Lines 251–311 and 0–15: 77 lines, 4,851 cycles, no DMA |
+| 251 (`$FB`) | `game_irq_bottom`, entry 1, `IrqNormal` | `jsr sfx_update`, `IrqDone()` | 93 framework (**measured**; all it costs until stage 4) + the whole call of `sfx_update` ≤ 500 (*estimate*, [engine/sfx.md](../../../engine/sfx.md#cycle-budget)) | Lines 251–311 and 0–15: 77 lines, 4,851 cycles, no DMA |
 
 Why these lines:
 
@@ -324,28 +356,36 @@ in flight, 2 enemy hits and a launch in the same frame, 4 enemy explosions runni
 Rows are in the table's old order; the order they run in is [Order of the frame](#order-of-the-frame).
 "Border" = the routine runs above the first badline (line 51), so its figure is CPU cycles plus at
 most a wrapped diver's sprite fetches; "display" = it runs among badlines and the formation's sprites.
+**Re-set 2026-10-02 from stage 3's measurements** ([Stage 3, measured](#stage-3-measured)); the
+"Basis" column says what each row now rests on.
 
-| # | Subsystem | Budget (raster) | CPU count behind it | Check in `budget.json` (labels), from stage |
-|---|---|---|---|---|
-| 1 | Main loop, state machine, timers | 150 | 100 | part of `game_update` |
-| 2 | Input (`jsr input_read`, the whole call) | **40**, **measured** | 40: `jsr` 6 + 28 + `rts` 6 ([engine/input.md](../../../engine/input.md#cycle-budget)). No DMA allowance: see below | `tests/engine/input` (locks the 28); part of `game_update` |
-| 3 | Player: move, clamp, cooldown, fire, flash, explosion timer. **Display**, after the collisions: the one short routine there | **290**, *counted* | 150: **measured 122** moving and firing + 28 *counted* for stage 3's respawn flash. + a badline (43) + 8 sprites on each of 5 lines (95) = 288: [Short routines](#short-routines-in-the-display). Was 200 (150 × 1.27 = 190, which a badline alone breaks) | `player_update`, 1 |
-| 4 | Player shots (2): move, remove. **Border** | **60**, **measured** | **43 measured**, + 5%, + 3 wrapped divers' fetches on its one line (52 *counted*). Was 150 | `pshot_update`, 1 |
-| 5 | Formation: drift, 18 home X (9 bits), animation frame, 4 explosion slots. **Border**. The wind-up wobble is row 6's | 750 | 627: **measured 437** (turn and swap in one frame) + 190 *counted* for the slots (3 ending at 53, 1 animating at 31); **measured 538** with 4 animating then ending together. + 3 wrapped divers' fetches: 735. [Row 5](#row-5-the-formation-and-its-explosions) | `formation_update`, 2 |
-| 6 | Divers (3): 2 path steps each (about 90 a step), return, shot spawn; the wind-up wobble and flash of the one enemy that can be winding up (about 90, in place of its path steps); the launcher's pick and scan of 18 on a launch frame (about 300, of which at most 2 `rng_next` calls: 84, **measured**). Border into the first enemy row | 1,350 | 1,050 | `diver_update`, 3 |
-| 7 | Enemy shots (3): move, remove. **Border** (called with `pshot_update`) | 200 | 150; with 3 wrapped divers' fetches 177 *counted* | `eshot_update`, 3 |
-| 8 | Collisions: 42 box tests (**2,450**: the spike's **measured** 2,335 through the display + 5%) and the responses to 2 enemy hits or a player hit: state, score add, explosion start (375, *estimate*) | **2,825** | **1,813 measured** (`spike_mix`) + 295. Was 2,475 on a count of 1,641: [The collision budget](#the-collision-budget) | `collide_update`, 2 |
-| 9 | Panel, **in a frame of play**: redraw score, lives and wave. The four-field redraw is exempt: [The panel's budget](#the-panels-budget) | 250 | 200 (**measured** 231, no DMA) | `panel_update`, 1 |
-| 10 | Star twinkle: one colour RAM write. **Border**, straight after the panel: no DMA at all | **60**, **measured** | **57 measured** there (stages 1 and 2A), + 5%. Was 100, and **129 measured** when it ran after the collisions (part B) | `stars_update`, 1 |
-| 11 | Sound: `sfx_play` calls from the main loop (up to 3) | 100 | 75 | inside the routines that call it |
-| | **Main loop, `game_update` in all** | **6,075** | | `game_update`, 1 |
-| 12 | Sound tick in `game_irq_bottom` (IRQ time, no DMA): three effects starting in one frame | 500 | 500 | `game_irq_bottom`, 4 |
-| | **Game logic and sound in all** | **6,575** | | |
-| | **Engine's promise** | 7,200 | | |
-| | **Headroom** | **625 (8.7%)** | | `game_idle_min` × 16 ≥ 625, 1 |
+| # | Subsystem | Budget (raster) | **Measured**, stage 3 (DEBUG) | Basis of the budget | Check in `budget.json` (labels), from stage |
+|---|---|---|---|---|---|
+| 1 | Main loop, state machine, timers | 150 | Not on its own: it is what `game_update` has outside the routines' spans | *Counted*: the ten routines' `jsr` and `rts` (120) + `game_state_update` in a frame of play (12–24). A state change's own work is a [one-off frame](#one-off-frames)'s | part of `game_update` |
+| 2 | Input (`jsr input_read`, the whole call) | **40** | **40** (28 in the profile span) | **Measured**, a lock ([engine/input.md](../../../engine/input.md#cycle-budget)) | `tests/engine/input`; part of `game_update` |
+| 3 | Player: move, clamp, cooldown, fire, flash, explosion timer; from stage 4 one `sfx_play` when it fires. **Display**, after the collisions: the one short routine there | **365** | **248–260** max in `AUTOPLAY` (the flash and a shot in the same frame, lines 43–86); 129–148 in the game; 46 dying, 16–33 hidden | 290 *counted* (150 CPU + a badline 43 + 8 sprites on each of 5 lines 95 = 288; the sampled 260 is inside it) **+ 75** for the `sfx_play` (*estimate*: 55 CPU more makes the count 362). [Short routines](#short-routines-in-the-display) | `player_update`, 1 |
+| 4 | Player shots (2): move, remove. **Border** | **60** | **43** | **Measured** + 5% + 3 wrapped divers' fetches (52 *counted*) | `pshot_update`, 1 |
+| 5 | Formation: drift, 18 home X (9 bits), animation frame, 4 explosion slots. **Border**. From stage 4 the wave-clear bonus and its sound, in the frame the last explosion ends | **750** | **616–620**: 3 explosions ending + 1 animating on a turn-and-swap frame, placed in the game (counted 627), no DMA. 475–495 max in `AUTOPLAY`, divers out | **Measured** 620 + 3 wrapped divers' fetches = 735 *counted*. The stage 4 frame is about 720 *counted* (no diver exists then): [Stage 4](#stage-4-what-must-be-done-to-stay-in-budget) | `formation_update`, 2 |
+| 6 | Divers (3): path steps, return, shot spawn, the wind-up of the one that can be winding up, the launcher (at most 2 `rng_next`). From stage 4 up to 3 `sfx_play` (a dive, enemy shots). Border into the first enemy row | **1,350** | **972–978** max in `AUTOPLAY` (lines 36–57); **688** for the launcher's longest scan with both `rng_next` calls, placed | **Measured** 978 + 5% = 1,030, + 210 for three `sfx_play` at 70 (*estimate*) = 1,240: **110 spare**. Kept as a ceiling: the sampled maximum of a routine that reaches the display isn't its worst case | `diver_update`, 3 |
+| 7 | Enemy shots (3): move, remove. **Border** (called with `pshot_update`) | **200** | **162–169** max in `AUTOPLAY` (lines 29–33) | **Measured** 169 + 5% = 178, *counted* 177 with 3 wrapped divers on every line. 22 spare | `eshot_update`, 3 |
+| 8 | Collisions, as built: the grid lookup for parked enemies, the box test for divers in a shot's Y band, the player's two guarded scans, and the answers to 3 enemy hits and the player's. From stage 4 at most 3 `sfx_play`. **Display** | **2,825** | **2,464–2,469**: the lookup's own worst frame, placed in the game, lines 40–90. 1,846 in the frame placed for the box scan; 1,399–1,489 max in `AUTOPLAY` | **Measured** 2,469 + 5% = **2,600**, + **225** for three `sfx_play` at 75 (*estimate*). [The collision budget](#the-collision-budget) | `collide_update`, 2 |
+| 9 | Panel, **in a frame of play**: redraw score, lives and wave. The four-field redraw is exempt: [The panel's budget](#the-panels-budget) | **250** | **231** in every `AUTOPLAY` frame (lines 24–28) | **Measured** + 5% = 243 | `panel_update`, 1 |
+| 10 | Star twinkle: one colour RAM write. **Border**, straight after the panel: no DMA at all | **60** | **56–57** (lines 28–29) | **Measured** + 5% | `stars_update`, 1 |
+| 11 | Sound requests from the main loop (`sfx_play`, stage 4) | **0**: no row of its own | – | Every call is inside its caller's row: 1, 3, 5, 6 or 8. It was 100 for "up to 3 calls", which neither said where they were nor covered the 6 a frame can have: [Stage 4](#stage-4-what-must-be-done-to-stay-in-budget) (a) | inside the routines that call it; `sfx_play`, 4 |
+| | **Main loop, `game_update` in all** | **6,050** | **3,448–3,455** max in `AUTOPLAY` (average 2,066); one-off frames 2,875–3,713 | The sum of the rows: simultaneous worst cases that can't all fall in one frame | `game_update`, 1 |
+| 12 | Sound tick in `game_irq_bottom` (IRQ time, no DMA): the whole call of `sfx_update`, three effects starting in one frame | **500** | Not built (stage 4). The entry's 93 of framework is the engine's and already in every figure | *Estimate*: 468 *counted* from the contract's design ([engine/sfx.md](../../../engine/sfx.md#cycle-budget)) | `game_irq_bottom` and `sfx_update`, 4 |
+| | **Game logic and sound in all** | **6,550** | | | |
+| | **Engine's promise** | 7,200 | **Measured** left for the game in Swarm's own worst frames: at least 8,782 (19,656 − IRQs 2,732 − `mux_update` 8,142) | | |
+| | **Headroom** | **650 (9.0%)** | Idle in the worst `AUTOPLAY` frame: **6,288** | | `game_idle_min` × 16 ≥ 650, 1 |
 
-What changed on 2026-10-02 for stage 3 (the totals were 6,115 / 6,615 / 585): row 3 + 90, row 4
-− 90, row 10 − 40: **40 back to the headroom**. Rows 5, 6, 7, 8 and 9 are unchanged.
+What changed on 2026-10-02 after stage 3 (the totals were 6,075 / 6,575 / 625): row 11 − 100 (gone:
+each `sfx_play` is in its caller's row), row 3 + 75 (the only caller whose row had no room for
+one): **25 back to the headroom**. Row 8 is unchanged in size and changed in what it is made of.
+Rows 5, 6 and 7 are unchanged and are now ceilings over a measurement; none is lowered to its
+measurement, for the reason in row 6: a sampled maximum of code that runs through the display is
+a look, not a bound, and the margin they hold (15, 110 and 22) is what stage 4's sound and waves
+are counted to need. The stage 3 decisions before it (6,115 / 6,615 / 585 → 6,075 / 6,575 / 625):
+row 3 + 90, row 4 − 90, row 10 − 40.
 
 **Measured rows** (2026-10-02, M4 stage 1; the span convention is
 [engine/README.md](../../../engine/README.md#which-span-a-figure-is)):
@@ -363,10 +403,12 @@ What changed on 2026-10-02 for stage 3 (the totals were 6,115 / 6,615 / 585): ro
   index to the next parked enemy, or try again next frame): an unbounded retry loop has no worst
   case to budget. Row 6 is unchanged: its 300 for a launch frame covers the two calls (84 CPU) and
   the scan, and stays an *estimate* until stage 3.
-- **`tests/games/swarm/budget.json` agrees with this table** (brought in line 2026-10-02, and
-  again for the stage 3 decisions): `game_update` ≤ 6,075, `player_update` ≤ 290, `pshot_update`
-  and `stars_update` ≤ 60, `collide_update` ≤ 2,825 and `game_idle_min` × 16 ≥ 625, in the stage 1
-  checks and the stage 5 soak.
+- **`tests/games/swarm/budget.json` agrees with this table** (brought in line 2026-10-02, for the
+  stage 3 decisions and again after stage 3 was measured): `game_update` ≤ 6,050, `player_update`
+  ≤ 365, `pshot_update` and `stars_update` ≤ 60, `formation_update` ≤ 750, `diver_update` ≤ 1,350,
+  `eshot_update` ≤ 200, `collide_update` ≤ 2,825, `panel_update` ≤ 250 and `game_idle_min` × 16
+  ≥ 650, in the stage 1 checks and the stage 5 soak; and from stage 4 the sound tick ≤ 570,
+  `sfx_update` ≤ 488 and `sfx_play` ≤ 125 in the display.
 
 #### Stage 1, measured
 
@@ -381,10 +423,10 @@ stay as the budgets.
 | 4 | `pshot_update` (2 shots) | 150 | **43** | 55 |
 | 10 | `stars_update` | 100 | **57** | 72 |
 | 9 | `panel_update` | 250 | **9** with nothing dirty (the usual frame); **231** with score, lives and wave dirty; about 325 with the high score too (*counted*, not measured) | 293 for the 231: **over 250**, see [The panel's budget](#the-panels-budget) |
-| | `game_update` in all | 5,765 then (6,075 now) | 262–317 in the game; max **580** in `AUTOPLAY` (three panel fields redrawn every frame) | |
+| | `game_update` in all | 5,765 then (6,050 now) | 262–317 in the game; max **580** in `AUTOPLAY` (three panel fields redrawn every frame) | |
 | | All IRQ time a frame (check: ≤ 4,500) | | **620**, of which `game_irq_bottom` is 93 of framework and no work | |
 | | `mux_update`, 3 sprites shown | engine: 4,261 average with 24 | **1,073–1,120** | |
-| | Idle in the worst frame (`game_idle_min` × 16) | ≥ 935 then (625 now) | **15,888** | |
+| | Idle in the worst frame (`game_idle_min` × 16) | ≥ 935 then (650 now) | **15,888** | |
 
 (The budgets in this table are stage 1's. Rows 3, 4 and 10 were re-set for stage 3, and the
 "× 1.27" column is superseded for them: [Short routines in the display](#short-routines-in-the-display).)
@@ -465,6 +507,66 @@ What it settles and what it opens:
   the explosion slots were measured on the game build with states set through the monitor. The
   list for stage 3: [What AUTOPLAY cannot measure](#what-autoplay-cannot-measure).
 
+#### Stage 3, measured
+
+**Measured** 2026-10-02 on the stage 3 build (commit d5586da: enemy shots, divers, the player's
+death, lives, game over, and parked enemies hit by the grid lookup; VICE 3.10 x64sc PAL, DEBUG).
+Raster cycles, IRQs excluded. Three sources:
+
+- the gameplay-engineer's `uv run --package budget-runner python tests/games/swarm/stage3_costs.py`,
+  results in [stage3_costs.txt](../../../tests/games/swarm/stage3_costs.txt): the `AUTOPLAY` spans
+  (600 passes each) and the cases `AUTOPLAY` can't reach, placed on the game build. The same script
+  on the build before the grid lookup (commit 039ad26):
+  [stage3_costs_boxscan.txt](../../../tests/games/swarm/stage3_costs_boxscan.txt);
+- `make test ARGS=swarm` (22 checks pass): where two figures are given, the second is its reading;
+- the Technical Director's two follow-ups, each with its results beside it:
+  [stage3_collide_worst.py](../../../tests/games/swarm/stage3_collide_worst.py) (the grid lookup's
+  own worst frame, and the same frames on the box-scan build) and
+  [stage3_oneoff.py](../../../tests/games/swarm/stage3_oneoff.py) (the one-off frames).
+
+| Row | Routine | Budget then | **Measured**, stage 3 | Where it ran |
+|---|---|---|---|---|
+| 9 | `panel_update` (three fields every frame) | 250 | **231** | Lines 24–28 |
+| 10 | `stars_update` | 60 | **56–57** | Lines 28–29: back in the border |
+| 4 | `pshot_update` | 60 | 18–**43** | Lines 29–30 |
+| 7 | `eshot_update` | 200 | 38–**169** (162 in `make test`), average 99 | Lines 29–33 |
+| 5 | `formation_update`, `AUTOPLAY` (no explosions, divers out) | 750 | 339–**495** (475), average 353 | Lines 31–41: above the first badline in every pass |
+| 5 | `formation_update`, game build: 3 explosions ending + 1 animating, a drift turn and an animation swap in one frame | 750 | **616–620** (counted 627) | Lines 27–37, no DMA |
+| 6 | `diver_update`, `AUTOPLAY` (3 divers, 2 steps every other frame, firing, launches) | 1,350 | 180–**972** (978), average 428 | Lines 36–57 |
+| 6 | `diver_update`, game build: the launcher with one survivor 17 places past the drawn index, both `rng_next` calls, its first wind-up frame | 1,350 | **688** | Lines 33–44 |
+| 8 | `collide_update`, `AUTOPLAY` | 2,825 | 95–**1,399** (1,489), average 434 | Lines 40–86 |
+| 8 | `collide_update`, game build, the frame placed for the box scan: both shots hit, the shot scan's 3 full tests, 3 divers at the ship's height, the last one ramming | 2,825 | **1,846** | Lines 40–69 |
+| 8 | `collide_update`, game build, **the grid lookup's worst frame**: a diver in each shot's band, the third ramming, the shot scan's 3 full tests | 2,825 | **2,452–2,469** | Lines 40–90 |
+| 8 | `collide_update`: the player hit by a shot alone / a ram alone / both shots hitting with 3 divers in one shot's band | 2,825 | **311** / **690** / **1,033** | |
+| 3 | `player_update`, `AUTOPLAY` (the flash every frame, firing) | 290 | 92–**260** (248), average 125 | Lines 43–86: in the display |
+| 3 | `player_update`, game build: play / the flash, divers flying / dying / hidden | 290 | **129** / **148** / **46** / **16–33** | |
+| | `game_update` in all, `AUTOPLAY` | 6,075 | 1,421–**3,448** (3,455), average 2,066 | Lines 23 to 45–86 |
+| | `game_update`, the two [one-off frames](#one-off-frames) | 6,075 | **2,875** (a formation's return), **3,713** (a new game); 3,464 for a return with both shots hitting | To lines 69–90 |
+| | `mux_update`, frames with no overflow | engine: average ≤ 5,000, max 7,400 | 3,656–**6,672** (6,629), average **4,470** (4,524) | To lines 112–191 |
+| | `mux_update`, all frames | engine: 13,000 | 3,708–**7,827** (8,142) | To lines 113–200 |
+| | All IRQ time a frame (24 sprites; the sound tick does nothing yet) | 4,500 | **2,732** | |
+| | Idle in the worst frame | ≥ 625 | **6,288** | |
+| | Frames in which a sprite was dropped | model: 10.5% | **9.6%** (959 of about 10,000) | Wave 12, nothing dies |
+| | `mux_max_age` / `mux_pin_drop_count` / `mux_late_count`, `irq_late_count`, `game_overrun_count` | ≤ 1 / 0 / 0 | **1** / **0** / **0** | |
+
+What it settles:
+
+- **Every row is inside its budget, and the frame has three times the idle it was expected to**
+  (6,288 against the 3,200–3,700 estimated). `game_update`'s worst is 57% of its budget, as the
+  rows' worst cases don't fall together.
+- **The fallback's trigger fired and the grid lookup is in.** What it bought, and what its own
+  worst frame is: [The collision budget](#the-collision-budget).
+- **The short-routine allowance held**: `player_update`, the one short routine in the display,
+  read 260 at most against the counted 288. The engine's share is what the README says:
+  `mux_update` averages 4,470–4,524 with 24 sprites moving as a game moves them (limit 5,000).
+- **Overflow frames are real and cheaper than feared**: `mux_update` at most 8,142 in a frame
+  that drops a sprite, against the 12,342 of the engine's spike. The model's flicker figure was
+  right to within a point, and nothing was missing two frames running.
+- **A trigger fired in two frames that aren't frames of play**: [One-off frames](#one-off-frames).
+- **Still not measured:** row 1 on its own; `player_update`, `diver_update` and `collide_update`
+  at their worst *start line* (a sampled or placed frame lands where it lands: the 5% and the
+  counted allowances cover it, and `make test-long` is the longer look at sign-off).
+
 #### Short routines in the display
 
 **Decided (Technical Director, 2026-10-02): a routine of up to a few hundred CPU cycles that runs
@@ -500,12 +602,12 @@ Every short row checked against it:
 |---|---|---|---|---|
 | 1 | Main loop, state machine | Pieces of a few cycles between the calls, most in the border | 150 | 150: no single span to meet a badline; inside `game_update`'s check |
 | 2 | `input_read` | Border, line 23 | 40 | 40 |
-| 3 | `player_update` | **Display**, after the collisions (it fires after them: the order is checked by `check.py`'s 37 cases and Simon's playtest, so it isn't moved) | 200 | **290** = 150 + 43 + 5 × 19 |
+| 3 | `player_update` | **Display**, after the collisions (it fires after them: the order is checked by `check.py`'s 37 cases and Simon's playtest, so it isn't moved) | 200 | **290** = 150 + 43 + 5 × 19 (**measured** max 260). **365** from stage 4: + one `sfx_play`, 55 CPU, counted 362 (`worst(205, 8)` in the script) |
 | 4 | `pshot_update` | Border | 150 | **60** |
 | 7 | `eshot_update` | **Border**: called with `pshot_update`, not after the divers | 200 | 200 (150 CPU; 177 with 3 wrapped divers) |
 | 9 | `panel_update` | Border, lines 24–28: no sprite DMA before line 30 | 250 | 250 (**measured** 231) |
 | 10 | `stars_update` | **Border**: moved, straight after `panel_update` | 100 | **60** |
-| 11 | `sfx_play` calls | Inside the callers' spans | 100 | 100 (stage 4) |
+| 11 | `sfx_play` calls | Inside the callers' spans | 100 | No row: each call is in its caller's ([Stage 4](#stage-4-what-must-be-done-to-stay-in-budget)). One call in the display, alone, is 55 CPU and at worst 155 raster (`worst(55, 8)`); inside a long routine it is × 1.27–1.36: 70–75 |
 
 Rows 5 and 6 are in the border or start there; rows 6 and 8 are long, and keep × 1.27 and the
 **measured** × 1.23–1.36.
@@ -578,18 +680,20 @@ collide_update                      // through the display: its budget is a disp
 player_update                       // the only short routine in the display: row 3
 ```
 
-| Routine | Budget | Starts no later than (line) | Ends no later than (line) | DMA it can meet |
-|---|---|---|---|---|
-| `input_read`, `panel_update`, `stars_update` (+ `autoplay_update`, 45) | 40 + 250 + 60 | 23 | 29 | None: no sprite DMA before line 30 (`MUX_Y_MIN`), first badline 51 |
-| `pshot_update`, `eshot_update` | 60 + 200 | 29 | 34 | Up to 3 wrapped divers (Y 30–50) |
-| `formation_update` | 750 | 34 | **45** | The same |
-| `diver_update` | 1,350 | 45 | 67 | Badlines 51 and 59; row 0's sprites from line 56 |
-| `collide_update` | 2,825 | 67 | 112 | Rows 0 and 1, divers, shots: × 1.35 |
-| `player_update` | 290 | 112 | 117 | A badline and up to 8 sprites a line |
+| Routine | Budget | Starts no later than (line) | Ends no later than (line) | **Measured**, stage 3 `AUTOPLAY`: starts / ends on lines | DMA it can meet |
+|---|---|---|---|---|---|
+| `input_read`, `panel_update`, `stars_update` (+ `autoplay_update`, 45) | 40 + 250 + 60 | 23 | 29 | 23 / 29 | None: no sprite DMA before line 30 (`MUX_Y_MIN`), first badline 51 |
+| `pshot_update`, `eshot_update` | 60 + 200 | 29 | 34 | 29 / 30–33 | Up to 3 wrapped divers (Y 30–50) |
+| `game_state_update` (row 1), `formation_update` | 750 | 34 | **45** | 31–33 / **36–41** | The same |
+| `diver_update` | 1,350 | 45 | 67 | 36–41 / 40–57 | Badlines 51 and 59; row 0's sprites from line 57 |
+| `collide_update` | 2,825 | 67 | 112 | 40–54 / 42–86 | Rows 0 and 1, divers, shots: × 1.27–1.36 |
+| `player_update` | 365 | 112 | 118 | 43–76 / 45–86 | A badline and up to 8 sprites a line |
 
-Lines are *counted* from the budgets (63 cycles a line from line 23, cycle 33, **measured**), so
-they are the latest each can be; **measured** in part B the border work ended on lines 34–37.
-`game_update_end` is reached by about line 120 in the worst frame.
+"No later than" lines are *counted* from the budgets (63 cycles a line from line 23, cycle 33,
+**measured**; IRQ time, which the costs leave out and the raster doesn't, pushes a real frame a few
+lines further), so they are the latest each can be. `game_update_end` is reached by about line 120
+in the worst frame by count; **measured** by line 86 in `AUTOPLAY` and line 90 in the placed
+frames.
 
 - **`stars_update` straight after `panel_update`.** It depends on nothing else in the frame (its
   own counter, the star table, colour RAM). There its cost is its CPU count, 56–57 (**measured** in
@@ -600,11 +704,69 @@ they are the latest each can be; **measured** in part B the border work ended on
   `diver_update` is first moved in the next frame, so it is shown once where it was fired
   ([design](design.md#firing): "the shot starts at the diver's position"), as a player shot is.
   It keeps row 7 in the border.
-- **Border work must end above line 51.** With every border row at its budget it ends on line 45:
-  about 350 cycles spare. `formation_update` ending on line 49 or later in any measured frame is
-  reported to the Technical Director (row 5's 750 assumes no badline).
+- **Border work must end above line 51 in every frame of play.** With every border row at its
+  budget it ends on line 45: about 350 cycles spare; **measured**, it ends on lines 36–41.
+  `formation_update` ending on line 49 or later is reported to the Technical Director (row 5's
+  750 assumes no badline), **except in a [one-off frame](#one-off-frames)**, which has its own
+  conditions.
 - `collide_update` therefore starts on about line 37 in stage 2 and no later than about line 67
   in stage 3's worst frame.
+
+#### One-off frames
+
+**Decided (Technical Director, 2026-10-02): accepted. `formation_init` does not move. A frame in
+which the state machine runs an init is budgeted as a whole, not row by row, on the conditions
+below.**
+
+What happened: `game_state_update` runs before `formation_update` (it must: the state decides what
+the frame does), and in two frames of stage 3 it does thousands of cycles of set-up there, so
+`formation_update` and everything after it start late. The rule "ending on line 49 or later:
+report" fired, as it should. **Measured** ([stage3_costs.txt](../../../tests/games/swarm/stage3_costs.txt);
+the spans inside the frame and its idle time by
+[stage3_oneoff.py](../../../tests/games/swarm/stage3_oneoff.py), results beside it):
+
+| Frame | `game_update` | `formation_update`: cost, lines | `collide_update` | `mux_update` | Idle left in that frame |
+|---|---|---|---|---|---|
+| A cleared formation comes back (`formation_init`: 18 `enemy_park`) | **2,874–2,875**, to line 69 | **369**, lines 58–64 | 148 | 4,251 | **11,248** |
+| The same with both player shots hitting returning enemies in that frame | **3,464**, to line 78 | 369, lines 58–64 | 709 | 5,653 | **9,408** |
+| A new game starts (`game_new`) | **3,712–3,713**, to line 90 | **471–474**, lines 70–77 (ended on 86 in `stage3_costs.txt`: where the zone IRQs fall moves it) | 105 | 3,877 | **9,888** |
+| For comparison: the worst `AUTOPLAY` frame | up to 3,455 | up to 495, ending by line 41 | up to 1,489 | up to 8,142 | **6,288** |
+
+Why accept:
+
+- **They are lighter than a frame of play, not heavier.** The init runs instead of the frame's
+  expensive work, not on top of it: `formation_init` and `game_new` park every enemy, so nothing is
+  in WindUp, Dive or Return, the launch timer is back at 50, and the player's scans have no
+  target. The frame has 9,400–11,200 cycles idle against the 6,288 of the worst frame of play.
+- **Row 5's own figure holds below the badline here**: 369 and 474 against 750. It is light
+  because no explosion is running and no diver is out. The border assumption protects the *worst*
+  `formation_update` (620 measured, 735 with wrapped divers' fetches), which can't happen in the
+  frame of an init.
+- **Moving `formation_init` buys nothing and costs behaviour.** Run after `formation_update`, the
+  new formation's drift and animation timers would first count a frame later than they do now,
+  which `check.py`'s frame-exact cases would see, to save cycles in a frame that has 9,000 spare.
+  And stage 4 takes the 18 `enemy_park` calls out of both frames anyway: enemies appear one every
+  2 frames ([Stage 4](#stage-4-what-must-be-done-to-stay-in-budget) (b)).
+
+**The rule.** A **one-off frame** is a frame in which `game_state_update` runs a set-up routine
+(stage 3: `formation_init` on a return, `game_new`; stage 4: a new game, a later wave's first
+Intro frame, entering the title. **Not** GameOver's first frame: divers can still be out in it,
+so it is a frame of play). In it the per-routine limits and the "above line 49" rule don't apply, provided all four of these hold, **measured** on the game build by the
+stage's costs script (the budget build never reaches one):
+
+1. **Nothing is diving and nothing can launch in that frame**, and the player's two scans find no
+   target. (True by construction for the frames listed; a set-up routine that leaves a diver out
+   isn't a one-off frame.)
+2. **`game_update` for the frame ≤ 4,000** (the largest measured, 3,713, + 5%, rounded up). The
+   set-up itself is therefore held to about 2,500.
+3. **`formation_update`'s own span in that frame ≤ 750**, wherever it ran.
+4. **The frame doesn't overrun** (`game_overrun_count` unchanged) **and has at least 5,000 cycles
+   idle**: that it is lighter than a frame of play is the reason it is accepted, so it is checked.
+
+A set-up that can't meet 2 is spread over frames (the design already does this for the title's
+drawing and the wave's appearance) or reported. A one-off frame is not a place to put work that a
+frame of play can also have: the bonus for a cleared wave, for instance, is in the frame the last
+explosion ends, which is a frame of play, and is inside row 5.
 
 #### The panel's budget
 
@@ -618,8 +780,9 @@ does not rise. The four-field redraw is exempt, and `panel_update` moves to the 
    shares a frame with the costs the budget protects. It happens twice: in `panel_init`, before
    `irq_init`, which isn't a frame at all; and when a game ends
    ([design](design.md#title-and-game-over-screens): "the high score is updated when the game ends"). **Rule:
-   `PANEL_DIRTY_HI` is set only by `panel_init` and by the state machine on entering game over,
-   never by a play-state routine.** With item 3 it is drawn in the following frame, a game-over
+   `PANEL_DIRTY_HI` is set only by `panel_init` and by the state machine on entering game over
+   (and, from stage 4, by `game_new`, whose next frame is a wave's Intro: the design asks for all
+   four fields at a new game), never by a play-state routine.** With item 3 it is drawn in the following frame, a game-over
    frame, which runs no collisions (2,825), no launcher and no hits, so 75 over the row is covered
    many times.
    Raising the budget to 350 instead would take 100 from the headroom (585 then) in every frame of
@@ -646,9 +809,13 @@ and a player hit together), so the measured `game_update` should come in under t
 
 #### The collision budget
 
-**Decided (Technical Director, 2026-10-02, M4 stage 2): bounding boxes stay, row 8 rises from
-2,475 to 2,825, taken from the headroom (935 → 585). The grid lookup is not required from the
-start; it is the fallback, with a measured trigger.**
+**Decided (Technical Director, 2026-10-02, after stage 3): row 8 stays 2,825, as a ceiling made
+of two parts: 2,600 for the collisions as built (the grid lookup's worst frame, 2,469 measured,
++ 5%) and 225 for stage 4's `sfx_play` calls there. Nothing goes back to the headroom from this
+row.** The stage 2 decision it follows, kept for the record: bounding boxes stay, row 8 rises from
+2,475 to 2,825, taken from the headroom (935 → 585); the grid lookup is not required from the
+start; it is the fallback, with a measured trigger. The trigger fired in stage 3:
+[As built](#as-built-in-stage-3-the-grid-lookup).
 
 **Method:** one object against a run of targets, bounding boxes, exact to the pixel, reading the
 multiplexer's own `mux_x_lo` / `mux_x_hi` / `mux_y` arrays
@@ -695,21 +862,92 @@ register loads, and the four hits: 172 in all. The DMA factor was as assumed.
    score add, explosion start, `sfx_play`, a panel dirty flag) have 375 raster cycles between
    them. The panel is drawn next frame by `panel_update`, never from here.
 
-**The fallback and its trigger.** Parked enemies are a grid, so a player shot finds its one
-candidate by row and column (about 80 cycles a shot) and only divers go through the box test:
-about 700 CPU cycles less, no design change. The gameplay-engineer **must switch to it**, without
-asking, and report the figures, when either of these is **measured** in the `AUTOPLAY` build
-(`make test ARGS=swarm`, `collide_update` → `collide_update_end`, max over 600 passes):
+**The fallback and its trigger (stage 2's rule; spent in stage 3).** Parked enemies are a grid,
+so a player shot finds its one candidate by row and column and only divers go through the box
+test. The gameplay-engineer was to switch to it, without asking, when `collide_update` measured
+over 2,050 in part B (not reached: 1,192) or over 2,825 from stage 3. **It measured 2,833–2,836 in
+stage 3's placed worst frame, and the switch was made.** Rule 4 above (one `collision_range` over
+all 18) describes the box scan and is replaced by the next section; rules 1, 2, 3 and 5 stand.
 
-- **Part B** (no divers, no enemy shots, so the player's scans are skipped by rule 3): **over
-  2,050**. Not reached: **measured 1,192** ([Stage 2 part B, measured](#stage-2-part-b-measured)). Stage 3 adds about 570 CPU to this routine (*counted* from the measured calls: the
-  player's two scans 505, three divers in a shot's band 66), about 770 raster, and 2,050 + 770 is
-  the budget.
-- **Stage 3 on** (the full mix): **over 2,825**, which is the `budget.json` check failing.
+##### As built in stage 3: the grid lookup
 
-Also from stage 3: if `game_overrun_count` is not 0 or `game_idle_min` × 16 is under 625 with
-`collide_update` inside its 2,825, report to the Technical Director; the fallback is then the
-first remedy considered, since it is the largest saving available without a design change.
+`collide.asm`, commit d5586da. For each player shot in flight:
+
+1. **The one Parked candidate, by arithmetic.** The shot's Y gives the row whose 22-line band it
+   is in (three compares; none: no candidate). Its X less this frame's `fx` indexes a table,
+   `grid_col`, that gives the column or "between two columns". The enemy at that row and
+   column is the candidate if its state is Parked. The box is the module's, to the pixel: the
+   band and the table are built from the same `BOX_*` constants as `col_pairs`, and `.errorif`s
+   hold the conditions the lookup needs (a shot in at most one row's band and one column's box).
+2. **Divers through the module, and only when one is near.** If a diver slot's enemy is within the
+   shot's Y band: one `collision_begin` for the shot, then `collision_one` for every diver slot in
+   use. An enemy in WindUp, Dive or Return is never the grid's candidate (its state isn't Parked).
+3. **The highest virtual sprite hit wins**, as the box scan's order from sprite 23 down chose it,
+   so a shot under a parked enemy and a diver hits the same one as before.
+
+The player's two guarded scans and the answers are unchanged.
+
+**Measured** (raster cycles, IRQs excluded, DEBUG; the first three rows from
+[stage3_costs.txt](../../../tests/games/swarm/stage3_costs.txt) and
+[stage3_costs_boxscan.txt](../../../tests/games/swarm/stage3_costs_boxscan.txt), the lettered frames
+from [stage3_collide_worst.py](../../../tests/games/swarm/stage3_collide_worst.py), whose header
+gives the commands for both builds):
+
+| | Box scan of all 18 (commit 039ad26) | Grid lookup (d5586da) |
+|---|---|---|
+| `AUTOPLAY`, 600 passes: average | 938 | **434** |
+| `AUTOPLAY`: maximum (and in `make test`) | 2,004 (2,209) | **1,399** (1,489) |
+| `AUTOPLAY`: idle in the worst frame | 5,872 | **6,288** |
+| Frame A, placed for the box scan: both shots at the far ends of their scans, 3 enemy shots beside the ship, 3 divers at the ship's height, the last one ramming | **2,833–2,836**: over 2,825, the trigger | 1,846 |
+| Frame B: a diver in each shot's band (box-tested, missed), 2 parked hits, the third diver ramming, the 3 enemy shots | 2,592–2,595 | 2,452–2,453 |
+| Frame C: as B with each band's diver *under* the shot, over a parked enemy: 3 diver hits and the player's | 2,125 | **2,464–2,469** |
+| **Worst frame found** | **2,836** (A) | **2,469** (C) |
+
+- **The box-scan figures are reproducible**: check out 039ad26 (a `git worktree` does it without
+  touching the working tree), build the game, and run either script on it.
+  `stage3_costs_boxscan.txt` and `stage3_collide_worst_boxscan.txt` are those runs.
+- **What the fallback bought.** In the usual frame, a lot: the average halves (938 → 434), the
+  worst sampled frame falls by 600–700, and the worst `AUTOPLAY` frame has 416 more idle cycles.
+  **In the worst frame, 367** (2,836 → 2,469, 13%), not the 990 that frame A alone suggests.
+- **Why the difference: the worst frame moved.** Frame A was built to be the box scan's worst:
+  long scans, and every diver low enough for the player's scan. The lookup doesn't care where a
+  parked enemy is in a scan, so A became cheap. What the lookup added is step 2, which costs a
+  `collision_begin` (95) and three `collision_one` (up to 52 each) **for each shot** that has a
+  diver in its band, where the box scan met a diver as one more target in a range it was already
+  running. A diver can't be both in a shot's band and low enough to ram (the lowest shot is tested
+  at Y 205, band Y 188–209; a ram needs Y ≥ 210), so the lookup's worst frame splits the three
+  divers: one in each shot's band, one ramming. In frame C the lookup is *dearer* than the box
+  scan was (2,469 against 2,125). **A frame placed for one algorithm says nothing about the worst
+  frame of the next; it is found again from the new code's paths.**
+- **Can play produce frame C?** Only from loop 1 (three divers) and only with two divers crossing
+  rows 0 and 2 exactly under the two shots while the third reaches the ship beside three enemy
+  shots. It is a bound, not a forecast: `AUTOPLAY`'s 10,000 frames of wave 12 never passed 1,489.
+
+**Row 8 now: 2,825, kept as a ceiling.**
+
+| Part | Raster cycles | Basis |
+|---|---|---|
+| The collisions as built, worst frame found | 2,469 | **Measured** (frame C, starting on line 40) |
+| The same starting on its worst line | **2,600** | 2,469 + 5%, the rule for a measured display routine. *Counted* check: about 1,950 CPU; started on a row's first sprite line with 8 sprites on every line of it, about 2,585 |
+| Stage 4: at most 3 `sfx_play` calls (the enemy explosion once, the player's hit twice) | **225** | *Estimate*: 55 CPU a whole call ([engine/sfx.md](../../../engine/sfx.md#cycle-budget)) × 1.36 = 75 |
+| **Row 8** | **2,825** | |
+
+- **Why not lower it to 2,600 and give 225 to the headroom:** the 225 would come straight back
+  in stage 4, from the headroom, for the same routine. `collide_update` is where an enemy's hit
+  and the player's are answered, so it is where their sounds are asked for.
+- **Why not lower it toward 1,846 or 1,489:** those aren't the worst frame.
+- **What it does to the engine's excepted case:** nothing. The game's total is 6,550 against the
+  about 6,400 that case leaves, 150 short (it was 175; the 25 comes from rows 3 and 11, not from
+  here). It would take lowering row 8 by 150 to close it on paper, which the measurement doesn't
+  support, and the case doesn't arise in this design ([Risks](#risks-in-order), item 3).
+- **Until stage 4** the placed worst frame is held to **2,600** (it reads 2,469); from stage 4, with
+  the three sound requests, to 2,825. The `budget.json` limit is 2,825 throughout: `AUTOPLAY` can't
+  place the frame, so the check there is a guard on the sampled maximum (1,489), and the placed
+  frame is run by the stage's costs script.
+- **A saving held in reserve, not asked for:** step 2 calls `collision_one` for every diver slot
+  in use once any diver is in the band; testing only those in the band saves up to two calls a
+  shot, of the order of 100 raster in frame C (*counted* roughly, not measured). If stage 4's placed frame passes
+  2,825, this is the first remedy; the gameplay-engineer reports the figure and makes it.
 
 **Boxes.** `col_pairs` is typed from the design's [hit-box table](design.md#hit-boxes), which is
 the only place the numbers live: player 6–17 × 6–20, enemy 4–19 × 3–17, player shot 11–12 × 0–7,
@@ -734,16 +972,21 @@ monitor at `game_update_end` and the game then left to run, by a `stageN_costs.p
 
 | Cost | Why `AUTOPLAY` misses it | State to set | Measured |
 |---|---|---|---|
-| An enemy hit's answer in `collide_update` (`enemy_explode`: 61–88 + `jsr`, the score add) | The enemy stays, so no explosion starts | Both shots one move away from an enemy at the far end of its scan | Part B: **1,245** for two |
-| `formation_update` with explosion slots animating and ending | No explosion ever runs | Enemies in `ENEMY_EXPLODING`, slots taken, timers set | Part B: **538** (4 together). Stage 3: **3 ending + 1 animating on a turn-and-swap frame** (count 627) |
-| The frame a cleared formation comes back (`formation_init`, about 2,000 *counted*, inside `game_update`) | The wave never ends | `zp_enemies_alive` = 0, `zp_state_timer` = 1 | **Not yet.** Stage 3: `game_update` for that frame |
+| An enemy hit's answer in `collide_update` (`enemy_explode`: 61–88 + `jsr`, the score add) | The enemy stays, so no explosion starts | Both shots one move away from an enemy at the far end of its scan | Part B: **1,245** for two (the box scan). Stage 3: inside the frames below |
+| `formation_update` with explosion slots animating and ending | No explosion ever runs | Enemies in `ENEMY_EXPLODING`, slots taken, timers set | Part B: **538** (4 together). Stage 3: **616–620** for 3 ending + 1 animating on a turn-and-swap frame (count 627) |
+| The frame a cleared formation comes back, and the frame a new game starts (`formation_init`, `game_new`) | The wave never ends | `zp_enemies_alive` = 0, the clear timer about to end; GameOver's last frame | Stage 3: `game_update` **2,875** and **3,713**: [One-off frames](#one-off-frames) |
 | A fifth explosion (dies at once) | As above | 4 slots taken, a fifth hit | Stage 3: behaviour, in `check.py` |
-| **Stage 3:** the player's hit answered in `collide_update` (lives, enemy shots removed, explosion start, state) | The player can't be hit | An enemy shot at Y ≥ 207 over the player, and a diver at Y ≥ 210 | Stage 3 |
-| **Stage 3:** `collide_update`'s worst frame: both shots in a row's band with 3 divers there, both of the player's scans running, 2 enemy hits and the player's | The script reaches the parts, not all at once | All of it, placed | Stage 3: against 2,825 |
-| **Stage 3:** `player_update` while dying (explosion shapes, 32 frames), hidden, and respawned (the flash) | The player never dies | Each player state in turn | Stage 3: against 290 |
-| **Stage 3:** the launcher with 4 or fewer alive: the halved interval, and the scan from the picked index to the one parked enemy furthest from it | 18 are always parked or diving | 17 dead, the survivor at the far end of the scan, launch timer 1 | Stage 3: `diver_update` on that frame, against 1,350 |
-| **Stage 3:** a diver hit while winding up, diving and returning; a diver that rams | Divers don't die | A shot placed under each | Stage 3: behaviour, in `check.py`; cost inside the `collide_update` case above |
-| Entering game over: the four-field panel redraw (about 325 *counted*, exempt: [The panel's budget](#the-panels-budget)) | Lives never run out | Lives 1, a hit | Stage 4, with the state machine |
+| The player's hit answered in `collide_update` (lives, enemy shots removed, explosion start, state) | The player can't be hit | An enemy shot at Y ≥ 207 over the player, and a diver at Y ≥ 210 | Stage 3: **311** by a shot alone, **690** by a ram alone |
+| `collide_update`'s worst frame | The script reaches the parts, not all at once | All of it, placed. **For the grid lookup: a diver in each shot's band and the third ramming** ([The collision budget](#the-collision-budget)), not the frame first placed | Stage 3: **2,464–2,469** (1,846 in the frame placed for the box scan) |
+| `player_update` while dying (explosion shapes, 32 frames), hidden, and respawned (the flash) | The player never dies | Each player state in turn | Stage 3: **46**, **16–33**, **148** |
+| The launcher with 4 or fewer alive: the halved interval, and the scan from the picked index to the one parked enemy furthest from it | 18 are always parked or diving | 17 dead, the survivor at the far end of the scan, launch timer 1, the generator's state set so that both `rng_next` calls are made | Stage 3: **688** |
+| A diver hit while winding up, diving and returning; a diver that rams | Divers don't die | A shot placed under each | Stage 3: behaviour, in `check.py`; cost inside the `collide_update` frames above |
+| **Stage 4:** GameOver's first frame and the frame after: the high score, the text, the four-field panel redraw (about 325 *counted*, exempt: [The panel's budget](#the-panels-budget)) | Lives never run out | Lives 1, a hit, 100 frames | Stage 4 |
+| **Stage 4:** the wave phase: Clear's first frame (the bonus and its sound inside `formation_update`), Intro's first frame, a frame in which an enemy appears | The wave never ends | The last enemy exploding with its timer at 1; the Clear's timer at its last frame | Stage 4 |
+| **Stage 4:** the title: entering it, a frame of it, the press of fire and the new game's frame | `AUTOPLAY` skips the title | GameOver's last frame; then the stick | Stage 4 |
+| **Stage 4:** the placed worst `collide_update` frame and `player_update`'s firing frame, with their sound requests | As stage 3 | As stage 3 | Stage 4: against 2,825 and 365 |
+
+The whole stage 4 list, with limits: [Stage 4](#stage-4-what-must-be-done-to-stay-in-budget) (f).
 
 What `AUTOPLAY` **does** measure in stage 3, by these changes to it (gameplay-engineer; exact
 because the checks rely on them):
@@ -762,6 +1005,12 @@ because the checks rely on them):
    that is hit is scored and the shot removed, and it carries on (as parked enemies do now).
 
 #### Stage 3: what the gameplay-engineer must do to stay in budget
+
+**Done (commits 7d79ee5 to d5586da).** Kept as the brief stage 3 was built to. Of the fallback
+triggers in item 7, two fired: `collide_update` over 2,825 in the placed frame (the grid lookup
+went in: [The collision budget](#the-collision-budget)) and `formation_update` ending below line
+49 in two frames ([One-off frames](#one-off-frames)). The budgets quoted here are stage 3's:
+`player_update` is 365 from stage 4.
 
 **Before any stage 3 code** (one commit, `"stage"` still 2): move `jsr stars_update` in
 `games/swarm/src/main.asm` to straight after `jsr panel_update`, and correct the two headers that
@@ -825,6 +1074,11 @@ describe the order (`main.asm`, `stars.asm`). `make test ARGS=swarm` fails on `s
 
 #### Does stage 3 fit? Yes, by count
 
+**Since measured: it fits with more room than this count allowed**
+([Stage 3, measured](#stage-3-measured)). The section is kept as the forecast the measurements
+were compared with: `game_update` forecast about 5,200–5,700 if every worst case fell in one
+frame, **measured** at most 3,455; idle forecast about 3,200–3,700, **measured** 6,288.
+
 The stage 3 design (3 divers stepping paths, 3 enemy shots, the player's two guarded scans, lives
 and game over) is the worst case this budget was drawn for; nothing in it is new work. What
 changed is what is known:
@@ -844,13 +1098,252 @@ three more sprites, and overflow frames for the first time (about 1,900–2,500 
 `mux_update`: (a) below). Expected idle in the worst frame: **about 3,200–3,700** (*estimate*), against
 the floor of 625.
 
+#### Stage 4: what must be done to stay in budget
+
+Stage 4 is waves, sound, the title and the art ([M4 brief](../../milestones/M4-training-game.md));
+its behaviour is the design's [Stage 4 rules](design.md#stage-4-rules) and
+[Sound effects](design.md#sound-effects), which win over anything here about *what* happens. This
+section says *where in the frame* it happens and what it may cost. Nothing below depends on which
+text row a message is on. Every figure is an *estimate* (counted from the intended code) unless
+marked **measured**.
+
+**Order of work.** (1) The raster-engineer builds `engine/sfx.asm`, its spike and
+`docs/reference/sid.md` to [engine/sfx.md](../../../engine/sfx.md); the Technical Director turns
+its measured costs into locks. (2) The gameplay-engineer builds waves and the title on the stage 3
+engine, with `"stage"` still 3: every check that is new at stage 4 is a sound check and needs the
+module's labels, so waves and the title are measured by `tests/games/swarm/stage4_costs.py` in the
+meantime (the [parts rule](#labels-the-game-must-provide)). (3) Sound goes in last, `"stage"`
+becomes 4 in the same commit, and `make test ARGS=swarm` runs the four sound checks.
+
+**(a) Sound**
+
+*The tick.* `game_irq_bottom` (chain entry 1, line 251) becomes `jsr sfx_update` then `IrqDone()`,
+and nothing else, ever: it is IRQ context (no `zp_tmp*`, no `zp_joy_pressed`). `jsr sfx_init` goes
+in `start`, before `irq_init`.
+
+| | Raster cycles | Basis |
+|---|---|---|
+| The entry's framework | 93 | **Measured** ([README](../../../engine/README.md#irq-framework-costs)); already in every IRQ figure on this page |
+| `sfx_update`, the whole call: three effects starting in one tick | ≤ **500** (row 12) | *Estimate*, 468 counted ([engine/sfx.md](../../../engine/sfx.md#cycle-budget)). No DMA on lines 251–260, so raster = CPU |
+| `game_irq_bottom` → `irq_exit_rti`: `jsr` 6 + span ≤ 488 + `rts` 6 + `jmp` 3 + `irq_exit` 60 | ≤ **570** | The check, from stage 4 |
+| All IRQ time a frame | 2,732 **measured** + about 510 = about 3,250, limit 4,500 | |
+
+*Requests.* `sfx_play` (A = effect) is called from the main loop only, by these routines and no
+others. A whole call is **55 CPU** (*estimate*); inside a long routine in the display that is
+70–75 raster. The design's voices are 1–3; the module's are 0–2 (voice − 1).
+
+| Effect | Voice (design), priority | Requested by, when | Row that pays | Most calls a frame |
+|---|---|---|---|---|
+| Player shot | 1, 1 | `player_update`, when a shot spawns | 3 (365) | 1 |
+| Enemy shot | 1, 1 | `eshot_spawn`, called by `diver_update`, for each shot fired | 6 | 3 for the row: at most 3 shots, or 2 and a dive (a launch needs a diver slot free) |
+| Dive | 3, 1 | The launcher, in WindUp's frame 0 | 6 | |
+| Enemy explosion | 2, 2 | **`collide_update`, once, at its end, if a player shot hit an enemy this frame** (the fifth, which shows no explosion, included). Not per hit, and not for a ram: in a ram's frame the player's hit takes voice 2 at priority 3 whatever is asked | 8 | 1 |
+| Player hit: two effects | 2 and 3, 3 | `player_hit`, called by `collide_update` | 8 | 2 |
+| Wave clear | 3, 2 | Where enemies alive reaches 0 (`enemy_kill`, inside `formation_update`), with the bonus | 5 | 1 |
+| Wave start | 3, 2 | The wave phase's Intro frame 0, in `game_state_update` | 1 | 1 |
+| Start | 1, 3 | The title's press of fire, in `game_state_update` | 1 | 1 |
+| Game over | 1, 3 | GameOver's frame 0, in `game_state_update` | 1 | 1 |
+
+*When several happen in one frame:*
+
+1. **The module decides; the game has no priority code.** Each voice holds one pending request.
+   `sfx_play` keeps the higher priority of the pending one and the new one, the new one on a tie;
+   the tick starts the survivor if its priority is equal to or higher than what the voice is
+   playing, and drops it otherwise. So every routine asks for its sound without looking at what
+   else happened.
+2. **A tie goes to the later call, and the order of calls is the order of the frame**:
+   `game_state_update`, `formation_update`, `diver_update`, `collide_update`, `player_update`. On
+   voice 1 a player shot beats an enemy shot fired in the same frame. (For the designer: this is
+   what "cut each other off" comes to within one frame.)
+3. **At most 6 calls in a frame of play**: 3 in `diver_update` and 3 in `collide_update` (the
+   explosion once and the hit's pair), in which frame the player doesn't fire. The explosion is
+   asked for once a frame (a one-byte flag set by a hit, tested before the `rts`), because three
+   hits and a ram asking separately would be 5 calls there, 375 raster, and row 8 has 225.
+4. **At most three effects start in a tick**, one a voice, whatever was asked: that is the tick's
+   worst case and what row 12 budgets.
+5. A request made in frame N starts at line 251 of frame N: `game_update` is over by line 90 and
+   `mux_update` by line 200 (**measured**), and the sprites that frame N moved are shown from the
+   top of frame N + 1. Sound leads picture by a fraction of a frame.
+6. `sfx_play` uses A, X and Y: a caller that needs one of them afterwards saves it
+   (`collide_enemy_hit` holds the enemy's sprite in X: one reason the explosion's request is made
+   at the end of `collide_update` and not there).
+
+**(b) Waves**
+
+The design has a wave phase (Intro, Fight, Clear) beside the game state, with its own timer. Zero
+page: the phase at `$33`, the timer at `$1B` (stage 3's `zp_clear_timer`); the three wave stores
+(`zp_wave` BCD, `zp_pattern`, `zp_loop`) exist. Both machines are stepped in `game_state_update`,
+where stage 3's state machine is: after the shots have moved and before `formation_update`, in the
+border.
+
+| What | Where it runs | CPU, counted | What it does to the frame |
+|---|---|---|---|
+| **Clear's first frame**: + 1,000 (a BCD add with the 999,990 stop), the score's dirty flag, the phase and its timer, `sfx_play` | In `enemy_kill`'s "enemies alive is now 0" branch, inside `formation_update`: the design pays the bonus in the frame the last explosion ends | about 125 (46 + 10 + 12 + 57) | Row 5. The worst such frame: 3 explosions ending together on a turn-and-swap frame, about 596 (the **measured** 620 less the fourth slot's animation) + 125 = **about 720 of 750**. No diver exists when the last enemy dies, so there are no sprite fetches above line 51 to add |
+| The pause: 75 frames of an empty sky | The wave timer: a decrement and a test in `game_state_update` | about 10 a frame | Row 1. The player still moves and fires; an enemy shot can still be in flight. Frames lighter than any in stage 3 |
+| **Intro frame 0 of a later wave**: the three stores advance, the wave field's dirty flag, the formation reset **without parking** (`fx`, the drift and animation timers, the explosion slots, the six home X; 18 enemies Waiting, enemies alive 18), the wave message written, `sfx_play`, enemy 0 parked | `game_state_update` | about 450 (40 + 150 + 110 + 57 + 86) | A [one-off frame](#one-off-frames), and a light one: nothing is alive but one enemy. `game_update` about 1,400 |
+| **Enemies appear**: enemy k in Intro frame 2k, k = 1 to 17 | `game_state_update`: one `enemy_park` (74 + 12, counted in its header) and the index | about 105, in 17 frames | Row 1 hasn't room for it, and doesn't need it: nothing dives or launches in Intro, so rows 6 and 7 are idle. Border work then ends about 2 lines later than stage 3's 36–41 (**measured**): still above line 49. The multiplexer gets one new sprite every other frame, where stage 3's return gave it 18 at once and took 4,251 in `mux_update` (**measured**) |
+| Intro frame 75: the message erased. Frame 100: Fight, the launch timer set | `game_state_update` | about 110; about 10 | Row 1 |
+| **A new game** (the frame after the title is erased): score, lives, the stores, every init, all four panel fields dirty, then Intro frame 0 | `game_state_update` (`game_new`) | Stage 3's `game_new` frame is **3,713 measured** as `game_update`, of which the 18 `enemy_park` calls are about 1,550. Without them: about 2,200–2,600 | A one-off frame: ≤ 4,000 |
+
+- **`formation_init` splits in two**: the reset (run at Intro frame 0) and the parking (now one
+  enemy at a time). The stage 3 frame in which a cleared formation came back, **measured 2,875**,
+  no longer exists.
+- Everything a loop changes is read from `zp_loop` when it is used (as built), and no diver or
+  enemy shot exists when the stores advance, so nothing has to be converted at a wave's start.
+- A Respawn can fall inside a Clear or an Intro (the design's rule 6 and its typical case). It
+  adds the ship's set-up (about 150, as stage 3) to a frame that has no diver: no new worst case.
+
+**(c) The title and game over**
+
+*The title runs almost nothing.* One state test in the main loop skips the play routines:
+
+| Routine | Title | GameOver |
+|---|---|---|
+| `input_read`, `panel_update`, `stars_update` | Yes: 40 + 9 (nothing dirty) + 57 | Yes |
+| `pshot_update`, `eshot_update`, `formation_update`, `diver_update`, `collide_update`, `player_update` | **No** | Yes, as stage 3: the formation, divers and explosions carry on, nothing launches or fires, the ship is hidden |
+| `game_state_update` | The title's own code: the frame count, the blink, the three sprites' shape swap, `rng_next` ((d) below), the press | Its timer; a new press from frame 50 |
+| `mux_update` | Yes, with 3 sprites: **1,073–1,120 measured** in stage 1 with 3 | Yes |
+
+- **Multiplexer load on the title: none to speak of.** Three sprites 16 lines apart, placed by
+  the title's code in three of the enemies' virtual sprites, every other sprite `MUX_OFF`. No
+  overflow, no zone IRQ below the third. A title frame is about 150–450 of `game_update` and has
+  about 15,000 cycles idle (stage 1 **measured** 15,888 with three sprites and more work).
+- **The star field carries on**: `stars_update` is in every state, one colour write a frame.
+- **Text is screen codes only.** The play area's colour RAM has been the message colour since
+  `screen_init`, and no star is in a text band, so drawing a text is a loop of stores: about 12
+  cycles a cell. The title's six texts are 56 cells. **Draw at most one text a frame** (the
+  longest is 20 cells, about 260), in `game_state_update`, in the title's first six frames; erase
+  the same way after the press. The design allows 8 frames for each and reads fire from frame 8.
+  So no title frame is a heavy one, and nothing needs measuring to the cycle here: the limit is
+  the one-off rule's 4,000 and the expectation is under 700.
+- **Entering the title** (frame 0): all 24 sprites hidden (about 150), the message row erased
+  (about 110), the three title sprites placed (about 100), the first text. About 600: a one-off
+  frame with nothing else in it.
+- **GameOver's frame 0 is a frame of play** (divers may still be flying home), so the "above line
+  49" rule applies to it. Its extra work in `game_state_update` is the high score's compare and
+  copy, the message, the dirty flag and `sfx_play`: about 300. It fits because by then there is
+  no shot of either kind (the enemies' were removed at the hit, the player's are gone 21 frames
+  after it), so rows 4 and 7 (260 between them) are empty and the ship is hidden.
+- **The panel's four-field redraw stays exempt** from row 9's 250
+  ([The panel's budget](#the-panels-budget)): about 325 *counted*, limit **350** where it is
+  measured. `PANEL_DIRTY_HI` is set in three places from stage 4: `panel_init`, GameOver's frame 0,
+  and `game_new` (the design asks for all four fields at a new game). Each is drawn at the top of
+  the next frame, in the border: the frame after a new game is Intro frame 1, with one enemy on
+  screen; the frame after GameOver's first has no shots, as above. No play-state routine sets it.
+
+**(d) Seeding the random numbers**
+
+**Decided: the generator is stepped once in every title frame, and at the press it is seeded from
+its own state mixed with the design's two sources.**
+
+```
+// every title frame, in game_state_update:
+        jsr rng_next                    // 42 cycles, result unused
+// in the frame of the press, before the new game is set up:
+        lda $d012                       // reading it is allowed; only writing is the IRQ framework's
+        eor zp_rng_hi
+        tax
+        lda zp_irq_frame                // has run since power-on; never zeroed
+        eor zp_rng_lo
+        jsr rng_seed                    // A = low, X = high; it replaces 0/0 itself
+```
+
+- **Why not the two sources alone**, as [engine/rng.md](../../../engine/rng.md) and the design's
+  rule 11 put it: on the title the main loop does the same small amount of work every frame, so
+  the code that reads `$D012` runs on the same raster line every time (about line 25, *counted*;
+  to be measured, (f) 5). That leaves `zp_irq_frame`'s 8 bits: at most about 256 different games,
+  and the same first dive for anyone who presses within the same frame mod 256. Stepping the
+  generator while the title is up makes its state at the press depend on how many frames the
+  title has been shown (65,535 states) and on every earlier game since power-on.
+- Both written rules still hold as written: the seed uses the frame counter and the raster line,
+  and nothing else reseeds. `rng_seed` is called here and once at power-on (the constant, which
+  the title's stepping starts from).
+- **`AUTOPLAY` has no title and keeps the constant seed.** A scripted test that presses fire on
+  the same frame every run gets the same game; one that needs a particular sequence writes
+  `zp_rng_lo` and `zp_rng_hi` through the monitor after the press, as `stage3_costs.py` does.
+- Cost: 42 a title frame, about 50 once. `rng.asm`'s zero page is main loop only: all of this is
+  in `game_state_update`, none in the IRQ.
+
+**(e) What `AUTOPLAY` exercises in stage 4, and the checks**
+
+`AUTOPLAY` stays what it is: wave 12, nothing dies, the stick scripted. Stage 4 adds:
+
+1. **It starts through wave 12's Intro** (`game_new` with the stores at wave 12, pattern index 2,
+   loop 3), inside the 400-frame warm-up. No title. The wave never clears.
+2. **Every `sfx_play` call site is assembled as in the game**: shots, dives, and the explosion's
+   once-a-frame request on a detected hit. A hit on the player is still counted and not answered,
+   and asks for no sound.
+3. **Every 64 frames `autoplay_update` asks for three priority-3 effects, one a voice** (game
+   over on voice 1 and the player-hit pair on 2 and 3), and adds 1 to **`autoplay_sfx_triples`**
+   (`.word 0`, little-endian, saturating). So the tick's worst case, three effects starting in
+   one tick, happens at least 9 times in any 600 frames, and `budget.json` requires the count to
+   be 1 or more. Those three calls are in the border (165 in `game_update`): harsher than play,
+   as the panel's load is. Between them the voices are held at priority 3 for 50–60 of every 64
+   frames, so most of play's requests are dropped at the tick; that is deliberate (the requests'
+   cost in the main loop is the same either way) and is why this build says nothing about how the
+   game sounds.
+
+Checks in [budget.json](../../../tests/games/swarm/budget.json) that become active when `"stage"`
+is 4:
+
+| Check | Kind | Limit | New? |
+|---|---|---|---|
+| Sound tick IRQ: `game_irq_bottom` → `irq_exit_rti` | `profile`, 600 | 570 | There since stage 0 |
+| `sfx_update` → `sfx_update_end` in the game | `profile`, 600 | 488 (the whole call's 500 less `jsr` and `rts`) | **Added** |
+| `sfx_play` → `sfx_play_end`, a request made in the display | `profile_excl_irq`, 600 | 125 (its 43-cycle span meeting a badline and 8 sprites' fetches: 124 by `short_routine_dma.py`'s count) | **Added** |
+| `AUTOPLAY` starts three effects in one tick | `memory`, `autoplay_sfx_triples` | ≥ 1 | **Added** |
+
+Checks already running whose figures stage 4 moves: all IRQ time (≤ 4,500; expect about 3,250),
+`game_update` (≤ 6,050), `player_update` (≤ 365), `diver_update` (≤ 1,350), `collide_update`
+(≤ 2,825), the headroom (≥ 650), and the `check.py` script, which the gameplay-engineer extends
+for the title, the waves, the bonus, the high score, the seeding and **which effect each event
+asks for** (read from the module's `sfx_request` and `sfx_cur`:
+[engine/sfx.md](../../../engine/sfx.md#labels-exported-for-tests)). The four soak checks stay
+pending for stage 5. After stage 4: 26 checks run, 4 pending.
+
+**(f) What must be measured on the game build**
+
+By `tests/games/swarm/stage4_costs.py` (gameplay-engineer; the pattern is `stage3_costs.py`),
+results committed beside it. Each line is reported with its figure, pass or not.
+
+| # | What | State to set | Limit |
+|---|---|---|---|
+| 1 | Clear's first frame: `formation_update` with the bonus and the sound, 3 explosions ending on a turn-and-swap frame | As stage 3's formation case, the three being the last alive | ≤ 750, and it ends above line 49 |
+| 2 | A later wave's Intro frame 0: `game_update`, `formation_update`, idle in that frame | The Clear's timer at its last frame | One-off rule: ≤ 4,000, ≤ 750, idle ≥ 5,000, no overrun |
+| 3 | The frames an enemy appears in: `game_update` over all of Intro, and the line `formation_update` ends on | A wave's start, left to run | Ends above line 49 in every frame |
+| 4 | The new game's frame (from the title's press) and the frame after it: `game_update`, `formation_update`, idle; `panel_update` for the four fields | The stick | One-off rule; `panel_update` ≤ 350 |
+| 5 | The title: entering it, its drawing frames, a steady frame, a blink frame: `game_update` and idle. **And the raster line of the `$D012` read at the press over 8 presses made on different frames, and whether two presses one frame apart give different `zp_rng_lo/hi`** | GameOver's last frame; the stick | ≤ 4,000 entering; the generator's states must differ |
+| 6 | GameOver's frame 0 and frame 1 with 3 divers still out: where `formation_update` ends; `panel_update` for the four fields | Lives 1, a ram at loop 1 or later | Above line 49; ≤ 350 |
+| 7 | `collide_update`'s placed frames A, B and C with the sound requests ([stage3_collide_worst.py](../../../tests/games/swarm/stage3_collide_worst.py) runs them as they are) | As the script | ≤ 2,825 |
+| 8 | `player_update` in a firing frame with the flash, and `diver_update`, with their sound requests: the `AUTOPLAY` maxima and the lines they ran on | `make test` | ≤ 365; ≤ 1,350 |
+| 9 | The sound tick: its maximum, the line it ends on, all IRQ time | `make test` | ≤ 570; ends by line 262; ≤ 4,500 |
+| 10 | A whole session by script on the game build: title, three waves, game over, title, a second game | The stick | `game_overrun_count`, `mux_late_count`, `irq_late_count`, `mux_pin_drop_count` all 0; the lowest idle reported |
+| 11 | `AUTOPLAY`: idle in the worst frame, the flicker share, `mux_max_age` | `make test` | ≥ 650; reported; ≤ 1 |
+| 12 | Sizes from the build's memory map: engine block, game tables, game code | | Inside `$27FF`, `$3FFF`, `$5FFF` (the `.errorif`s) |
+
+Fallback triggers. Limits are not edited to pass, and no row borrows from another:
+
+| Measured | Action |
+|---|---|
+| `sfx_update` over 488, or the tick over 570 | The raster-engineer's to report, from the module's spike, before the game sees it: [engine/sfx.md](../../../engine/sfx.md#cycle-budget) has the remedy (two starts a tick) and it is the Technical Director's call |
+| `collide_update`'s frame C over 2,825 with sound | Test only the divers that are in the shot's band ([The collision budget](#the-collision-budget)), and report both figures |
+| `formation_update` over 750 in Clear's first frame, or ending on line 49 or later in a frame of play | Report. The first remedy is the Technical Director's: the bonus and its sound move to the next frame's `game_state_update`, which changes the frame the score changes in, so the designer is told |
+| `player_update` over 365, `diver_update` over 1,350 | Report the figure and the line it ran on |
+| A one-off frame over 4,000 or under 5,000 idle | Spread the set-up over two frames, and report |
+| `game_overrun_count` not 0 anywhere, or `game_idle_min` × 16 under 650 | Report to the Technical Director |
+| Two presses a frame apart giving the same generator state | Report: the seeding isn't doing what (d) says |
+
 ### Does it fit? Yes
 
-| Frame | `mux_update` | IRQs incl. sound tick | Game | Idle left | Basis |
+Stage 3 **measured** (`AUTOPLAY`, wave 12, nothing dies: [Stage 3, measured](#stage-3-measured)),
+then the same frames with the game at its full budget and the sound tick at its estimate:
+
+| Frame | `mux_update` | IRQs | Game | Idle left | Basis |
 |---|---|---|---|---|---|
-| Normal (89.5–100% of frames) | 4,261 avg, ≤ 6,783 | ≤ 4,300 | ≤ 6,075 | **≥ about 2,500**, typically about 6,500 | Engine **measured**, game *estimate* |
-| Overflow (0–10.5% of frames, *model*) | about 5,400–6,500 *estimate*: 1–3 evictions and drops against the spike's 8 | ≤ 4,300 | ≤ 6,075 | about 2,700 *estimate*; **≥ 625 by the promise** | Promise **measured** in a harsher spike |
-| The README's excepted case, if it could happen | ≤ 12,342 | ≤ 4,300 | ≤ 6,075 | **None: short by about 175** (game left about 6,400, **measured**, against 6,575): one repeated frame | Doesn't occur in this design: see (b). It fitted by 135 before stage 2's collision figure |
+| **Measured**: the worst frame in about 10,000 | ≤ 8,142 | 2,732 (no sound yet) | ≤ 3,455 | **6,288** | **Measured** |
+| Normal (90.4% of frames **measured**; the model said 89.5%), game at its budget | 4,470–4,524 average, ≤ 6,672 **measured** | 2,732 + 570 | ≤ 6,050 | **≥ about 3,630**; about 9,800 with all three at their **measured** averages | Engine and IRQs **measured**; game budget; tick *estimate* |
+| Overflow (9.6% of frames **measured**), game at its budget | ≤ 8,142 **measured** (it was estimated at 5,400–6,500, and 7,500–8,100 for the busiest) | 2,732 + 570 | ≤ 6,050 | **≥ about 2,160**; ≥ 650 by the promise | The same |
+| The README's excepted case, if it could happen | ≤ 12,342 | ≤ 4,300 | ≤ 6,050 + 500 | **None: short by about 150** (game left about 6,400, **measured** in the engine's spike, against 6,550): one repeated frame | Doesn't occur in this design: see (b). The shortfall was 175 before stage 3's re-set, and the budget fitted by 135 before stage 2's collision figure |
 
 ### (a) Pinned evictions in the player's zone
 
@@ -865,7 +1358,10 @@ the floor of 625.
   filling the kept list 356, pinned pass 340, the fail decision 244 and eviction 302, restoring ages
   74, rebuild from a late slot about 600): **about 1,900** for one pinned eviction, about 2,500 for
   two. `mux_update` goes from about 4,300 to about 6,200–6,800 in that frame, which leaves the game
-  about 9,100 (frame − engine IRQs − `mux_update`) against its 6,575. Budgeted: nothing extra, because the engine's promise already covers it.
+  about 9,100 (frame − engine IRQs − `mux_update`) against its 6,550. Budgeted: nothing extra, because the engine's promise already covers it.
+- **Measured in stage 3**: no pinned sprite was ever left out (`mux_pin_drop_count` 0), and
+  `mux_update` in a frame that dropped or evicted anything was at most **7,827–8,142**: about
+  1,500 over its no-overflow maximum (6,629–6,672), a little under the estimate above.
 
 ### (b) Overflow frames
 
@@ -873,19 +1369,25 @@ the floor of 625.
   worst is loop 3) of frames in worst-case play, where nothing ever dies. A real game is lighter.
   At most **3** evictions and drops in a frame, against about 8 on average in the spike that the
   engine's 12,342 worst case comes from.
-- **Does the game still fit, or repeat frames? It fits; no repeated frame is expected.** The promise
-  of 7,200 was measured in a spike with 65% overflow frames and 4 pinned sprites sweeping through
-  crowds; Swarm's 6,575 is inside it by 625, and its overflow frames are lighter.
+- **Measured in stage 3**: **9.6%** of frames in the worst case (959 of about 10,000; 913 in
+  `make test`'s shorter run), `mux_max_age` 1: the model was right to within a point.
+- **Does the game still fit, or repeat frames? It fits; no frame repeated** (`game_overrun_count`
+  0). The promise of 7,200 was measured in a spike with 65% overflow frames and 4 pinned sprites
+  sweeping through crowds; Swarm's 6,550 is inside it by 650, and its overflow frames are lighter:
+  what Swarm's own worst frames left the game was at least 8,782 (19,656 − 2,732 − 8,142).
 - **The excepted case** (a mass re-sort **and** pinned sprites evicting in the same frame, about
   6,400 left) needs many sprites to change places in Y order at once. The model's busiest frame has
   **43 shifts** (a full reversal is 276; the spike's stress frames re-order three groups of 8), from
   a diver wrapping to Y 30 while shots cross a row. That costs the sort about 1,000 more than usual
   (*estimate*: 276 shifts ≈ 6,000, README). Frames with 20 or more shifts that also overflow: at
-  most 72 in 6,000 (1.2%), 39 with a pinned eviction. Estimated `mux_update` there: about 7,500–8,100,
-  leaving the game about 7,800–8,400, which the 6,575 budget fits by about 1,200. **At the README's
-  measured floor for the excepted case (6,400) it no longer does: 175 short** (it fitted by 135
-  at 6,265). That floor comes from the spike's mass re-sorts with 8 evictions; Swarm would have to
-  spend every row's worst case in a frame six times busier in the sort than the model's busiest.
+  most 72 in 6,000 (1.2%), 39 with a pinned eviction. Estimated `mux_update` there: about 7,500–8,100
+  (**measured** since: 8,142 at most), leaving the game about 7,800–8,400, which the 6,550 budget
+  fits by about 1,200. **At the README's measured floor for the excepted case (6,400) it doesn't:
+  150 short** (175 before stage 3's re-set; it fitted by 135 at 6,265). That floor comes from the
+  spike's mass re-sorts with 8 evictions; Swarm would have to spend every row's worst case in a
+  frame six times busier in the sort than the model's busiest. Stage 4 removes the one frame that
+  came nearest a mass re-sort, 18 enemies appearing at once (which itself took only 4,251 in
+  `mux_update`, **measured**): they now appear one every 2 frames.
 - **If the estimates are wrong** the effect is one repeated frame of sprites (a 1/50 s stutter), no
   corruption. `game_overrun_count` counts them and `make test` requires 0.
 
@@ -901,36 +1403,41 @@ the floor of 625.
 
 ### Risks, in order
 
-1. **`collide_update` in the display is the largest figure still counted, not measured.** Expected
-   about 2,450–2,600 of 2,825 in stage 3's worst frame: the calls are **measured**, the mix and
-   the × 1.35 are *counted*, and `AUTOPLAY` can't place the worst frame, so it is measured on the
-   game build ([What AUTOPLAY cannot measure](#what-autoplay-cannot-measure)). Over 2,825 switches
-   to the grid lookup (about 700 CPU, 900 raster, no design change).
-2. **Divers (1,350) are the largest row still wholly an estimate**, and the row that decides where
-   the collisions land. Its count (1,050 CPU) assumes a launch and three divers stepping together,
-   which can't happen, so the estimate is believed generous; stage 3's `diver_update` check and the
-   placed launcher case settle it.
-3. **The headroom is 625 (8.7%), and the budget is 175 over what the engine's excepted case
-   leaves.** That case isn't reached in the model ((b) above), and the rows' worst cases can't all
-   fall in one frame, so no repeated frame is expected. `make test` requires
-   `game_overrun_count` = 0.
-4. **Overflow frames are a model's until stage 3 runs them.** Part B never overflowed (0 flicker
-   frames with 21 sprites). The model has up to 10.5% of frames dropping a sprite and
-   `mux_update` about 1,900–2,500 dearer in them; if the engine drops more than the model says,
-   feel target 5 fails first (`mux_max_age` ≤ 1, checked from stage 3).
-5. **Border work must stay above line 51.** Rows 4, 5, 7 and 10 are budgeted with no badline; at
-   their budgets the border work ends on line 45. A routine added before `diver_update`, or the
-   order changed, breaks four rows at once: the `stars_update` lesson.
-6. **`player_update` at 290 is the worst start cycle with 8 sprites on five lines running.**
-   A sampled run will read far less (122–165 usually), so its check has wide margin by design and
-   says little; the count is what holds.
+1. **The sound tick (500) is the largest figure still not measured**, and it is close to its
+   count (468 for three effects starting in one tick). Nothing in the game can absorb an overrun
+   of it: it is IRQ time. It is measured in the module's spike before the game uses it, and the
+   remedy if it is over (two starts a tick) is ready in [engine/sfx.md](../../../engine/sfx.md#cycle-budget).
+2. **`collide_update`'s worst frame is 2,469 of a 2,600 allowance, and the 225 beside it is
+   spoken for** by stage 4's sound requests. The frame was found by reading the code's paths, not
+   by a search, so a dearer one may exist; the 5% is for where it lands in the frame, not for
+   that. A reserve of about 100 is identified
+   ([The collision budget](#the-collision-budget)).
+3. **The headroom is 650 (9.0%), and the budget is 150 over what the engine's excepted case
+   leaves.** That case wasn't reached in about 10,000 measured frames of Swarm's worst case
+   (`mux_update` at most 8,142 against the 12,342 it comes from; idle never under 6,288), and the
+   rows' worst cases don't fall in one frame (`game_update` at most 3,455 of 6,050). If it did
+   happen: one repeated frame. `make test` requires `game_overrun_count` = 0.
+4. **Rows 5, 6 and 8 have little spare for what stage 4 puts in them**: about 30 in row 5 in
+   Clear's first frame, 110 in row 6, none in row 8. Each has a measurement in
+   [Stage 4](#stage-4-what-must-be-done-to-stay-in-budget) (f) and a fallback that isn't "raise
+   the limit".
+5. **Border work must stay above line 51 in a frame of play.** Rows 4, 5, 7 and 10 are budgeted
+   with no badline; **measured**, the border work ends on lines 36–41, and at the rows' budgets
+   on line 45. A routine added before `diver_update`, or the order changed, breaks four rows at
+   once: the `stars_update` lesson. Stage 4 adds work there in three kinds of frame (an enemy
+   appearing, Clear's first, GameOver's first), each counted to fit and each to be measured.
+6. **Sampled maxima of display routines aren't worst cases.** `player_update` (260 sampled, 288
+   counted, 362 with its sound), `diver_update` (978) and `game_update` (3,455) are looks; the
+   limits are the counts, and `make test-long` is the longer look at sign-off.
 7. **The promise itself has almost no margin** (28 cycles over about 800,000 frames in the spike), so
    treat 7,200 as exact, not conservative.
 8. **ECM with the multiplexer is unmeasured** in the write-timing run (see [The panel](#the-panel));
-   parts A and B ran the 21 sprites under ECM with no late write and no dropped sprite in 3,000
-   frames each, and Simon's stage 2 playtest ran it on real hardware.
+   stage 3 ran all 24 sprites under ECM with no late write and no dropped pinned sprite in about
+   10,000 frames, and Simon has played stages 2 and 3 on real hardware.
 9. **A fifth explosion is not drawn** ([Row 5](#row-5-the-formation-and-its-explosions)): a rule,
    and a rare one, but visible if it happens to the diver that rams the player.
+10. **How the game sounds can't be tested here at all**: the tools can't hear. Simon judges it,
+    with `make run` and on the C64 Ultimate ([engine/sfx.md](../../../engine/sfx.md#the-reference-doc-it-must-write-docsreferencesidmd)).
 
 ## Labels the game must provide
 
@@ -952,6 +1459,10 @@ files: checked, [kickassembler.md](../../reference/kickassembler.md#syntax-we-re
   what this build can't show and is measured on the game build instead);
 - it sets `PANEL_DIRTY_PLAY` (score, lives, wave) every frame, so the panel is at its busiest for
   a frame of play in every pass ([The panel's budget](#the-panels-budget));
+- from stage 4 it starts through wave 12's Intro, makes every sound request the game makes, and
+  every 64 frames asks for three priority-3 effects at once, counted in `autoplay_sfx_triples`, so
+  that the sound tick's worst case is in every run
+  ([Stage 4](#stage-4-what-must-be-done-to-stay-in-budget) (e));
 - in stages before a feature exists, it simply runs what there is.
 
 | Label | Kind | Meaning | Checked from stage |
@@ -966,10 +1477,12 @@ files: checked, [kickassembler.md](../../reference/kickassembler.md#syntax-we-re
 | `diver_update`, `diver_update_end` | Code | Row 6, the launcher included | 3 |
 | `eshot_update`, `eshot_update_end` | Code | Row 7 | 3 |
 | `game_irq_bottom` | Code | Chain entry 1's first instruction (exists from stage 1 as a bare `IrqDone()`; calls `sfx_update` from stage 4) | 4 |
+| `sfx_update`, `sfx_update_end`, `sfx_play`, `sfx_play_end` | Code, the engine's | The sound module's two routines ([engine/sfx.md](../../../engine/sfx.md#api)); come with its import | 4 |
 | `game_overrun_count` | 1 byte, DEBUG, saturating at 255 | Frames whose work (`game_update` + `mux_update`) finished after the next frame tick | 1 |
 | `game_idle_min` | 2 bytes, little-endian, DEBUG, starts `$FFFF` | Fewest idle-loop iterations in any frame after the first `GAME_IDLE_WARMUP` (200) frames. Overrun frames don't update it | 1 |
 | `game_flicker_frames` | 2 bytes, little-endian, DEBUG, saturating | Frames in which `mux_drop_count` was not 0 after `mux_update` | 3 |
 | `autoplay_player_hits` | 2 bytes, little-endian, `AUTOPLAY` build only, saturating | Hits on the player that `collide_update`'s two scans reported (counted, not answered) | 3 |
+| `autoplay_sfx_triples` | 2 bytes, little-endian, `AUTOPLAY` build only, saturating | Frames in which `autoplay_update` asked for three priority-3 effects, one a voice (every 64th frame) | 4 |
 | Engine's: `irq_dispatch`, `irq_exit_rti`, `irq_late_count`, `mux_update`, `mux_update_fast`, `mux_update_end`, `mux_late_count`, `mux_max_age`, `mux_pin_drop_count`, `mux_pin_excess_count` | | Come with the engine imports | 1–3 |
 
 **The main loop**, as built in stage 1 (`games/swarm/src/main.asm`):
