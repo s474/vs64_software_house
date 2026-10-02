@@ -1,8 +1,10 @@
 # What a game needs from the engine
 
-Two pages for a gameplay engineer starting a game on engine v1. **This is a guide, not a source of
+A few pages for a gameplay engineer starting a game on engine v1. **This is a guide, not a source of
 truth**: every figure is copied from [README.md](README.md), a module contract
-([input.md](input.md), [rng.md](rng.md), [collision.md](collision.md), [sfx.md](sfx.md)) or,
+([input.md](input.md), [rng.md](rng.md), [collision.md](collision.md), [sfx.md](sfx.md)), a
+hardware reference page (for sound, [docs/reference/sid.md](../docs/reference/sid.md): what the
+SID does, measured in VICE, and what only ears can check) or,
 where it says Swarm, [Swarm's memory map](../docs/games/swarm/memory-map.md), and if
 they disagree, they are right and this page gets fixed. Read the game's own
 `docs/games/<title>/memory-map.md` first; a worked example is `games/swarm/src/main.asm`.
@@ -14,21 +16,22 @@ BasicUpstart2(start)
 #import "zp.asm"                        // every zero-page label below
 .const MUX_SCREEN = $0400               // before the multiplexer import
 .const MUX_Y_MAX  = 221                 // largest sprite Y shown: 80-249
-* = $0810 "Engine"                      // allow about 6 KB (6,045 bytes measured, DEBUG)
+* = $0810 "Engine"                      // allow about 7.2 KB (Swarm: 6,293 measured + sound)
 #import "engine/irq.asm"
 #import "engine/multiplexer.asm"
 #import "engine/input.asm"              // 32 bytes
 #import "engine/rng.asm"                // 37 bytes
 #import "engine/collision.asm"          // 148 bytes. After the multiplexer: it reads its arrays
+#import "engine/sfx.asm"                // 632 bytes + up to 255 of padding (it is page-aligned)
         IrqChainBegin()
         IrqNormal(MUX_TOP_LINE, mux_irq_top)    // entry 0 is always this, at line 16
         IrqNormal($fb, game_irq_bottom)         // entry 1, line 251: sound, later music
         IrqChainEnd()
 ```
 
-`sfx.asm` is a contract only until the README's status table says otherwise; when it exists, the
-`$fb` handler is `jsr sfx_update` and nothing else, and the main loop asks for sounds with
-`sfx_play` ([sfx.md](sfx.md)). `collision.asm` needs a `col_pairs` label in the game (section 5).
+With `sfx.asm` the `$fb` handler is `jsr sfx_update` then `IrqDone()` and nothing else, and the
+effect data is written after the import (section 6). `collision.asm` needs a `col_pairs` label
+in the game (section 5).
 Chain: 1–16 entries, ascending lines 0–255, each handler ends with `IrqDone()`; with the
 multiplexer, none before line 16 and none from there to `MUX_Y_MAX + 2` (`+ 3` when `MUX_Y_MAX` is
 243 or less): [Declaring the chain](README.md#declaring-the-chain), [Raster timeline](README.md#raster-timeline).
@@ -44,6 +47,7 @@ multiplexer, none before line 16 and none from there to `MUX_Y_MAX + 2` (`+ 3` w
 | `zp_rng_lo`, `zp_rng_hi` | `rng.asm` | Not touch them |
 
 One byte each; any free addresses. Suggested block: [Zero page](README.md#zero-page).
+`collision.asm` and `sfx.asm` need none.
 
 ## 3. Start-up and the main loop
 
@@ -53,6 +57,7 @@ start:  ...                     // anything needing sei or a $01 write: here, be
         ...                     // write mux_flags once, all 24 entries
         jsr input_init
         jsr rng_seed            // A = low, X = high. A constant here; see below
+        jsr sfx_init            // silences the SID, volume 15. Before irq_init: the tick is an IRQ
         jsr irq_init            // $01 = $35, chain running, interrupts on. Last
 main:   jsr irq_wait_frame      // A = frame number
 main_frame:
@@ -146,7 +151,78 @@ col_pairs:                                   // the game's label; one row per pa
   frame, a diver in each shot's Y band, is 2,469, and in that frame the lookup is dearer than the
   scan was ([the collision budget](../docs/games/swarm/memory-map.md#the-collision-budget)).
 
-## 6. Rules that must not be broken
+## 6. Sound effects ([sfx.md](sfx.md))
+
+Three SID voices, one effect a voice at a time, priorities 1–3. No music. Two halves: the main
+loop leaves a **request** (one byte a voice), and the **tick**, an IRQ at line 251, starts and
+steps the effects, so sound keeps its tempo when the main loop is late.
+
+```
+#import "engine/sfx.asm"                // in the engine block, with the other modules
+        ...
+        SfxBegin()                      // the effect data: in a file the GAME owns, placed with
+#import "sfx_data.asm"                  // the game's tables. SfxEnd() emits the tables here
+        SfxEnd()
+        ...
+start:  jsr sfx_init                    // before irq_init
+        ...
+game_irq_bottom:                        // chain entry 1, line $FB
+        jsr sfx_update                  // the tick. This and IrqDone(), NOTHING else, ever
+        IrqDone()
+        ...
+        lda #SFX_PLAYER_SHOT            // main loop: ask for an effect
+        jsr sfx_play                    // A, X and Y are gone; no zero page is touched
+```
+
+An effect in the data file (voice 0–2 is SID voice 1–3):
+
+```
+.label SFX_PLAYER_SHOT = SfxEffect(0, 1, $00, $a0, 8)   // voice, priority, AD, SR, pulse width 0-15
+        SfxStep(8, $41, $9000, -$0e00)                   // frames, control, frequency, slide a frame
+        SfxStep(1, $40, SfxHz(523.25), 0)                // SfxHz: a pitch in Hz as a PAL frequency value
+```
+
+- **`sfx_play` from the main loop only**, never from an IRQ handler; `sfx_update` from the IRQ
+  only. `sfx_play` clobbers **A, X and Y**: a caller that needs X or Y afterwards saves it (6
+  cycles each through a `zp_tmp` byte, which the call doesn't touch).
+- **The priority rule, which the game never codes**: a new effect starts if its voice is idle or
+  playing an effect of **equal or lower** priority, which it cuts off; otherwise it is dropped,
+  not queued. Of several requests for one voice in one frame the highest priority survives, and
+  **the latest call on a tie**. So every routine asks for its sound without looking at what else
+  happened, and the order of calls is the order of the frame.
+- A request made before line 251 starts in that frame's tick. An effect that needs two voices is
+  two effects and two calls.
+- **What a request costs** (`lda #` + `jsr sfx_play`, CPU cycles, **measured**): **36** with
+  nothing pending on the voice, **51** replacing a pending request, **39** keeping a higher one.
+
+  | Where | Raster cycles to allow |
+  |---|---|
+  | Border (no badline, no sprites) | 36 / 51 / 39 |
+  | Display, no sprites on the lines | 79 / 94 / 82 at worst: + a badline (**measured**) |
+  | Display, 8 sprites on the lines | 117 / 151 / 120 at worst (*counted*) |
+
+  So: ask in the border where the event allows it; **ask once a frame** for an effect that
+  several events in a frame would ask for (a flag, tested once at the routine's end); don't ask
+  for an effect that a higher priority on its voice has already beaten in that frame. Inside a
+  routine in the display, add the requests' CPU to the routine's and count the routine again
+  ([sfx.md](sfx.md#what-a-request-costs-a-game); Swarm's nine requests:
+  [memory map](../docs/games/swarm/memory-map.md#stage-4-part-b-sound-requests)).
+- **The tick** costs IRQ time, no DMA: 56 with nothing playing, 214 with three voices sliding,
+  **429** when three effects start in one frame (whole calls, **measured**); the chain entry
+  around that worst tick is 498 to its `rti`.
+- **The SID can't be read back** ([sid.md](../docs/reference/sid.md), fact 2). Tests read the
+  module instead: `sfx_request` (3 bytes: what the main loop asked for this frame, effect + 1,
+  cleared by the tick), `sfx_cur` (3 bytes: what each voice is playing, effect + 1, 0 = idle),
+  and in DEBUG `sfx_shadow` (25 bytes: the last value written to each of `$D400–$D418`). The
+  VICE monitor's own read of `$D400–$D418` (`vice_read_memory`) does return the last value
+  written, in release builds too ([sid.md](../docs/reference/sid.md), fact 3). Read
+  `sfx_request` at `game_update_end`, before the tick takes it.
+- **Envelope values decide whether an effect starts on time** ([sid.md](../docs/reference/sid.md),
+  fact 15): release 0 on every effect; every rate 0 on one that must never be late. A start that
+  cuts off a slowly decaying effect is about 33 ms late. And nothing here can tell you how it
+  sounds: that is a person's job, in VICE and on the real machine.
+
+## 7. Rules that must not be broken
 
 The four conditions engine v1 was measured under ([verdict](README.md#verdict-safe-for-m4-with-the-zone-code-frozen)):
 1. **The zone code and its three scheduling constants are frozen.** A game needing an engine
@@ -164,8 +240,10 @@ The four conditions engine v1 was measured under ([verdict](README.md#verdict-sa
   `JOY_DOWN` `$02`, `JOY_LEFT` `$04`, `JOY_RIGHT` `$08`, `JOY_FIRE` `$10`.
 - **Random numbers.** Main loop only; `rng_next` returns A and preserves X and Y. Never write
   code that waits for a particular value to turn up, and bound any mask-and-retry loop yourself.
+- **Sound.** Only `sfx.asm` writes `$D400–$D418`. `sfx_play` in the main loop, `sfx_update` in
+  the `$FB` handler, never the other way round (section 6).
 
-## 7. What it costs, and what is left (raster cycles a frame, PAL, DEBUG, round figures)
+## 8. What it costs, and what is left (raster cycles a frame, PAL, DEBUG, round figures)
 
 | | Cycles |
 |---|---|
@@ -176,6 +254,8 @@ The four conditions engine v1 was measured under ([verdict](README.md#verdict-sa
 | Left for the game in a normal frame | about 11,600 |
 | `jsr input_read` / `jsr rng_next`, whole call, no DMA | 40 / 42 |
 | `jsr collision_begin` / a target rejected / a target tested / `jsr collision_one` | 95 / 17 / 39 / up to 52 |
+| `lda #` + `jsr sfx_play`: nothing pending / replacing / keeping, no DMA | 36 / 51 / 39 |
+| The sound tick (`jsr sfx_update` in the `$FB` handler): idle / three slides / three starts | 56 / 214 / 429, + 6 more in `irq_exit` when it ends past line 255 |
 | A chain entry of your own | 93 + its work |
 
 Budget the game against 7,200, sound included. A **long** routine (thousands of cycles) that runs
@@ -193,7 +273,7 @@ nothing that makes a frame of play expensive can be in it; measure its idle time
 routines; and spread set-up that grows with the number of objects over several frames (Swarm:
 [one-off frames](../docs/games/swarm/memory-map.md#one-off-frames)).
 
-## 8. Limits ([v1 limits](README.md#v1-limits))
+## 9. Limits ([v1 limits](README.md#v1-limits))
 
 - **24 sprites, 4 pinned.** No expanded sprites, one screen for the sprite pointers.
 - **Row spacing.** At most 8 sprites in any 25-line window show without flicker; a full row of 8
@@ -205,7 +285,7 @@ routines; and spread set-up that grows with the number of objects over several f
 - If the frame's work overruns, the previous frame's sprites are shown again: a stutter, never
   corruption.
 
-## 9. Testing ([Budget files](README.md#budget-files))
+## 10. Testing ([Budget files](README.md#budget-files))
 
 - `make test` runs every `tests/**/budget.json`; `make test ARGS=<name>` runs one.
 - The game's budget build is `tests/games/<title>/main.asm`: `#define AUTOPLAY`, then `#import`

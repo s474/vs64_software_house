@@ -2,79 +2,85 @@
   "spike": "sfx",
   "src_dir": "tests/engine/sfx",
   "warmup_frames": 100,
-  "notes": "Checks from the contract's table (engine/sfx.md#spike-testsenginesfx, Technical Director 2026-10-02), with the contract's limits. Built and measured by the raster-engineer in M4 stage 4 (2026-10-02: engine/sfx.md#results, tests/engine/sfx/measure.py and measure_results.txt). The limits are still the contract's estimates-with-room: every path below is constant and DMA-free (sfx_update from line 251, sfx_play in the top border, no IRQ inside), so each can become a lock (min_cycles = max_cycles) at its measured figure, which each check's source gives; setting the locks is the Technical Director's. The spike runs an 80-frame phase cycle (main.asm's header): 21 idle ticks, 39 slide ticks and 1 three-start tick a cycle, sfx_play's take path 5 times and its replace and keep paths once each; warmup_frames covers one whole cycle. The spans of the first three and the last three profile checks are a jsr to the label after it: WHOLE CALLS (profile span + jsr 6 + rts 6: engine/README.md#which-span-a-figure-is). Behaviour is check.py (the last check): the module against an independent model, every SID register write, every frame. Schema: engine/README.md#budget-files.",
+  "notes": "Checks from the contract's table (engine/sfx.md#spike-testsenginesfx). Built and measured by the raster-engineer in M4 stage 4 (2026-10-02: engine/sfx.md#results, tests/engine/sfx/measure.py and measure_results.txt); LOCKS SET by the Technical Director the same day from those figures. Every path below is constant and DMA-free (sfx_update from line 251, sfx_play in the top border, no IRQ inside; the module is page-aligned, so its branches cross the same pages in every program), so each single-path check is a lock: min_cycles = max_cycles = the measured figure, as the IRQ framework's are (engine/README.md#irq-framework-costs). A lock that fails in EITHER direction means the module changed: re-measure and re-baseline on purpose, in engine/sfx.asm's header, engine/sfx.md and here together. The two checks that every tick passes through can only have a maximum, and it is the measured one. The spike runs an 80-frame phase cycle (main.asm's header): 21 idle ticks, 39 slide ticks and 1 three-start tick a cycle, sfx_play's take path 5 times and its replace and keep paths once each; warmup_frames covers one whole cycle. The spans of the first three and the last three profile checks are a jsr to the label after it: WHOLE CALLS (profile span + jsr 6 + rts 6: engine/README.md#which-span-a-figure-is). Behaviour is check.py (the last check): the module against an independent model, every SID register write, every frame. IF THE START SEQUENCE GAINS ITS EIGHTH WRITE (engine/sfx.md#option-b-an-eighth-write-in-a-start): the locks on the three ticks and the two maxima move and are re-set from a new measure.py run; the three sfx_play locks do not. Schema: engine/README.md#budget-files.",
   "checks": [
     {
       "name": "the tick, all idle (whole call)",
       "kind": "profile",
       "routine": ["spike_tick_idle", "spike_tick_idle_end"],
-      "max_cycles": 62,
+      "min_cycles": 56,
+      "max_cycles": 56,
       "samples": 50,
-      "basis": "estimate",
-      "source": "engine/sfx.md#cycle-budget: contract limit 62 (span 50 + 12). MEASURED 56 every pass (span 44): proposed lock 56"
+      "basis": "measured",
+      "source": "LOCK. Measured 56 every pass, 105 of 105 (span 44), lines 251-252: tests/engine/sfx/measure_results.txt. Counted: 3 voices x 14 + 2 (one branch of voice 1 and one of voice 2 cross a page; the module's .align fixes that) + jsr 6 + rts 6. The contract's estimate was 62"
     },
     {
       "name": "the tick, three slides (whole call)",
       "kind": "profile",
       "routine": ["spike_tick_slide", "spike_tick_slide_end"],
-      "max_cycles": 232,
+      "min_cycles": 214,
+      "max_cycles": 214,
       "samples": 50,
-      "basis": "estimate",
-      "source": "engine/sfx.md#cycle-budget: contract limit 232 (span 220 + 12). MEASURED 214 every pass (span 202): proposed lock 214"
+      "basis": "measured",
+      "source": "LOCK. Measured 214 every pass, 195 of 195 (span 202), lines 251-255: measure_results.txt. Counted: 3 x 67 + 1 (a page crossing) + 12. The contract's estimate was 232"
     },
     {
       "name": "the tick, three starts (whole call)",
       "kind": "profile",
       "routine": ["spike_tick_start3", "spike_tick_start3_end"],
-      "max_cycles": 500,
+      "min_cycles": 429,
+      "max_cycles": 429,
       "samples": 5,
-      "basis": "estimate",
-      "source": "engine/sfx.md#cycle-budget: contract limit 500 (span 488 + 12), the worst case. MEASURED 429 every pass (span 417): proposed lock 429. One pass every 80 frames"
+      "basis": "measured",
+      "source": "LOCK, the worst case. Measured 429 every pass (span 417 = 3 x 139), lines 251-258: measure_results.txt. One pass every 80 frames, so 5 samples are 400 frames. The contract's budget is 500 (span 488): 71 spare, of which the eighth write of a start, if it is ever asked for, would take about 45"
     },
     {
       "name": "the tick, any (profile span)",
       "kind": "profile",
       "routine": ["sfx_update", "sfx_update_end"],
-      "max_cycles": 488,
+      "max_cycles": 417,
       "samples": 600,
-      "basis": "estimate",
-      "source": "engine/sfx.md#cycle-budget: contract limit 488. MEASURED 44 to 417 over 400 ticks (the maximum is the three-start tick); 600 samples = 7 phase cycles"
+      "basis": "measured",
+      "source": "A MAXIMUM, not a lock (every tick passes through this span). Measured 44 to 417 over 400 ticks; the maximum is the three-start tick, which nothing can exceed (a start is the dearest thing a voice can do: 139 against 115 for a dropped request and a step change). 600 samples = 7 phase cycles. The contract's budget is 488"
     },
     {
       "name": "the sound tick IRQ (spike_bottom to the rti)",
       "kind": "profile",
       "routine": ["spike_bottom", "irq_exit_rti"],
-      "max_cycles": 590,
+      "max_cycles": 511,
       "samples": 600,
-      "basis": "estimate",
-      "source": "engine/sfx.md#spike-testsenginesfx: 563 of a game's entry + 25 for the spike's choice of call site. MEASURED max 511 (the three-start tick) = 13 (the choice: 7 idle, 11 slide, 13 start3, 12 other) + 429 + jmp 3 + irq_exit 66. irq_exit is 58 on this entry (the wrap to entry 0) and 66 when the tick ends after line 255, which only the three-start tick does (line 258). A game's entry with no choice: 498"
+      "basis": "measured",
+      "source": "A MAXIMUM (every tick passes through). Measured 124 idle, 286 slides, 511 three starts, every pass: 13 (the spike's choice of call site: 7 idle, 11 slide, 13 start3, 12 other) + 429 + jmp 3 + irq_exit 66. irq_exit is 58 on this entry (the wrap to entry 0) and 66 when the tick ends after line 255, where the framework's raster bit-8 test is reached (counted from engine/irq.asm: 44 + 2 + 2 + 4 + 3 + 2 + 3 + 6); a tick whose profile span is over about 225 gets there (the spike's three-start tick; in a game one start with the other two voices sliding, 273, is enough), so it is part of the worst case and of some ordinary ticks. A game's entry has no choice of call site: 498 (jsr 6 + 417 + rts 6 + jmp 3 + 66), which is Swarm's check. The contract's estimate was 590"
     },
     {
       "name": "sfx_play, nothing pending (whole call)",
       "kind": "profile",
       "routine": ["spike_play_take", "spike_play_take_end"],
-      "max_cycles": 55,
+      "min_cycles": 34,
+      "max_cycles": 34,
       "samples": 10,
-      "basis": "estimate",
-      "source": "engine/sfx.md#cycle-budget: contract limit 55 (span 43 + 12). MEASURED 34 every pass (span 22): proposed lock 34"
+      "basis": "measured",
+      "source": "LOCK. Measured 34 every pass (span 22), lines 19-21, no DMA: measure_results.txt. The contract's budget is 55. In the display the same call is 34 or 77 (a badline inside; measure.py's DISPLAY part): what a game allows for it is engine/GAME-GUIDE.md section 6"
     },
     {
       "name": "sfx_play, equal priority pending: replaced (whole call)",
       "kind": "profile",
       "routine": ["spike_play_replace", "spike_play_replace_end"],
-      "max_cycles": 55,
+      "min_cycles": 49,
+      "max_cycles": 49,
       "samples": 5,
-      "basis": "estimate",
-      "source": "engine/sfx.md#cycle-budget: contract limit 55. MEASURED 49 every pass (span 37): proposed lock 49. One pass every 80 frames"
+      "basis": "measured",
+      "source": "LOCK. Measured 49 every pass (span 37): the dearest path. One pass every 80 frames. The contract's budget is 55"
     },
     {
       "name": "sfx_play, higher priority pending: kept (whole call)",
       "kind": "profile",
       "routine": ["spike_play_keep", "spike_play_keep_end"],
-      "max_cycles": 55,
+      "min_cycles": 37,
+      "max_cycles": 37,
       "samples": 5,
-      "basis": "estimate",
-      "source": "engine/sfx.md#cycle-budget: contract limit 55. MEASURED 37 every pass (span 25): proposed lock 37. One pass every 80 frames"
+      "basis": "measured",
+      "source": "LOCK. Measured 37 every pass (span 25). One pass every 80 frames. The contract's budget is 55"
     },
     {
       "name": "the three-starts phase ran",

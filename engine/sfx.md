@@ -1,14 +1,19 @@
 # Sound effects: `engine/sfx.asm`
 
 Design contract for M4 (Technical Director, 2026-10-01; **tightened 2026-10-02** after four stages
-of M4, before the module is built). Status: **implemented and measured** (raster-engineer, M4
-stage 4, 2026-10-02), **not yet reviewed by the Technical Director and not yet heard by Simon**:
-`engine/sfx.asm`, 586 bytes of code (DEBUG), no zero page; spike `tests/engine/sfx/`, 11 checks in
-`make test`, all passing; `docs/reference/sid.md` written. Every path is inside its budget: three
-starts **417** against 488, `sfx_play` at most **37** against 43. What was built, measured and
-found is in [Results](#results-raster-engineer-2026-10-02); one SID finding there needs a
-decision ([late starts](#for-the-technical-director)). Conventions are
-[engine/README.md](README.md)'s.
+of M4, before the module was built). Status: **implemented, measured and accepted** (built by the
+raster-engineer in M4 stage 4, commit 4848b12; reviewed by the Technical Director the same day,
+2026-10-02), **not yet heard by Simon**: `engine/sfx.asm`, 586 bytes of code (DEBUG; 490 release),
+no zero page; spike `tests/engine/sfx/`, 11 checks in `make test`, all passing, the constant paths
+**locked** to their measured figures; [docs/reference/sid.md](../docs/reference/sid.md) written.
+Every path is inside its budget: three starts **417** against 488 (whole call **429** against
+500), `sfx_play` at most **37** against 43 (whole call **49** against 55). What was built,
+measured and found is in [Results](#results-raster-engineer-2026-10-02); what was decided from it
+(the locks, what a request costs a game, late starts, where a game's effect data lives, what
+constrains a change to the module) is in
+[Review and decisions](#review-and-decisions-technical-director-2026-10-02). Where the text
+above the Results says *estimate*, the Results and the review have the measured figure.
+Conventions are [engine/README.md](README.md)'s.
 
 **What the 2026-10-02 revision changed**, so nobody builds from a remembered copy:
 
@@ -22,9 +27,10 @@ decision ([late starts](#for-the-technical-director)). Conventions are
 | SID facts "unverified" | A list of the facts the module rests on and how each is checked: [below](#the-reference-doc-it-must-write-docsreferencesidmd) | `docs/reference/sid.md` doesn't exist yet |
 | Voices "0–2" here, "1–3" in the design | Stated: module voice v is the design's voice v + 1 | |
 
-**SID facts aren't in `docs/reference/` yet.** Everything this page says about SID registers is
-*unverified* (remembered, standard figures) until `docs/reference/sid.md` records it. The tools
-can't hear: pitch, timbre and loudness are judged by Simon, in VICE and on his C64 Ultimate.
+**SID facts are in [docs/reference/sid.md](../docs/reference/sid.md)** (15 facts, each marked
+measured, unverified or by ear; measured means measured in VICE's emulation, an 8580 by default).
+Where this page and that one differ about the SID, that one is right. The tools can't hear:
+pitch, timbre and loudness are judged by Simon, in VICE and on his C64 Ultimate.
 
 ## Purpose
 
@@ -121,15 +127,17 @@ sfx_init:
 // Ask for an effect to start at the next tick. Main loop only; never from an IRQ handler.
 // In:  A = effect number, 0 to SFX_COUNT - 1 (not checked)
 // Out: nothing   Uses: A, X, Y. No zero page
-// Cost: profile span (sfx_play -> sfx_play_end) at most 43 CPU cycles, whole call at most 55
-//       (budget). MEASURED: 22, 37 or 25 by path; whole call 34, 49, 37
+// Cost: MEASURED and locked, CPU cycles, by path: nothing pending on the voice 22 (whole call
+//       34); a pending request of equal or lower priority replaced 37 (49); a pending request of
+//       higher priority kept 25 (37). The budget was 43 (55). In the display a call can lose a
+//       badline (43) and each line's sprite fetches: "What a request costs a game", below
 sfx_play:
 
 // The tick: advance every voice by one frame. Called from an IRQ handler, once a frame; never
 // from the main loop.
 // In:  nothing   Out: nothing   Uses: A, X, Y. No zero page, no zp_tmp
-// Cost: profile span (sfx_update -> sfx_update_end) at most 488 CPU cycles, whole call at most
-//       500 (budget). MEASURED: 417 for three starts, the worst case; whole call 429
+// Cost: MEASURED and locked: three voices idle 44 (whole call 56), three slides 202 (214), three
+//       effects starting in one tick, the worst case, 417 (429). The budget was 488 (500)
 sfx_update:
 ```
 
@@ -163,39 +171,50 @@ in the step tables, closed by an end marker.
 At most 255 steps in all, end markers included (one index byte). Swarm: 10 effects, about 35
 steps: about 270 bytes.
 
-The module provides the macros that build the tables, so a game writes effects, not columns.
-Intended form (the raster-engineer settles the syntax; if it needs KickAssembler features that
-[docs/reference/kickassembler.md](../docs/reference/kickassembler.md) doesn't list, such as lists
-filled by `.eval`, check them and add them there):
+The module provides what builds the tables, so a game writes effects, not columns. **As built**
+(the syntax is the raster-engineer's; the KickAssembler features it needs are recorded in
+[docs/reference/kickassembler.md](../docs/reference/kickassembler.md)):
 
 ```
-        SfxBegin()
-        // name, voice 0-2, priority 1-3, attack/decay, sustain/release, pulse width 0-15
-        SfxEffect("PLAYER_SHOT", 0, 1, $00, $a0, 8)
-        SfxStep(8, $41, $2800, -$0180)  // frames, control, start frequency, slide per frame
-        SfxEffect("WAVE_START", 2, 2, $09, $00, 8)
-        SfxStep(9, $41, $1d45, 0)       // a note
-        SfxStep(1, $40, $1d45, 0)       // gate off for one frame: the next note gets a new attack
-        SfxStep(9, $41, $24dc, 0)
+#import "engine/sfx.asm"                // in the engine block; it emits the code and the state
         ...
-        SfxEnd()                        // emits the tables, the end markers and SFX_COUNT, and
-                                        // defines SFX_PLAYER_SHOT = 0, SFX_WAVE_START = 1, ...
+        SfxBegin()                      // once per program, after the import
+        // voice 0-2, priority 1-3, attack/decay, sustain/release, pulse width 0-15
+.label SFX_PLAYER_SHOT = SfxEffect(0, 1, $00, $a0, 8)
+        SfxStep(8, $41, $9000, -$0e00)  // frames 1-255, control, start frequency, slide per frame
+.label SFX_WAVE_START  = SfxEffect(2, 2, $09, $00, 8)
+        SfxStep(9, $41, SfxHz(523.25), 0)   // a note: SfxHz gives the PAL frequency value
+        SfxStep(1, $40, SfxHz(523.25), 0)   // gate off for one frame: the next note re-attacks
+        SfxStep(9, $41, SfxHz(659.26), 0)
+        ...
+        SfxEnd()                        // emits the twelve tables WHERE IT STANDS (each kept
+                                        // inside one page), the end markers, SFX_COUNT, SFX_STEPS
 ```
 
-The macros stop the build (`.errorif` or `.error`) on: a voice outside 0–2, a priority outside
-1–3, a pulse width over 15, frames outside 1–255, an effect with no step, more than 255 steps, and
-a control byte that isn't one waveform bit (`$10`, `$20`, `$40`, `$80`) with or without the gate
-(`$01`): no combined waveforms, no test, sync or ring bit.
+| | Kind | |
+|---|---|---|
+| `SfxBegin()` | macro | Opens the one set of effects a program has |
+| `SfxEffect(voice, prio, ad, sr, pw)` | **function** | Begins an effect and **returns its number** (0, 1, 2… in the order written). The game names it with a `.label` in front: a macro can't define a symbol whose name is one of its arguments. A `.label` may be used before the line that defines it (a `.const` may not), so `lda #SFX_PLAYER_SHOT` can come earlier in the source than the data |
+| `SfxStep(frames, ctrl, freq, slide)` | macro | A step of the effect being written. The effect's end marker (its last control value with the gate clear) is added for it |
+| `SfxHz(hz)` | function | Hz × 16,777,216 ÷ 985,248, rounded: the frequency value on PAL ([sid.md](../docs/reference/sid.md), fact 5) |
+| `SfxEnd()` | macro | Emits the tables and defines `SFX_COUNT` and `SFX_STEPS` |
 
-An effect that needs two voices (Swarm's player hit) is two effects and two `sfx_play` calls. The
-numbers in the example are placeholders, not Swarm's sounds.
+The build stops (`.errorif` or `.error`; all tried) on: a voice outside 0–2, a priority outside
+1–3, a pulse width over 15, frames outside 1–255, an effect with no step, more than 127 effects
+or 255 steps, and a control byte that isn't one waveform bit (`$10`, `$20`, `$40`, `$80`) with or
+without the gate (`$01`): no combined waveforms, no test, sync or ring bit. A pulse width of 0 is
+allowed and silent ([sid.md](../docs/reference/sid.md), fact 8).
+
+An effect that needs two voices (Swarm's player hit) is two effects and two `sfx_play` calls.
+**Envelope values decide whether a start is prompt**: release 0 on every effect, every rate 0 on
+an effect that must never start late ([sid.md](../docs/reference/sid.md), fact 15). The effect
+file is the game's: [Where a game's effect data lives](#where-a-games-effect-data-lives).
 
 ## Zero page
 
-**None.** The design above needs no pointer: every table read is absolute indexed. The game's
-zero page keeps `zp_sfx_ptr` (2 bytes, `$14–$15` in Swarm) reserved for this module, IRQ only, in
-case the measured code needs it after all; say in the report whether it was used, and the
-Technical Director releases it if not.
+**None.** Every table read is absolute indexed, and the module as built uses no pointer and no
+`zp_tmp`. **`zp_sfx_ptr` is released** (Technical Director, 2026-10-02): a game's `zp.asm` doesn't
+define it, and Swarm's `$14–$15` go back to the engine's reserved bytes.
 
 All state is absolute RAM in the module, per voice:
 
@@ -220,10 +239,11 @@ asked for and which is playing.
 
 ## Cycle budget
 
-All *estimates*, counted from the design above written as intended: the three voices' code
-unrolled (no voice index), absolute addressing, the shadow store after each SID write (DEBUG).
+The "Counted" and "Budget" columns are the contract's, written before the module existed (the
+three voices' code unrolled, absolute addressing, the shadow store after each SID write in
+DEBUG); the **Measured** columns are the module as built, and are what the spike locks.
 `sfx_update` runs on lines 251 onwards, where there is no badline or sprite DMA and nothing can
-interrupt it, so its raster cost is its CPU cost and each path's figure will be exact. The DEBUG
+interrupt it, so its raster cost is its CPU cost and each path's figure is exact. The DEBUG
 build is the one budgeted; release is the same less 4 cycles a SID write.
 
 | Path | Counted (estimate) | Budget: profile span | Budget: whole call (+ `jsr` 6, `rts` 6) | **Measured**, DEBUG: span / whole call | Release |
@@ -245,17 +265,19 @@ Behind the 456: a start is about 152 a voice (the request and the priority test 
 registers 36, the two state bytes and the first step's index 20, control 0 written 10, the step's
 frames, frequency and control 62).
 
-- **Measured figures replace these**: in the routine headers, here, and in the spike's
-  `budget.json`, where each constant path becomes a lock (`min_cycles` = `max_cycles`). The
-  Technical Director sets the locks from the raster-engineer's report.
-- Swarm's frame budget carries **500** for the tick (the whole call) and puts each `sfx_play` in
-  its caller's row at 55 CPU ([memory map](../docs/games/swarm/memory-map.md#stage-4-what-must-be-done-to-stay-in-budget)).
-  With the chain entry: `jsr` 6 + 488 + `rts` 6 + `jmp irq_exit` 3 + `irq_exit` 60 = 563, checked
-  at 570.
-- **If three starts measure over 488, or `sfx_play` over 43: report, with the figures, before
-  changing anything.** The choices are the Technical Director's: start at most two effects a tick
-  (the third request stays pending for the next), or take the difference from Swarm's headroom.
-  Don't trim the shadow or the write order to fit.
+- **The measured figures are locked** in the spike's `budget.json` (`min_cycles` = `max_cycles`:
+  56, 214 and 429 for the three ticks, 34, 49 and 37 for `sfx_play`, whole calls), and are in the
+  routine headers and here. A change to `engine/sfx.asm` that moves one is re-measured and
+  re-baselined on purpose, in all three places.
+- **In a game the chain entry around the worst tick is 498**: `jsr` 6 + 417 + `rts` 6 +
+  `jmp irq_exit` 3 + `irq_exit` **66** (not 60: [Results](#costs)). Swarm's frame budget carries
+  **480** for the tick: 435 as built (429 + the 6 that `irq_exit` costs over the 60 in the
+  framework's 93) and 45 held for [option B](#option-b-an-eighth-write-in-a-start); each
+  `sfx_play` is in its caller's row
+  ([memory map](../docs/games/swarm/memory-map.md#stage-4-part-b-sound-requests)).
+- The contract's stop condition (three starts over 488, or `sfx_play` over 43: report before
+  changing anything) was not met. It stands for any later change: don't trim the shadow or the
+  write order to fit.
 
 ## The reference doc it must write: `docs/reference/sid.md`
 
@@ -366,14 +388,14 @@ It must demonstrate:
 
 `tests/engine/sfx/budget.json` (`warmup_frames` long enough for one whole phase cycle):
 
-| Check | Kind | Labels | Limit | Basis |
+| Check | Kind | Labels | Limit (set 2026-10-02 from the measurements; the contract's estimate) | Basis |
 |---|---|---|---|---|
-| The tick, all idle | `profile` | `spike_tick_idle` → `spike_tick_idle_end` | max 62 | estimate; a lock once measured |
-| The tick, three slides | `profile` | `spike_tick_slide` → `spike_tick_slide_end` | max 232 | estimate; a lock once measured |
-| The tick, three starts | `profile` | `spike_tick_start3` → `spike_tick_start3_end` | max 500 | estimate; a lock once measured |
-| The tick, any | `profile`, 600 samples | `sfx_update` → `sfx_update_end` | max 488 | estimate |
-| The sound tick IRQ | `profile`, 600 samples | `spike_bottom` → `irq_exit_rti` | max 590: the 563 of a game's entry + the spike's choice of call site (allow 25; count it and say what it is). A game's own check is 570 | estimate + measured framework |
-| `sfx_play`, three paths | `profile` × 3 | `spike_play_take`, `_replace`, `_keep` → their `_end` | max 55 each | estimate; locks once measured |
+| The tick, all idle | `profile` | `spike_tick_idle` → `spike_tick_idle_end` | **lock 56** (62) | measured |
+| The tick, three slides | `profile` | `spike_tick_slide` → `spike_tick_slide_end` | **lock 214** (232) | measured |
+| The tick, three starts | `profile` | `spike_tick_start3` → `spike_tick_start3_end` | **lock 429** (500) | measured |
+| The tick, any | `profile`, 600 samples | `sfx_update` → `sfx_update_end` | **max 417** (488): every tick passes through, so a maximum, the measured one | measured |
+| The sound tick IRQ | `profile`, 600 samples | `spike_bottom` → `irq_exit_rti` | **max 511** (590): 13 for the spike's choice of call site + 429 + 3 + `irq_exit` 66. A game's entry is 498 | measured |
+| `sfx_play`, three paths | `profile` × 3 | `spike_play_take`, `_replace`, `_keep` → their `_end` | **locks 34, 49, 37** (55 each) | measured |
 | The three-starts phase ran | `memory` | `spike_triple_count`, size 2 | min 1 after one phase cycle | requirement |
 | No late chain entries | `memory` | `irq_late_count` | equals 0 | requirement |
 | Behaviour against the model | `script` | `check.py --prg {prg}` | exit code 0 | requirement |
@@ -499,6 +521,8 @@ would drift as the sounds are tuned).
 
 ### For the Technical Director
 
+Each item is answered in [Review and decisions](#review-and-decisions-technical-director-2026-10-02).
+
 1. **Late starts** ([sid.md fact 15](../docs/reference/sid.md#15-late-starts-the-envelopes-rate-counter),
    measured in VICE's 8580 emulation). A start is up to 33 ms (1.67 ticks) late, the voice holding
    its old level meanwhile, (a) always when it cuts off an effect that fades by a slow decay (in
@@ -524,3 +548,129 @@ would drift as the sounds are tuned).
 **Simon has not listened.** `make run GAME=sfx SRC_DIR=tests/engine/sfx`, stick in port 2: any
 movement leaves the test pattern; up/down choose, fire plays; entry 13 is the whole player hit.
 The questions are the table at the end of [sid.md](../docs/reference/sid.md#by-ear-simon).
+
+## Review and decisions (Technical Director, 2026-10-02)
+
+The module is accepted as built. The raster-engineer's changes to this page stand, with the
+corrections made in place above (status, the data syntax, the zero page, the budget table). One
+of his sentences is corrected here: "`irq_exit` is 66 when the handler ends after line 255, which
+only the three-start tick does" is true of the spike's ticks; in a game any tick whose profile
+span is over about 225 gets there (one start with the other two voices sliding is 273). It
+changes no worst case: three starts is still the dearest tick.
+
+### The locks
+
+`tests/engine/sfx/budget.json`, `make test ARGS=sfx` 11/11 with them (2026-10-02):
+
+| Check | Was (estimate) | Now | Kind of limit |
+|---|---|---|---|
+| The tick, all idle, whole call | max 62 | **56** | Lock (`min_cycles` = `max_cycles`) |
+| The tick, three slides, whole call | max 232 | **214** | Lock |
+| The tick, three starts, whole call | max 500 | **429** | Lock |
+| The tick, any, profile span | max 488 | **417** | Maximum: every tick passes through it. Nothing a voice can do costs more than a start (139; a dropped request and a step change is 115) |
+| The sound tick IRQ, `spike_bottom` → `rti` | max 590 | **511** | Maximum, for the same reason |
+| `sfx_play`: take / replace / keep, whole calls | max 55 each | **34 / 49 / 37** | Locks |
+
+The suggested figures were confirmed, not corrected. `irq_exit`'s 66 was checked by count from
+`engine/irq.asm`: 44 to the compare, then 2 + 2 + 4 + 3 through the raster bit-8 test, 2 + 3 in
+`irq_late` (the wrap is exempt), 6 to restore.
+
+### What a request costs a game
+
+A request is `lda #SFX_x` + `jsr sfx_play`: **36, 51 or 39 CPU cycles** (nothing pending on the
+voice / a pending request of equal or lower priority replaced / a higher one kept), + 6 for each
+of X and Y the caller needs afterwards (the routine uses A, X and Y and no zero page, so a value
+parked in a `zp_tmp` byte survives the call).
+
+| Where the call is made | Raster cycles to allow |
+|---|---|
+| Border, no sprite DMA | The CPU count: 36 / 51 / 39 |
+| Display, alone, no sprites on the lines | **79 / 94 / 82** at worst: the CPU count + a badline (43). **Measured** (whole calls 77 / 92 / 80, `measure.py`'s DISPLAY part) |
+| Display, alone, 8 sprites on the lines | **117 / 151 / 120** (*counted*: + 2 × sprites + 3 a line touched) |
+| Inside a routine in the display | Add the requests' CPU to the routine's CPU and count the routine again; for a long routine allow the worst case of the added cycles as one piece ([Swarm's counts](../tests/games/swarm/sfx_request_costs.txt)). **Not "70–75 a call"**: the earlier allowance (55 CPU × 1.27–1.36) is too low for one call and too high for several made close together |
+
+So the rule for a game: **make a request in the border where the event allows it; ask once a
+frame for an effect that several events in one frame would ask for** (a flag set by each event,
+tested once at the routine's end: it costs 6 an event and plays exactly what separate calls
+would, since a request replaced by the same effect is the same request); **and don't ask at all
+for an effect that a higher priority on the same voice has already beaten in that frame.**
+Swarm's nine requests, one by one:
+[memory map](../docs/games/swarm/memory-map.md#stage-4-part-b-sound-requests).
+
+### Late starts: option A now, option B ready
+
+[sid.md fact 15](../docs/reference/sid.md#15-late-starts-the-envelopes-rate-counter): a start is
+about 33 ms late (the voice holding its old level) always when it cuts off an effect that fades
+by a slow decay, and now and then from silence for those slow-decay effects themselves. Whether
+33 ms can be heard is **Simon's to say** after listening to the spike in VICE and on the C64
+Ultimate. Until he has, the module stays as built (**option A: accept**, seven writes a start).
+
+#### Option B: an eighth write in a start
+
+**It fits the budget and the contract, and is not built.** It removes the "now and then from
+silence" cases (**measured** in the probe: 0 late of 225) and does nothing for the cut-off cases,
+which no write order can fix. If Simon asks for it, this is the whole change:
+
+| What | From | To | Whose |
+|---|---|---|---|
+| The start sequence in `engine/sfx.asm` | 7 writes: attack/decay, sustain/release, pulse width, control 0, frequency low, high, control | **8**: attack/decay **with the decay nibble 0** (`and #$f0`), sustain/release, pulse width, control 0, frequency low, high, control, **attack/decay as the data has it** | raster-engineer |
+| This page | "[Start](#sfx_update-exactly) … **7 writes**" and the Start paragraph | 8 writes, in that order; a step change and an end are unchanged | Technical Director |
+| A start's cost | 139 a voice (DEBUG) | about **153**: + 12 to 14 **measured** in the probe ([sid.md](../docs/reference/sid.md), section 9) | |
+| The first branch of each voice (`beq play`, 127 bytes: [below](#constraints-on-changing-the-module)) | A branch | The start code grows by about 13 bytes a voice between it and its target, so it becomes `bne *+5` / `jmp play` (or the start's tail moves out of the span): **+ 2 a voice on the idle and slide paths, + 1 on a start**, if the jump is used | raster-engineer |
+| Locks: idle / slides / three starts (whole calls) | 56 / 214 / 429 | about 62 / 220 / **474** with the jump (56 / 214 / 471 without). All inside the contract's 62 / 232 / 500: **the idle tick exactly at its budget** | Technical Director, from a new `measure.py` run |
+| Maxima: the tick's span / the spike's tick IRQ | 417 / 511 | about 462 / 556 | the same |
+| `sfx_play`'s three locks | 34 / 49 / 37 | unchanged | |
+| Code size | 586 DEBUG, limit `SFX_CODE_MAX` 600 | about 625–640: **the limit rises to 650** (approved here, so nobody has to ask) | raster-engineer |
+| `check.py`'s model (the expected write list of a start), `mutate.py` (re-run: every mutant still killed), `measure_results*.txt`, `check_results*.txt` | | Regenerated | raster-engineer |
+| The effect data | | **Nothing**: the decay nibble is masked at run time, the tables are the same | |
+| Swarm's budget | Row 12 is 480: 435 as built + 45 held for this | The 45 is spent: **no row and no headroom figure moves** | |
+| Swarm's checks (`tests/games/swarm/budget.json`) | Tick IRQ ≤ 498, `sfx_update` ≤ 417 | Re-set to the new measurements (about 543 and 462) | Technical Director |
+| Swarm's game code | | Nothing | |
+| `docs/reference/sid.md` fact 15 ("it is *not* what the module does") | | One sentence | raster-engineer |
+
+If Simon says the late starts can't be heard, the 45 held in Swarm's row 12 goes back to its
+headroom.
+
+### Where a game's effect data lives
+
+**Decided: in the game, one copy.** Swarm's ten effects move from
+`tests/engine/sfx/swarm_sfx.asm` to **`games/swarm/src/sfx_data.asm`**, and the spike imports
+that file by its repo path (`#import "games/swarm/src/sfx_data.asm"`: the repo root is on the
+include path, and the Makefile's dependency file follows imports wherever they are). Why the
+game: the data is the game's content, tuned by the designer and Simon, sized into the game's
+tables and named by the game's code; an engine spike is a test and a player for it, and the next
+game brings its own file. Two copies would drift at the first tuning.
+
+- **Who moves it: the raster-engineer, in one commit, before part B starts** (`git mv`, the
+  spike's import line, the two headers; the content doesn't change, so every result file stays
+  valid). From then on the file is the gameplay-engineer's, with the values the designer's and
+  Simon's to tune.
+- **What the spike may assume about it**, so that tuning never breaks `make test ARGS=sfx`: ten
+  effects, numbers 0–9 in the design's order, with the ten `SFX_*` labels. Nothing in the locks
+  depends on a value in it (the lock paths use the spike's own probe effects and any start costs
+  the same), and `check.py` reads the tables from the running program. An effect added or removed
+  is a change to the spike's list and probe numbers too: tell the raster-engineer.
+- **What tuning must keep** ([sid.md](../docs/reference/sid.md), fact 15): release 0 everywhere;
+  every rate 0 on the two shots; the dive's decay no slower than its attack.
+
+### Constraints on changing the module
+
+- **The first branch of each voice (`beq play`) spans 127 bytes in DEBUG, the most a branch
+  can.** One more byte between it and `play` (the start, load and end code, with their shadow
+  stores) and the build stops with "jump distance is too far". The fix is `bne *+5` / `jmp play`,
+  which costs 2 cycles a voice on the idle and slide ticks and moves three locks: so **nothing is
+  added inside that span without re-measuring and re-baselining**, and a new register write there
+  (option B) is such a change.
+- **The code is page-aligned** (`.align $100` before `sfx_update`, up to 255 bytes of padding in
+  the engine block) so that its branches cross the same page boundaries in every program. That
+  is what makes the locks hold in a game. Don't remove it; allow for it in a game's memory map
+  (586 + 21 + 25 bytes, + up to 255).
+- **Size limit** `SFX_CODE_MAX` = 600 (586 used in DEBUG).
+- **The data tables are each kept inside one page** by `SfxEnd()`: put it where up to a page of
+  padding doesn't matter (Swarm: the game tables).
+
+### Still open
+
+- **Simon's listening** ([sid.md](../docs/reference/sid.md#by-ear-simon)): the ten effects, the
+  late starts, which SID his machine has.
+- The README's and the guide's lines are written ([README](README.md), [GAME-GUIDE.md](GAME-GUIDE.md#6-sound-effects-sfxmd)).

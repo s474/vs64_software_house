@@ -1,0 +1,33 @@
+# python3 tests/games/swarm/sfx_request_costs.py   (a count: sfx_play's measured whole calls
+# on the measured DMA steals; no emulator)
+Model against the spike's measurement (sfx_play in the display, a badline, no sprites):
+  take: 34 CPU -> model 77, measured 77
+  replace: 49 CPU -> model 92, measured 92
+  keep: 37 CPU -> model 80, measured 80
+One request (lda # + jsr sfx_play), raster cycles at worst:
+  path      CPU   border   border, 3 wrapped divers   display, no sprites   6 sprites   8 sprites
+  take      36    36       45                         79                    109         117
+  replace   51    51       60                         94                    124         151
+  keep      39    39       48                         82                    112         120
+Row 3, player_update (display, 8 sprites a line; 150 CPU without sound, stage 3):
+  150 + the shot's request (replace: an enemy shot may be pending on voice 1) = 201 CPU -> 358 (limit 365)
+Row 5, formation_update in Clear's first frame (border, no sprite DMA: no diver exists):
+  measured 650-670 + the wave-clear request 48 CPU (take, X and Y kept) = 698-718 (limit 750);
+  it ended on lines 37-38: 48 cycles more is under one line (63)
+Row 6, diver_update (border into the first enemy row; measured 994 max in AUTOPLAY, + 5% = 1044):
+  a request for each of 3 enemy shots: 174 CPU -> 312 at worst; 1044 + 312 = 1356 (limit 1350)
+  a request for each of 2 shots, and the dive: 159 CPU -> 297 at worst; 1044 + 297 = 1341 (limit 1350)
+  ONE enemy-shot request a frame (a flag), 3 shots: 62 CPU -> 162 at worst; 1044 + 162 = 1206 (limit 1350)
+  ONE enemy-shot request a frame, 2 shots, and the dive: 104 CPU -> 223 at worst; 1044 + 223 = 1267 (limit 1350)
+Row 8, collide_update (display; frame C measured 2471, + 5% = 2595):
+  frame C as it is (2 shot hits' flags, the ram: hit A take, hit B take; no explosion request): 90 CPU -> 178 with 6 sprites a line, 190 with 8; 2595 + 190 = 2785 (limit 2825)
+  the upper bound: the same with hit B replacing a dive or wave-clear request: 105 CPU -> 208 with 6 sprites a line, 224 with 8; 2595 + 224 = 2819 (limit 2825)
+  the upper bound if the explosion were also asked for in the hit's frame (kept): 150 CPU -> 253 with 6 sprites a line, 288 with 8; 2595 + 288 = 2883 (limit 2825)
+  a frame with no player hit: 2 flags, the test, the explosion (take): 60 CPU -> 148 with 6 sprites a line, 160 with 8; 2595 + 160 = 2755 (limit 2825)
+Row 1, game_state_update and the title (border, lines 23-45):
+  wave start, game over, start: 36 CPU each (take), one a frame; with 3 wrapped divers' fetches (GameOver's frame 0) 45
+AUTOPLAY's three priority-3 requests every 64 frames (border, line 23-24, no DMA): 108 in game_update
+Row 12, the sound tick (IRQ, lines 251-259, no DMA: raster = CPU):
+  game_irq_bottom -> rti: jsr 6 + span 417 + rts 6 + jmp 3 + irq_exit 66 = 498 (the spike's 511 less its 13 of call-site choice)
+  on top of the entry's 93 of framework (which has irq_exit at 60): 429 + 6 = 435
+  with an eighth write in a start (14 a start, + 1 a voice if the first branch becomes a jump): 480

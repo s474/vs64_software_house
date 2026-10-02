@@ -15,7 +15,7 @@ the code, not after.
 | Joystick input | `engine/input.asm` | **Implemented** (M4 stage 1). `input_read` **40** cycles for the whole call (28 in the profile span, **measured**), 32 bytes. Contract and results: [engine/input.md](input.md); spike `tests/engine/input` |
 | Random numbers | `engine/rng.asm` | **Implemented** (M4 stage 1). `rng_next` **42** cycles for the whole call (30 in the profile span, **measured**), constant time, 37 bytes. Contract and results: [engine/rng.md](rng.md); spike `tests/engine/rng` |
 | Collision | `engine/collision.asm` | **Implemented** (M4 stage 2). Bounding boxes between virtual sprites, read from the multiplexer's arrays; **148** bytes, no zero page. Whole calls, **measured**, no DMA: `collision_begin` **95**, `collision_range` **22 + 17** a target rejected on Y **+ 39** a target tested on X, `collision_one` up to **52**. Swarm's 42 tests in a frame: 1,813, and 2,227–2,335 through the display. Needs `MUX_Y_MAX + ay1 − by0 < 255` for every pair of boxes (checked at assembly). Contract and results: [engine/collision.md](collision.md); spike `tests/engine/collision` |
-| Sound effects | `engine/sfx.asm` | Contract: [engine/sfx.md](sfx.md). Not implemented |
+| Sound effects | `engine/sfx.asm` | **Implemented** (M4 stage 4). Three SID voices, one effect a voice, priorities 1–3, effects as data tables (`SfxBegin` / `SfxEffect` / `SfxStep` / `SfxEnd` / `SfxHz`); no music. **586** bytes of code in DEBUG (490 release) + 21 of state + 25 of DEBUG shadow, page-aligned (up to 255 bytes of padding before it); **no zero page**. Whole calls, **measured** and locked, no DMA: the tick `sfx_update` (from an IRQ at line 251) **56** with three voices idle, **214** with three sliding, **429** with three effects starting, the worst case (profile spans 44 / 202 / 417; release 54 / 189 / 345); a request `sfx_play` (main loop) **34** with nothing pending on the voice, **49** replacing a pending request, **37** keeping a higher one (spans 22 / 37 / 25). In the display a request can lose a badline: 77 / 92 / 80 **measured**, more with sprites on the line. A game's chain entry around the worst tick is 498 to its `rti`. Contract, results and decisions: [engine/sfx.md](sfx.md); SID facts: [docs/reference/sid.md](../docs/reference/sid.md); spike `tests/engine/sfx` |
 
 **How to read the numbers.** Every figure is marked:
 
@@ -67,8 +67,8 @@ with `* = ... "Engine"` like any other block and records them in its memory map.
 
 The M4 modules (input, random numbers, collision, sound effects) each have a contract file with
 the API, zero page and costs: [input.md](input.md), [rng.md](rng.md), [collision.md](collision.md),
-[sfx.md](sfx.md). Check the status table at the top before importing one: a contract is not an
-implementation.
+[sfx.md](sfx.md). All four are implemented; the status table at the top has each one's measured
+costs.
 
 **Rules for a game that imports `input.asm`** ([input.md](input.md)):
 
@@ -78,6 +78,23 @@ implementation.
   Neither byte is written outside the module.
 - **Nothing else writes `$DC00` or `$DC02`.**
 - **The keyboard can't be scanned after `input_init`** (it sets `$DC02` to `$00`).
+
+**Rules for a game that imports `sfx.asm`** ([sfx.md](sfx.md)):
+
+- Import it in the engine block and allow 632 bytes + up to 255 of alignment padding. It needs no
+  zero-page label. The effect data is the game's: `SfxBegin()`, the effects, `SfxEnd()` (which
+  emits the tables where it stands), in a file the game owns.
+- `jsr sfx_init` once, **before `irq_init`**. The chain entry at line `$FB` is `jsr sfx_update`
+  then `IrqDone()` and nothing else; `sfx_update` is never called from the main loop.
+- `sfx_play` (A = effect) **from the main loop only**; it uses A, X and Y and never disables
+  interrupts. A request made before line 251 starts in that frame's tick.
+- **Nothing else writes `$D400–$D418`**, and nothing reads them: they are write-only
+  ([sid.md](../docs/reference/sid.md), fact 2). Tests read `sfx_request`, `sfx_cur` and, in
+  DEBUG, `sfx_shadow`.
+- **Budget a request by where it is made**: 36 / 51 / 39 CPU with its `lda #` (nothing pending /
+  replacing / keeping), which in the border is its raster cost and in the display can be 43 more
+  for a badline and 19 a line for 8 sprites
+  ([sfx.md](sfx.md#what-a-request-costs-a-game)).
 
 **For a game that imports `rng.asm`** ([rng.md](rng.md#low-bit-limits)): main loop only; `rng_next`
 changes only A; and no code may depend on a particular value turning up within some number of
@@ -323,7 +340,7 @@ cycles, no DMA on the lines involved.
 | `irq_dispatch`: 3 self-mod saves (12), `cld` (2), `jmp` (3) | 17 | **measured** (`vice_profile irq_dispatch → spike_h1`: 17 every pass) |
 | **Handler starts** after the IRQ is taken | **24** | **measured** (dispatch hit + 17) |
 | Frame tick stub, entry 0 only | +8 | **measured** (h0 starts 25 after dispatch) |
-| `irq_exit` → `irq_exit_rti` (advance, `$D012`, target, ack, late check, restore) | **60** (58 on the wrap) | **measured**, every pass; equals the instruction count. The budget is locked to it |
+| `irq_exit` → `irq_exit_rti` (advance, `$D012`, target, ack, late check, restore) | **60** (58 on the wrap; **66** on the wrap when the handler ends on line 256 or later) | **measured**, every pass; equals the instruction count. The budget is locked to it. The 66: the last entry's handler ran past line 255, so the compare with entry 0's line no longer says "past it", the raster bit-8 test is reached and sends it through `irq_late`, where the wrap is exempt (44 + 2 + 2 + 4 + 3, then 2 + 3 + 6). **Measured** in the `sfx` spike, whose three-start tick ends on line 258; not counted as a late entry |
 | `irq_rearm` → `irq_exit_rti` (`$D012`, target, ack, late check, restore) | **41** | **measured** (M3 stage 2): `irq_chain` `spike_h2` re-arms `spike_h3`, `irq_rearm` on line 177 from cycle 21, 41 in 1,000 of 1,000 passes; equals the count (35 to `jmp irq_restore` + 6) |
 | `rti` + the handler's `jmp irq_exit` | 9 | [6502-timing.md](../docs/reference/6502-timing.md) |
 | **Total per normal entry, excluding its work** | **93** (+8 on entry 0) | **measured** parts |
@@ -1596,7 +1613,7 @@ is an assembly error ("unknown symbol"); each module also checks
 | `zp_joy_pressed` | 1 | Main loop (`input.asm`) | Newly pressed this frame. **Never read in an IRQ** (scratch for 15 cycles inside `input_read`) |
 | `zp_rng_lo`, `zp_rng_hi` | 2 | Main loop (`rng.asm`) | Generator state. Only if the game imports `rng.asm` |
 
-6 bytes of the IRQ framework's and multiplexer's own, 4 more for `input.asm` and `rng.asm`, plus 4 of the game's scratch. The register saves in
+6 bytes of the IRQ framework's and multiplexer's own, 4 more for `input.asm` and `rng.asm`, plus 4 of the game's scratch. `collision.asm` and `sfx.asm` use no zero page (the `zp_sfx_ptr` that the sound contract once reserved was never needed and is released: a game's `zp.asm` doesn't define it). The register saves in
 `irq_dispatch` are self-modified operands, not zero page. A game without the multiplexer
 defines only the two `zp_irq_*` labels.
 
@@ -1634,6 +1651,10 @@ build is *unmeasured*, and smaller by the DEBUG checks):
 | `mux_irq_top` (unrolled) and padding to the zone page | `$186A`–`$19FF` | 406 |
 | Zone code: dispatch, 16 unrolled blocks, park | `$1A00`–`$1FAC` | 1,453 |
 | **Engine block in all** | `$0810`–`$1FAC` | **6,045** |
+
+With the four M4 modules the block is larger still: Swarm's is **6,293** bytes before sound
+(**measured**, stage 4 part A, chain tables included), and `sfx.asm` adds 632 (DEBUG: code 586,
+state 21, shadow 25) and up to 255 of padding to its page boundary: allow **about 7.2 KB**.
 
 A game's memory map must allow **about 6 KB** for the engine block with the multiplexer, not 2.3.
 That's why the spike's sprite data moved from `$2000` to `$2800` in stage 4. Lifting it is a
