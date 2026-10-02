@@ -1,0 +1,101 @@
+{
+  "spike": "rng",
+  "src_dir": "tests/engine/rng",
+  "warmup_frames": 400,
+  "notes": "Checks from the contract's table (engine/rng.md#spike-testsenginerng, Technical Director 2026-10-01). warmup_frames 400: the spike's whole-period statistics take about 300 frames (screen off), and every memory check reads the finished result. The profile check is a lock: rng_next has no branches and is called on a top-border line with no DMA and no IRQ inside it, so min_cycles = max_cycles = the measured figure (as tests/engine/irq_chain). The model check against the 6502 routine and the ideal-random reference for the low-5-bit figures are tests/engine/rng/check.py. Schema: engine/README.md#budget-files.",
+  "checks": [
+    {
+      "name": "rng_next",
+      "kind": "profile",
+      "routine": [
+        "rng_next",
+        "rng_next_end"
+      ],
+      "max_cycles": 30,
+      "min_cycles": 30,
+      "samples": 50,
+      "basis": "measured",
+      "source": "engine/rng.md#cycle-budget: contract estimate 45 (a lock once measured). Measured 30 in every pass (2026-10-02), equal to the instruction count; the span ends at the rts, so jsr 6 + rts 6 are on top (42 for the call). Constant time (requirement 5): min = max"
+    },
+    {
+      "name": "statistics finished",
+      "kind": "memory",
+      "address": "spike_done",
+      "size": 1,
+      "after_frames": 0,
+      "equals": 1,
+      "basis": "requirement",
+      "source": "engine/rng.md#spike-testsenginerng"
+    },
+    {
+      "name": "period",
+      "kind": "memory",
+      "address": "spike_period",
+      "size": 2,
+      "after_frames": 0,
+      "equals": 65535,
+      "basis": "requirement",
+      "source": "engine/rng.md requirement 1"
+    },
+    {
+      "name": "every byte value at least 255 times",
+      "kind": "memory",
+      "address": "spike_hist_min",
+      "size": 2,
+      "after_frames": 0,
+      "min": 255,
+      "basis": "requirement",
+      "source": "engine/rng.md requirement 2. Measured 255 (value 0: the zero state is never visited)"
+    },
+    {
+      "name": "every byte value at most 257 times",
+      "kind": "memory",
+      "address": "spike_hist_max",
+      "size": 2,
+      "after_frames": 0,
+      "max": 257,
+      "basis": "requirement",
+      "source": "engine/rng.md requirement 2. Measured 256"
+    },
+    {
+      "name": "low 5 bits in every 256 calls: fewest of any value",
+      "kind": "memory",
+      "address": "spike_low5_min",
+      "size": 1,
+      "after_frames": 0,
+      "equals": 0,
+      "basis": "measured",
+      "source": "CONTRACT LIMIT NOT MET, awaiting the Technical Director's re-baseline: engine/rng.md's first-guess limit is min 2 (basis estimate, 'report the measured pair'). Measured 0 from seed $1234 over 255 blocks. An ideal random source also gives 0 (mean count 8, so P(a value is absent from a block) = 0.03%, times 8,160 cells = 2.7 expected; tests/engine/rng/check.py prints the reference). Locked to the measured figure so a change of algorithm or seed shows up; the sequence is deterministic, so there is no run-to-run noise"
+    },
+    {
+      "name": "low 5 bits in every 256 calls: most of any value",
+      "kind": "memory",
+      "address": "spike_low5_max",
+      "size": 1,
+      "after_frames": 0,
+      "equals": 21,
+      "basis": "measured",
+      "source": "CONTRACT LIMIT NOT MET, awaiting the Technical Director's re-baseline: engine/rng.md's first-guess limit is max 20 (basis estimate). Measured 21 from seed $1234 over 255 blocks; an ideal random source gives 19-22 over 20 trials (tests/engine/rng/check.py). Locked to the measured figure, as the min"
+    },
+    {
+      "name": "zero seed handled",
+      "kind": "memory",
+      "address": "spike_zero_ok",
+      "size": 1,
+      "after_frames": 0,
+      "equals": 1,
+      "basis": "requirement",
+      "source": "engine/rng.md#api: seed 0/0 is replaced by RNG_SEED_DEFAULT"
+    },
+    {
+      "name": "no late chain entries",
+      "kind": "memory",
+      "address": "irq_late_count",
+      "size": 1,
+      "after_frames": 100,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/README.md#handler-conventions"
+    }
+  ]
+}
