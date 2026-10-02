@@ -19,6 +19,11 @@ What it does:
      Explosions are NOT in the play simulation, and don't need to be: an explosion is drawn in
      the dead enemy's own virtual sprite, where it is, and the simulation's enemies never die,
      so every enemy sprite is already counted in every frame.
+  5. The play-area text (design.md "Text cells and the star rule"): which text rows no parked
+     enemy and no ship covers, at every drift position; what can pass over the message row and
+     when; the title's sprites against the title's text; the star bands and the free cells.
+  6. The difficulty curve: launches and enemy shots a minute per wave, counted in the play
+     simulation of 3 (a formation that stays full: the most the launcher can do).
 
 The multiplexer model is a transcription of the README's pseudocode, not the engine: its
 figures are design estimates until QA's positions.py runs on the real game (M4 deliverable 6).
@@ -221,7 +226,8 @@ def simulate(pattern, loop, frames, pin_shots, seed=1):
     pinned = {V_PLAYER} | ({1, 2, 3} if pin_shots else set())
     st = dict(max_window=0, drop_frames=0, max_run={k: 0 for k in KINDS},
               missing={k: 0 for k in KINDS}, shown_frames={k: 0 for k in KINDS},
-              max_divers=0, max_eshots=0, max_shown_range=0, max_moved=0)
+              max_divers=0, max_eshots=0, max_shown_range=0, max_moved=0,
+              launches=0, eshots_fired=0)
     prev_y = None
 
     for f in range(frames):
@@ -259,6 +265,7 @@ def simulate(pattern, loop, frames, pin_shots, seed=1):
                 e = rng.choice(cand)
                 e.update(st="W", t=WINDUP[L])
                 timer = INTERVAL[pattern][L]
+                st["launches"] += 1
         # enemies
         for e in en:
             hx, hy = FORM_X0 + fx + COL_DX * e["col"], ROW_Y[e["row"]]
@@ -283,6 +290,7 @@ def simulate(pattern, loop, frames, pin_shots, seed=1):
                             and VISIBLE_X[0] <= e["x"] <= VISIBLE_X[1] and None in eshots):
                         d = px - e["x"]
                         eshots[eshots.index(None)] = [e["x"], e["y"], 0 if abs(d) < 16 else (1 if d > 0 else -1)]
+                        st["eshots_fired"] += 1
                     if cnt == 0:
                         if e["x"] in (X_MIN, X_MAX):           # off screen: wrap to the top
                             e.update(st="R", x=hx, y=30)
@@ -409,7 +417,207 @@ def explosion_checks():
           "4 slots: the 5th dies without one")
 
 
+# ---- Text layout (design.md "Text cells and the star rule") ----
+MSG_ROW = 9                         # READY, GAME OVER, WAVE nn
+OLD_MSG_ROW = 12                    # where they were until stage 3 found the bug
+# (screen, row, text): every text is centred, first column (40 - n) div 2, but the scores
+TEXTS = [("Title", 5, "SWARM"), ("Title", 9, "150 PTS"), ("Title", 11, " 80 PTS"),
+         ("Title", 13, " 50 PTS"), ("Title", 16, "DIVING SCORES DOUBLE"), ("Title", 19, "PRESS FIRE"),
+         ("Game", MSG_ROW, "WAVE 01"), ("Game", MSG_ROW, "READY"), ("Game", MSG_ROW, "GAME OVER")]
+TEXT_COL = {"150 PTS": 17, " 80 PTS": 17, " 50 PTS": 17}
+BAND_COLS = (10, 29)
+TITLE_SPRITES = [(120, 119), (120, 135), (120, 151)]
+STARS = 48
+ENEMY_ART = (2, 21, 1, 19)          # the enemy art area: columns 2-21, rows 1-19 of the cell
+PSHOT_ART = (11, 12, 0, 7)
+ESHOT_ART = (11, 12, 14, 20)
+DYING_MIN, RESPAWN_FRAMES, CLEAR_PAUSE = 100, 50, 75
+
+
+def row_lines(r):
+    return 51 + 8 * r, 58 + 8 * r
+
+
+def col_of(text):
+    return TEXT_COL.get(text, (40 - len(text)) // 2)
+
+
+def text_x(text):
+    """The text's cells as sprite X coordinates (X 24 = the window's left edge), inclusive."""
+    c = col_of(text)
+    return 24 + 8 * c, 24 + 8 * (c + len(text)) - 1
+
+
+def overlap(a, b):
+    return a[0] <= b[1] and b[0] <= a[1]
+
+
+def sprite_lines(y, art=(0, 23, 0, 20)):
+    return y + 1 + art[2], y + 1 + art[3]
+
+
+def diver_frames_over(name, loop, lines, phase, start_x, mirror):
+    """One dive, launched in frame 0 (t = 0 of its wind-up): the frames, counted from the launch,
+    in which the diver's 21 lines overlap the text lines. Wind-up, Dive, wrap and Return."""
+    p = PATHS[name]
+    home_y = ROW_Y[p["row"]]
+    frames, f, x, y = [], 0, start_x, home_y
+    for _ in range(WINDUP[loop]):
+        if overlap(sprite_lines(y), lines):
+            frames.append(f)
+        f += 1
+    steps = list(walk(name, start_x=start_x, mirror=mirror))
+    i = 0
+    while i < len(steps):
+        n = 2 if EXTRA_STEP_EVERY[loop] and (f + phase) % EXTRA_STEP_EVERY[loop] == 0 else 1
+        i = min(len(steps), i + n)
+        y = steps[i - 1][2]
+        if overlap(sprite_lines(y), lines):
+            frames.append(f)
+        f += 1
+    if p["end"] == "wrap":
+        y = 30
+    while y != home_y:                                  # Return: 2 lines a frame
+        y += max(-2, min(2, home_y - y))
+        if overlap(sprite_lines(y), lines):
+            frames.append(f)
+        f += 1
+    return frames, f
+
+
+def layout_checks():
+    print("\n== Text rows against the formation and the ship (a sprite at Y is on lines Y + 1 .. Y + 21) ==")
+    form = [(y + 1, y + 21) for y in ROW_Y]
+    ship = (PLAYER_Y + 1, PLAYER_Y + 21)
+    print("formation rows on lines " + ", ".join(f"{a}-{b}" for a, b in form)
+          + f"; the ship on {ship[0]}-{ship[1]}; text row r is lines 51 + 8r .. 58 + 8r")
+    free = [r for r in range(24) if not any(overlap(row_lines(r), s) for s in form + [ship])]
+    print(f"text rows no parked enemy and no ship covers, at any drift position (Y never changes): {free}")
+    assert free == [4, 9, 14, 15, 16, 17, 18, 19, 20]
+    lo, hi = row_lines(OLD_MSG_ROW)
+    print(f"the old message row {OLD_MSG_ROW}: lines {lo}-{hi}, inside formation row 2's {form[2][0]}-{form[2][1]}: "
+          f"covered: {overlap((lo, hi), form[2])}")
+    assert overlap((lo, hi), form[2])
+    lines = row_lines(MSG_ROW)
+    gaps = [lines[0] - form[1][1] - 1, form[2][0] - lines[1] - 1]
+    art_gaps = [lines[0] - (ROW_Y[1] + 1 + ENEMY_ART[3]) - 1, (ROW_Y[2] + 1 + ENEMY_ART[2]) - lines[1] - 1]
+    print(f"the message row {MSG_ROW}: lines {lines[0]}-{lines[1]}: {gaps[0]} empty lines below row 1's cell, "
+          f"{gaps[1]} above row 2's ({art_gaps[0]} and {art_gaps[1]} to the nearest line the enemy art may use); "
+          f"{ship[0] - lines[1] - 1} lines above the ship")
+    assert MSG_ROW in free
+
+    # Every message cell against every parked or winding-up enemy, every drift position: by pixels
+    worst = 0
+    for _, row, text in TEXTS:
+        if row != MSG_ROW:
+            continue
+        tx, tl = text_x(text), row_lines(row)
+        for fx in range(DRIFT_MAX + 1):
+            for wob in (-1, 0, 1):                       # the wind-up's 1 pixel either side of home
+                for r in range(3):
+                    for c in range(6):
+                        ex = FORM_X0 + fx + COL_DX * c + wob
+                        if overlap((ex, ex + 23), tx) and overlap(sprite_lines(ROW_Y[r]), tl):
+                            worst += 1
+    print(f"message cells covered by a parked or winding-up enemy's cell, over fx 0-{DRIFT_MAX} and the "
+          f"wind-up's 1 pixel either side, 18 enemies, 3 messages: {worst}")
+    assert worst == 0
+    for _, row, text in TEXTS:
+        if row == MSG_ROW and _ == "Game":
+            c = col_of(text)
+            print(f"   {text!r}: row {row}, columns {c}-{c + len(text) - 1} (was row {OLD_MSG_ROW}, the same columns)")
+            assert BAND_COLS[0] <= c and c + len(text) - 1 <= BAND_COLS[1]
+
+    print(f"\n== What can pass over the message row (lines {lines[0]}-{lines[1]}) ==")
+    last_any = 0
+    for name in PATHS:
+        row = []
+        for loop in range(4):
+            last, longest = -1, 0
+            for phase in range(4):
+                for sx in (FORM_X0, 172, FORM_X0 + DRIFT_MAX + 5 * COL_DX):
+                    for m in (False, True):
+                        fr, total = diver_frames_over(name, loop, lines, phase, sx, m)
+                        if fr:
+                            last, longest = max(last, fr[-1]), max(longest, len(fr))
+            row.append(f"loop {loop}: " + (f"{longest} frames, the last {last} after its launch" if last >= 0 else "never"))
+            last_any = max(last_any, last)
+        print(f"{name} (row {PATHS[name]['row']}), from its launch frame through Dive, wrap and Return: " + "; ".join(row))
+    print(f"last frame after a launch in which any diver is over the row: {last_any}. GAME OVER is written "
+          f"{DYING_MIN} frames after the hit and nothing launches from the hit's frame on: "
+          f"{DYING_MIN - last_any - 1} frames to spare, so no diver ever crosses GAME OVER")
+    assert last_any < DYING_MIN
+    crossing = []
+    for name, p in PATHS.items():
+        at = {s: y for s, _, y in walk(name, start_x=172)}
+        for s in p["fire"]:
+            if s in at and at[s] + 1 + ESHOT_ART[2] <= lines[1]:
+                crossing.append(f"{name} step {s} (Y {at[s]})")
+    print("enemy shots that start above the row and fall through it: " + ", ".join(crossing))
+    top_fire = min(y for name in PATHS for s, _, y in walk(name, start_x=172) if s in PATHS[name]["fire"])
+    life = (MUX_Y_MAX - top_fire) // 2 + 2
+    print(f"longest enemy shot life (fired at Y {top_fire}, 2 a frame, shown one frame at its spawn): {life} frames, "
+          f"under the {CLEAR_PAUSE} empty frames before WAVE nn and the {DYING_MIN} before READY or GAME OVER "
+          f"(shots are removed at the player's hit anyway)")
+    assert life < CLEAR_PAUSE
+    ys = [y for y in range(PSHOT_SPAWN_Y, PSHOT_KILL_Y - 1, -PSHOT_SPEED) if overlap(sprite_lines(y, PSHOT_ART), lines)]
+    for text in ("WAVE 01", "READY"):
+        tx = text_x(text)
+        print(f"a player shot is over the row for {len(ys)} frames (Y {ys}), 2 pixels wide; over {text!r} only "
+              f"when fired from ship X {tx[0] - PSHOT_ART[1]}-{tx[1] - PSHOT_ART[0]}")
+
+    print("\n== Title: its three sprites against its text (no formation on screen) ==")
+    hits = 0
+    for sx, sy in TITLE_SPRITES:
+        cols = ((sx - 24) // 8, (sx + 23 - 24) // 8)
+        rows = ((sy + 1 - 51) // 8, (sy + 21 - 51) // 8)
+        print(f"sprite at ({sx}, {sy}): lines {sy + 1}-{sy + 21}, text rows {rows[0]}-{rows[1]}, columns {cols[0]}-{cols[1]}")
+        for scr, row, text in TEXTS:
+            if scr == "Title" and overlap((sx, sx + 23), text_x(text)) and overlap(sprite_lines(sy), row_lines(row)):
+                hits += 1
+    print(f"title texts covered by a title sprite: {hits} (the nearest text starts at column 17). No title row moves")
+    assert hits == 0
+
+    print("\n== Star bands ==")
+    bands = sorted({row for _, row, _ in TEXTS})
+    for _, row, text in TEXTS:
+        c = col_of(text)
+        assert BAND_COLS[0] <= c and c + len(text) - 1 <= BAND_COLS[1], text
+    width = BAND_COLS[1] - BAND_COLS[0] + 1
+    cells = 24 * 40 - len(bands) * width
+    print(f"text rows {bands}: {len(bands)} bands of {width} columns = {len(bands) * width} cells; "
+          f"{cells} of 960 play-area cells free for {STARS} stars (was 7 bands, 820 free: row {OLD_MSG_ROW} "
+          f"is no longer a text row and row {MSG_ROW} already was one)")
+    assert bands == [5, 9, 11, 13, 16, 19] and cells == 840 and STARS <= cells
+
+
+# ---- The difficulty curve ----
+def difficulty(frames=6000):
+    print(f"\n== Difficulty by wave (launches and shots counted over {frames} frames of the play simulation: "
+          "a full formation that never dies, so the most the launcher can do) ==")
+    print("wave pattern loop | interval, max divers, shots a dive (hook/sweep/plunge), wind-up, diver speed, "
+          "shot dy | launches/min, enemy shots/min | Hook: launch to first lethal frame, s | "
+          "shot from Y 164 to the ship, s")
+    base = None
+    for wave in range(1, 13):
+        pattern, loop = (wave - 1) % 3, (wave - 1) // 3
+        s = simulate(pattern, loop, frames, True)
+        mins = frames / 3000
+        shots = "/".join(str(min(len(PATHS[n]["fire"]), SHOTS_BASE[pattern] + loop)) if PATHS[n]["row"] in ROWS[pattern]
+                         else "-" for n in ("hook", "sweep", "plunge"))
+        speed = 1 + (1 / EXTRA_STEP_EVERY[loop] if EXTRA_STEP_EVERY[loop] else 0)
+        hook = (WINDUP[loop] + -(-35 // speed)) / 50
+        shot = -(-(ESHOT_HIT_Y - FIRE_MAX_Y) // ESHOT_DY[loop]) / 50
+        lm, sm = s["launches"] / mins, s["eshots_fired"] / mins
+        base = base or (lm, sm)
+        print(f"  {wave:2d}  {pattern + 1}  {loop} | {INTERVAL[pattern][loop]:3d}, {MAX_DIVERS[pattern][loop]}, {shots}, "
+              f"{WINDUP[loop]}, x{speed:.2f}, {ESHOT_DY[loop]} | {lm:5.1f}, {sm:5.1f} "
+              f"(x{lm / base[0]:.1f}, x{sm / base[1]:.1f} of wave 1) | {hook:.2f} | {shot:.2f}")
+
+
 if __name__ == "__main__":
     static_checks()
     explosion_checks()
+    layout_checks()
+    difficulty()
     play_checks()
