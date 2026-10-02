@@ -63,7 +63,7 @@ PAL_CLOCK = 985248  # docs/reference/vic-ii-timing.md: unmeasured
 ATTACK_MS = [2, 8, 16, 24, 38, 56, 68, 80, 100, 250, 500, 800, 1000, 3000, 5000, 8000]
 DECAY_MS = [6, 24, 48, 72, 114, 168, 204, 240, 300, 750, 1500, 2400, 3000, 9000, 15000, 24000]
 
-# Every attack/decay and sustain/release pair of Swarm's ten effects (tests/engine/sfx/swarm_sfx.asm),
+# Every attack/decay and sustain/release pair of Swarm's ten effects (games/swarm/src/sfx_data.asm),
 # with the frames the gate is held (the effect's length, or its first note's).
 SWARM_ENV = [
     ("player shot", 0x00, 0xA0, 8),

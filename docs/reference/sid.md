@@ -161,7 +161,7 @@ from the data sheet (*unverified* beyond the values below):
 | Decay, release, ms | 6 | 24 | 48 | 72 | 114 | 168 | 204 | 240 | 300 | 750 | 1,500 | 2,400 | 3,000 | 9,000 | 15,000 | 24,000 |
 
 **Measured** through `$D41C` (section 4), once a tick at line 251, for every attack/decay and
-sustain/release pair in [Swarm's first effect data](../../tests/engine/sfx/swarm_sfx.asm). Tick 0
+sustain/release pair in [Swarm's first effect data](../../games/swarm/src/sfx_data.asm). Tick 0
 is the start; G is the tick the gate is cleared; each value is read just before that tick's write.
 
 | Effect | AD, SR | What `$D41C` read |

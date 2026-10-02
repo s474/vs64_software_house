@@ -415,7 +415,7 @@ It must demonstrate:
 ## Results (raster-engineer, 2026-10-02)
 
 Built to the contract above: `engine/sfx.asm`, the spike `tests/engine/sfx/` (`main.asm`,
-`zp.asm`, `swarm_sfx.asm`, `budget.json`, `check.py`, `mutate.py`, `measure.py` and their result
+`zp.asm`, `budget.json`, `check.py`, `mutate.py`, `measure.py` and their result
 files), the probe `tests/timing/sid_readback/` and [docs/reference/sid.md](../docs/reference/sid.md).
 VICE 3.10 x64sc PAL. Neither stop condition was met (three starts 417 ≤ 488, `sfx_play` 37 ≤ 43),
 so nothing was reshaped. **`zp_sfx_ptr` is not used**: it can be released.
@@ -511,7 +511,7 @@ display. Raster cycles; in the border they are CPU cycles.
 
 ### Swarm's effect data
 
-`tests/engine/sfx/swarm_sfx.asm`: ten effects, numbers 0–9 in the design's order
+`games/swarm/src/sfx_data.asm` (moved from the spike in 1390b66; the spike imports it): ten effects, numbers 0–9 in the design's order
 (`SFX_PLAYER_SHOT`, `SFX_ENEMY_SHOT`, `SFX_DIVE`, `SFX_ENEMY_EXPLOSION`, `SFX_PLAYER_HIT_A`,
 `SFX_PLAYER_HIT_B`, `SFX_WAVE_START`, `SFX_WAVE_CLEAR`, `SFX_START`, `SFX_GAME_OVER`), each as
 long as the design's "Frames". **First versions: nobody has heard them.** The game imports the

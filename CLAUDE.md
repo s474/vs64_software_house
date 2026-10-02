@@ -46,8 +46,10 @@ Build outputs in `build/<title>/`: `.prg`, `main.vs` (labels), `main.dump` (addr
 - [raster-interrupts.md](docs/reference/raster-interrupts.md): IRQ setup, chaining, jitter, common bugs
 - [6502-timing.md](docs/reference/6502-timing.md): cycle counts, page crossings, illegal opcodes
 - [kickassembler.md](docs/reference/kickassembler.md): how we build and the syntax we use
+- [sid.md](docs/reference/sid.md): SID registers, what can and can't be read back, frequency and envelope (measured in VICE's 8580), late starts, what only ears can check
 - [coding-standards.md](docs/standards/coding-standards.md): naming, zero page, IRQ ownership, **definition of done**
-- [engine/README.md](engine/README.md): IRQ framework and multiplexer APIs, engine zero page, raster timeline, frame budget
+- [engine/GAME-GUIDE.md](engine/GAME-GUIDE.md): **start here for a game**: how to use the engine, its rules, limits and costs, on a few pages
+- [engine/README.md](engine/README.md): the engine in full: IRQ framework, multiplexer, input, rng, collision and sound effects, zero page, raster timeline, frame budget
 
 If a doc is wrong or missing something you had to find out, fix the doc in the same change, and
 mark measured facts as measured (with the probe that shows it).
