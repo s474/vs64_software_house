@@ -3,8 +3,8 @@
   "src_dir": "tests/games/swarm",
   "asset_dir": "games/swarm/src",
   "warmup_frames": 400,
-  "stage": 4,
-  "notes": "Swarm's budget checks (M4). Written by the Technical Director at stage 0, before the game exists: until tests/games/swarm/main.asm does, the runner reports SKIP. That file is the gameplay-engineer's, two lines: '#define AUTOPLAY' then '#import \"games/swarm/src/main.asm\"'. AUTOPLAY makes the game play the designer's worst case by itself (wave 12, scripted stick, nothing dies): docs/games/swarm/memory-map.md#labels-the-game-must-provide lists what it does and every label these checks read. 'stage' is the M4 stage the game's code has reached (docs/milestones/M4-training-game.md, stages 1-5): the gameplay-engineer sets it at the start of each stage and changes nothing else here. Checks with a higher from_stage print PENDING. Units: raster cycles, DMA included, IRQs excluded for main-loop routines (engine/README.md#budget-units). Every game limit is an estimate until its stage measures it; a failing check is reported with the measured figure, and the Technical Director re-baselines. The per-routine limits add up to 6,050 for game_update (re-set by the Technical Director on 2026-10-02 from stage 3's measurements, docs/games/swarm/memory-map.md#stage-3-measured: input 40; player_update 365, which is 150 CPU + the shot's sound request 51 counted as one short routine in the display (358); pshot_update and stars_update 60 each; formation_update 750; diver_update 1,350; eshot_update 200; collide_update 2,825, which is 2,595 for the grid lookup as built + 224 counted for stage 4's sound requests (the player's hit twice, or the explosion once: never both); panel_update 250; 150 for the main loop itself; no separate allowance for sfx_play calls any more, each being inside its caller's limit), + 480 for the sound tick = 6,530 against the engine's 7,200: 670 of headroom, which the idle check enforces (it was 650 with the tick estimated at 500, 625 before stage 3 was measured, 585 before that, and 935 before stage 2). STAGE 3 MEASURED (tests/games/swarm/stage3_costs.py, stage3_collide_worst.py and stage3_oneoff.py, results beside each): every limit here now rests on a measurement. THE SOUND IS MEASURED TOO, in the module's spike (tests/engine/sfx, locked): sfx_update 417 at worst (whole call 429), a game's tick IRQ 498, sfx_play 34/49/37 by path; what each of the game's nine requests costs where it is made is counted by tests/games/swarm/sfx_request_costs.py (results beside it) and decided in docs/games/swarm/memory-map.md#stage-4-part-b-sound-requests. STAGE 1 FIGURES CARRY NO DMA: with 3 sprites, game_update runs on raster lines 23-31, above the first badline (measured, docs/games/swarm/memory-map.md#stage-1-measured), so the display allowance (x 1.27) in every limit is untested until stage 2 puts the formation on screen. For that reason no limit here is re-baselined to a stage 1 measurement; each source line records the stage 1 figure beside the estimate. STAGE 2 PART A (formation, no collisions) was measured by tests/games/swarm/stage2a_costs.py, results beside it: still all above the first badline (docs/games/swarm/memory-map.md#stage-2-part-a-measured). STAGE 2 PART B (hits, explosions, score) was measured by tests/games/swarm/stage2b_costs.py, results beside it (docs/games/swarm/memory-map.md#stage-2-part-b-measured). SAMPLE COUNTS: a routine in the top border has a cost that depends only on its own state, so its count covers that state's cycle (stars 48 frames: 300; formation 192: 600); a routine in the display (player_update, collide_update, diver_update, game_update) lands on a different raster line every frame and the AUTOPLAY script repeats only after thousands of frames, so 600 samples are a look, not a proof: its limit is the counted worst case and make test-long is the longer look. WHAT AUTOPLAY CAN'T MEASURE (nothing dies in it) is measured on the game build with states set through the monitor, by a stageN_costs.py beside this file: docs/games/swarm/memory-map.md#what-autoplay-cannot-measure. A stage built in parts: memory-map.md#labels-the-game-must-provide, last paragraphs. warmup_frames 400: boot, the wave intro (100 frames) and the first launches; the game's own GAME_IDLE_WARMUP is 200 frames. The first memory check runs 3,000 more frames and the others read at that same moment (after_frames 0), except the stage 5 soak. STAGE 4: 'stage' becomes 4 in the commit that wires the sound in (the four checks that start at stage 4 all need engine/sfx.asm's labels); waves and the title were measured before that by tests/games/swarm/stage4_costs.py (part A, no sound: stage4_costs.txt, stage4a_collide_worst.txt; memory-map.md#stage-4-part-a-measured). The part B checklist is memory-map.md#stage-4-part-b-sound-requests.",
+  "stage": 5,
+  "notes": "Swarm's budget checks (M4). Written by the Technical Director at stage 0, before the game exists: until tests/games/swarm/main.asm does, the runner reports SKIP. That file is the gameplay-engineer's, two lines: '#define AUTOPLAY' then '#import \"games/swarm/src/main.asm\"'. AUTOPLAY makes the game play the designer's worst case by itself (wave 12, scripted stick, nothing dies): docs/games/swarm/memory-map.md#labels-the-game-must-provide lists what it does and every label these checks read. 'stage' is the M4 stage the game's code has reached (docs/milestones/M4-training-game.md, stages 1-5): the gameplay-engineer sets it at the start of each stage and changes nothing else here. Checks with a higher from_stage print PENDING. Units: raster cycles, DMA included, IRQs excluded for main-loop routines (engine/README.md#budget-units). Every game limit is an estimate until its stage measures it; a failing check is reported with the measured figure, and the Technical Director re-baselines. The per-routine limits add up to 6,720 for game_update (STAGE 5, 2026-10-02: diver_update 2,020, it was 1,350: its own worst frame was placed and measured at 1,924, docs/games/swarm/memory-map.md#row-6-the-divers and tests/games/swarm/stage5_diver_worst.py; the rest as re-set from stage 3's measurements, docs/games/swarm/memory-map.md#stage-3-measured: input 40; player_update 365, which is 150 CPU + the shot's sound request 51 counted as one short routine in the display (358); pshot_update and stars_update 60 each; formation_update 750; diver_update 2,020; eshot_update 200; collide_update 2,825, which is 2,595 for the grid lookup as built + 224 counted for stage 4's sound requests (the player's hit twice, or the explosion once: never both); panel_update 250; 150 for the main loop itself; no separate allowance for sfx_play calls any more, each being inside its caller's limit), + 435 for the sound tick (measured; the 45 held for an eighth SID write is released: Simon listened at stage 4 and asked for no change) = 7,155 against the engine's 7,200: 45 of headroom, which the idle check enforces (670 until stage 5 with diver_update at 1,350 and the tick at 480; 650 with the tick estimated at 500, 625 before stage 3 was measured, 585 before that, and 935 before stage 2). THE SUM IS A CEILING NO FRAME REACHES: each row is its routine's own worst frame, and those frames need different states; the largest whole game_update found is 4,371 in a placed frame (stage5_diver_worst.txt, JX) and 3,758 sampled. STAGE 3 MEASURED (tests/games/swarm/stage3_costs.py, stage3_collide_worst.py and stage3_oneoff.py, results beside each): every limit here now rests on a measurement. THE SOUND IS MEASURED TOO, in the module's spike (tests/engine/sfx, locked): sfx_update 417 at worst (whole call 429), a game's tick IRQ 498, sfx_play 34/49/37 by path; what each of the game's nine requests costs where it is made is counted by tests/games/swarm/sfx_request_costs.py (results beside it) and decided in docs/games/swarm/memory-map.md#stage-4-part-b-sound-requests. STAGE 1 FIGURES CARRY NO DMA: with 3 sprites, game_update runs on raster lines 23-31, above the first badline (measured, docs/games/swarm/memory-map.md#stage-1-measured), so the display allowance (x 1.27) in every limit is untested until stage 2 puts the formation on screen. For that reason no limit here is re-baselined to a stage 1 measurement; each source line records the stage 1 figure beside the estimate. STAGE 2 PART A (formation, no collisions) was measured by tests/games/swarm/stage2a_costs.py, results beside it: still all above the first badline (docs/games/swarm/memory-map.md#stage-2-part-a-measured). STAGE 2 PART B (hits, explosions, score) was measured by tests/games/swarm/stage2b_costs.py, results beside it (docs/games/swarm/memory-map.md#stage-2-part-b-measured). SAMPLE COUNTS: a routine in the top border has a cost that depends only on its own state, so its count covers that state's cycle (stars 48 frames: 300; formation 192: 600); a routine in the display (player_update, collide_update, diver_update, game_update) lands on a different raster line every frame and the AUTOPLAY script repeats only after thousands of frames, so 600 samples are a look, not a proof: its limit is the counted worst case and make test-long is the longer look. WHAT AUTOPLAY CAN'T MEASURE (nothing dies in it) is measured on the game build with states set through the monitor, by a stageN_costs.py beside this file: docs/games/swarm/memory-map.md#what-autoplay-cannot-measure. A stage built in parts: memory-map.md#labels-the-game-must-provide, last paragraphs. warmup_frames 400: boot, the wave intro (50 frames since the tuning after the stage 4 playtest; 100 before) and the first launches; the game's own GAME_IDLE_WARMUP is 200 frames. The first memory check runs 3,000 more frames and the others read at that same moment (after_frames 0), except the stage 5 soak, which runs 10,000 more (about 13,600 frames in all). STAGE 5: 'stage' is 5 from the Technical Director's review (2026-10-02), so the four soak checks run. STAGE 4: 'stage' becomes 4 in the commit that wires the sound in (the four checks that start at stage 4 all need engine/sfx.asm's labels); waves and the title were measured before that by tests/games/swarm/stage4_costs.py (part A, no sound: stage4_costs.txt, stage4a_collide_worst.txt; memory-map.md#stage-4-part-a-measured). The part B checklist is memory-map.md#stage-4-part-b-sound-requests.",
   "checks": [
     {
       "name": "game_update: all game logic in the main loop",
@@ -13,11 +13,11 @@
         "game_update",
         "game_update_end"
       ],
-      "max_cycles": 6050,
+      "max_cycles": 6720,
       "samples": 600,
       "basis": "estimate",
       "from_stage": 1,
-      "source": "docs/games/swarm/memory-map.md#frame-budget, row 'Main loop, game_update in all': the sum of the rows, which are simultaneous worst cases that can't all fall in one frame, so this limit is a ceiling and stays an estimate. 6,050 since stage 3 was measured (2026-10-02): the separate 100 for sfx_play calls removed, row 3 raised by 75 (it was 6,075 after the stage 3 decisions, 6,115 from stage 2's collision figure, 5,765 before). Raster cycles, IRQs excluded. Stage 3 measured: 1,421-3,448 in this AUTOPLAY build (3,455 in make test), from line 23 to lines 45-86; the one-off frames on the game build 2,875 (a cleared formation's return) and 3,713 (a new game), which have their own limit of 4,000 (memory-map.md#one-off-frames). Stage 1 measured: max 580 in this AUTOPLAY build, lines 23-31, no DMA. Stage 2 part A: 841-1,007, lines 23-39. Stage 2 part B: 883-2,217, ending on lines 37-58 (tests/games/swarm/stage2b_costs.txt). Stage 4 part A (no sound): 1,294-3,498 (3,498-3,693 over the runs); the one-off frames 1,892 (a later wave's Intro frame 0) and 2,190 (a new game); AUTOPLAY's three priority-3 requests every 64 frames add 108 in the border from stage 4"
+      "source": "docs/games/swarm/memory-map.md#frame-budget, row 'Main loop, game_update in all': the sum of the rows, which are simultaneous worst cases that can't all fall in one frame, so this limit is a ceiling and stays an estimate. 6,720 since stage 5 (2026-10-02): row 6 raised from 1,350 to 2,020, its placed worst frame measured (tests/games/swarm/stage5_diver_worst.txt); the largest whole game_update found is 4,371 (the same file, JX: a launch frame with collide_update's frame C) and 3,758 sampled over 6,000 passes after the tuning (tuning_long_look.txt). 6,050 from stage 3 (the separate 100 for sfx_play calls removed, row 3 raised by 75; it was 6,075 after the stage 3 decisions, 6,115 from stage 2's collision figure, 5,765 before). Raster cycles, IRQs excluded. Stage 3 measured: 1,421-3,448 in this AUTOPLAY build (3,455 in make test), from line 23 to lines 45-86; the one-off frames on the game build 2,875 (a cleared formation's return) and 3,713 (a new game), which have their own limit of 4,000 (memory-map.md#one-off-frames). Stage 1 measured: max 580 in this AUTOPLAY build, lines 23-31, no DMA. Stage 2 part A: 841-1,007, lines 23-39. Stage 2 part B: 883-2,217, ending on lines 37-58 (tests/games/swarm/stage2b_costs.txt). Stage 4 part A (no sound): 1,294-3,498 (3,498-3,693 over the runs); the one-off frames 1,892 (a later wave's Intro frame 0) and 2,190 (a new game); AUTOPLAY's three priority-3 requests every 64 frames add 108 in the border from stage 4"
     },
     {
       "name": "player_update",
@@ -104,11 +104,11 @@
         "diver_update",
         "diver_update_end"
       ],
-      "max_cycles": 1350,
+      "max_cycles": 2020,
       "samples": 600,
-      "basis": "estimate",
+      "basis": "measured",
       "from_stage": 3,
-      "source": "docs/games/swarm/memory-map.md#frame-budget, row 6, and #stage-4-part-b-sound-requests. Kept as a ceiling over the measurement: stage 3 measured 180-972 in this AUTOPLAY build (978 in make test), stage 4 part A 184-994 (961-994 over the runs), on lines 36-57, and 688 on the game build for the launcher's longest scan with both rng_next calls (tests/games/swarm/stage3_costs.txt). 994 + 5% = 1,044, + the sound requests FROM STAGE 4 counted as one piece in the display with 8 sprites a line (tests/games/swarm/sfx_request_costs.txt): 104 CPU -> 223 for two enemy shots and a dive in one frame, 62 -> 162 for three shots = 1,267 at most: 83 spare. THE COUNT HOLDS ONLY IF THE ENEMY-SHOT SOUND IS ASKED FOR ONCE A FRAME (a flag set by eshot_spawn, tested at diver_update's end): a request from each of three shots, with X and Y kept, is 174 CPU -> 312, which is 1,356 and over. Not lowered to the measurement: it runs from the border into the first enemy row, lands on a different line every frame, and a sampled maximum of such a routine isn't its worst case. Raster cycles, IRQs excluded. It includes the launcher (at most 2 rng_next calls a frame), the wind-up of the one enemy that can be winding up, and eshot_spawn (eshot.asm, called from here: the enemy shot's sound is this row's, not eshot_update's)"
+      "source": "docs/games/swarm/memory-map.md#frame-budget, row 6, and #row-6-the-divers. RE-SET AT STAGE 5 (Technical Director, 2026-10-02) from the routine's own worst frame, placed on the game build by tests/games/swarm/stage5_diver_worst.py (results beside it): 1,924 MEASURED (D3L: pattern 2 at loop 3, row 0 Parked and not in the wave's rows, so the launcher scans all 18 and falls back; both rng_next calls; a Sweep firing on a 2-step frame, another taking 2 steps, the new diver's first wind-up frame, the dive and enemy shot requests; the border work before it loaded, so it runs on lines 41-72 across three badlines and row 0's sprites), + 5% = 2,020. It was 1,350, an estimate kept as a ceiling: after the tuning (launch interval 32 at wave 12, 3 shots a dive from loop 0) this AUTOPLAY build read 1,268 in make test and 1,296 over 6,000 passes (tuning_long_look.txt), and the placed frames read 1,273 (D0, the full formation: what AUTOPLAY can reach), 1,429 (three Sweeps firing together, 4 or fewer alive), 1,673 (a launch after the longest scan with two Sweeps firing) and 1,635-1,924 (D3 and D3L). AUTOPLAY CAN'T PLACE THOSE FRAMES (its formation is full, so the launcher's scan is short and the interval is never halved): this check guards the sampled maximum, expect 1,100-1,300 on lines 37-61; the placed frames are held to 2,020 by the script. THE ENEMY-SHOT SOUND IS STILL ASKED FOR ONCE A FRAME (a flag set by eshot_spawn, tested at diver_update's end). Raster cycles, IRQs excluded. History: stage 3 measured 180-972 in this build (978 in make test), stage 4 part A 184-994, part B 192-1,095, and 688 on the game build for the launcher's longest scan alone (tests/games/swarm/stage3_costs.txt). It includes the launcher (at most 2 rng_next calls a frame), the wind-up of the one enemy that can be winding up, and eshot_spawn (eshot.asm, called from here: the enemy shot's sound is this row's, not eshot_update's)"
     },
     {
       "name": "eshot_update (3 enemy shots)",
@@ -239,9 +239,9 @@
       "after_frames": 0,
       "basis": "requirement",
       "from_stage": 1,
-      "source": "docs/games/swarm/memory-map.md#frame-budget: the engine promises 7,200, the game is budgeted 6,530 (6,550 while the sound tick was an estimate of 500, 6,575 before stage 3 was measured, 6,615 before the stage 3 decisions, 6,265 before stage 2's collision figure), so at least 670 must be left idle in every frame. game_idle_min is idle-loop iterations of 16 cycles. Stage 1 measured: 15,888 (3 sprites, no enemies). Stage 2 part A: 10,240 (21 sprites, no collisions). Stage 2 part B: 9,488. Stage 3, the whole game at wave 12: 6,288 (5,872 with the box scan it replaced); stage 4 part A (waves and the title in, no sound): 5,792",
+      "source": "docs/games/swarm/memory-map.md#frame-budget: the engine promises 7,200, the game is budgeted 6,530 (6,550 while the sound tick was an estimate of 500, 6,575 before stage 3 was measured, 6,615 before the stage 3 decisions, 6,265 before stage 2's collision figure), so at least 670 had to be left idle in every frame until stage 5; from stage 5 the budget is 7,155 (row 6 at 2,020, the tick at 435) and the floor is 45: the sum is a ceiling no frame reaches, and what protects the frame in practice is the figure this check prints (5,440-5,568 at stage 4). game_idle_min is idle-loop iterations of 16 cycles. Stage 1 measured: 15,888 (3 sprites, no enemies). Stage 2 part A: 10,240 (21 sprites, no collisions). Stage 2 part B: 9,488. Stage 3, the whole game at wave 12: 6,288 (5,872 with the box scan it replaced); stage 4 part A (waves and the title in, no sound): 5,792",
       "scale": 16,
-      "min": 670
+      "min": 45
     },
     {
       "name": "pinned sprites (player, enemy shots) never dropped",
@@ -328,9 +328,9 @@
       "after_frames": 0,
       "basis": "requirement",
       "from_stage": 5,
-      "source": "M4 stage 5 sign-off: as the stage 1 check (headroom 670), over a longer run",
+      "source": "M4 stage 5 sign-off: as the stage 1 check (headroom 45 from stage 5: see that check), over a longer run. game_idle_min is the minimum since the warm-up, so this reads the worst frame of all 13,000",
       "scale": 16,
-      "min": 670
+      "min": 45
     },
     {
       "name": "soak: no late chain entries or sprite writes (chain)",
@@ -353,6 +353,48 @@
       "from_stage": 5,
       "source": "M4 stage 5 sign-off",
       "equals": 0
+    },
+    {
+      "name": "soak: pinned sprites (player, enemy shots) never dropped",
+      "kind": "memory",
+      "address": "mux_pin_drop_count",
+      "size": 1,
+      "after_frames": 0,
+      "basis": "requirement",
+      "from_stage": 5,
+      "source": "M4 stage 5 sign-off: as the stage 3 check, read again after the soak's 10,000 frames (added by the Technical Director at stage 5: the four soak checks written at stage 0 didn't read the two flicker counters again)",
+      "equals": 0
+    },
+    {
+      "name": "soak: nothing missing 2 frames running",
+      "kind": "memory",
+      "address": "mux_max_age",
+      "size": 1,
+      "after_frames": 0,
+      "basis": "requirement",
+      "from_stage": 5,
+      "source": "M4 stage 5 sign-off: as the stage 3 check (design.md feel target 5), read again after the soak's 10,000 frames",
+      "max": 1
+    },
+    {
+      "name": "placed worst frames: diver_update (stage5_diver_worst.py)",
+      "kind": "script",
+      "basis": "measured",
+      "from_stage": 5,
+      "source": "docs/games/swarm/memory-map.md#row-6-the-divers: the frames AUTOPLAY can't reach (4 or fewer alive, a launch after the longest scan, the fallback scan of pattern 2), set through the monitor on the game's DEBUG build and held to row 6's 2,020; D3L reads 1,924. It also prints the whole frame's game_update and idle time for each. Pass = exit code 0. About 10 seconds",
+      "command": ["uv", "run", "--quiet", "--package", "budget-runner", "python", "tests/games/swarm/stage5_diver_worst.py", "--prg", "{prg}"],
+      "build": {"game": "swarm"},
+      "timeout": 180
+    },
+    {
+      "name": "placed worst frames: collide_update (stage3_collide_worst.py)",
+      "kind": "script",
+      "basis": "measured",
+      "from_stage": 5,
+      "source": "docs/games/swarm/memory-map.md#the-collision-budget: frames A, B and C on the game's DEBUG build, held to row 8's 2,825 with their sound requests; C reads 2,612 since the tuning (tests/games/swarm/stage4b_collide_worst.txt). The script is stage 3's, with the gameplay-engineer's stage 4 addition (the sfx_request read and the limit) accepted by the Technical Director at stage 5. Pass = exit code 0. About 10 seconds",
+      "command": ["uv", "run", "--quiet", "--package", "budget-runner", "python", "tests/games/swarm/stage3_collide_worst.py", "--prg", "{prg}"],
+      "build": {"game": "swarm"},
+      "timeout": 180
     },
     {
       "name": "stick behaviour (check.py)",

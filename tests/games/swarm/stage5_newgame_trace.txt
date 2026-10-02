@@ -1,0 +1,44 @@
+# uv run --package budget-runner python tests/games/swarm/stage5_newgame_trace.py   (build/swarm/swarm.prg, VICE 3.10 x64sc PAL, DEBUG)
+the new game's frame (the title's press was in its frame 60), routine: raster cycles, IRQ time excluded; line.cycle it starts and ends on:
+  game_update        2294   23.31 -> 59.57
+  input_read           28   23.37 -> 24.02
+  panel_update          9   24.14 -> 24.23
+  stars_update         56   24.35 -> 25.28
+  formation_update    369   48.60 -> 54.51
+  diver_update         61   55.00 -> 55.61
+  collide_update      118   56.10 -> 58.02
+  player_update        57   58.14 -> 59.08
+  wave phase 1, wave timer 0, game state 0 (Intro's frame 0 of a new game: 1, 0, 0)
+the $D012 read at the press (title frame: line.cycle of the read, by rng_seed's line.cycle less 18; the value read, from X at rng_seed ^ the stepped zp_rng_hi):
+  frame  60: read at 26.61 (rng_seed at 27.16): value 26
+  frame   9: read at 27.11 (rng_seed at 27.29): value 27
+  frame  12: read at 27.09 (rng_seed at 27.27): value 27
+  frame  23: read at 27.09 (rng_seed at 27.27): value 27
+  frame  40: read at 27.05 (rng_seed at 27.23): value 27
+  frame  77: read at 27.09 (rng_seed at 27.27): value 27
+  frame 130: read at 27.09 (rng_seed at 27.27): value 27
+  frame 142: read at 27.09 (rng_seed at 27.27): value 27
+  frame 200: read at 27.09 (rng_seed at 27.27): value 27
+  values read: [26, 27]
+# uv run --package budget-runner python tests/games/swarm/stage5_newgame_trace.py   (the stage 4 part A build, commit 7f9e937, built in a worktree: build/swarm/swarm.prg, VICE 3.10 x64sc PAL, DEBUG)
+the new game's frame (the title's press was in its frame 60), routine: raster cycles, IRQ time excluded; line.cycle it starts and ends on:
+  game_update        2189   23.37 -> 58.21
+  input_read           28   23.43 -> 24.08
+  panel_update          9   24.20 -> 24.29
+  stars_update         56   24.41 -> 25.34
+  formation_update    368   48.26 -> 54.16
+  diver_update         53   54.28 -> 55.18
+  collide_update      105   55.30 -> 57.09
+  player_update        57   57.21 -> 58.15
+  wave phase 1, wave timer 0, game state 0 (Intro's frame 0 of a new game: 1, 0, 0)
+the $D012 read at the press (title frame: line.cycle of the read, by rng_seed's line.cycle less 18; the value read, from X at rng_seed ^ the stepped zp_rng_hi):
+  frame  60: read at 27.01 (rng_seed at 27.19): value 27
+  frame   9: read at 27.10 (rng_seed at 27.28): value 27
+  frame  12: read at 27.10 (rng_seed at 27.28): value 27
+  frame  23: read at 27.10 (rng_seed at 27.28): value 27
+  frame  40: read at 27.01 (rng_seed at 27.19): value 27
+  frame  77: read at 27.04 (rng_seed at 27.22): value 27
+  frame 130: read at 27.13 (rng_seed at 27.31): value 27
+  frame 142: read at 27.04 (rng_seed at 27.22): value 27
+  frame 200: read at 27.13 (rng_seed at 27.31): value 27
+  values read: [27]
