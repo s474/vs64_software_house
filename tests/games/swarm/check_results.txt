@@ -1,0 +1,19 @@
+# uv run --package budget-runner python tests/games/swarm/check.py   (DEBUG build, 2026-10-02; the release build gives the same lines)
+[PASS] setup: $D011=$5b $D018=$1b $D020-22=[0, 0, 6] $D017/$D01D/$D01B=0/0/0 $DC02=$00 $01=$35; pinned flags [128, 128, 128, 128, 0, 0]...; player (171, 221), sprites 1-23 hidden: True; lives 3
+[PASS] charset: 'A' and '0' are the ROM's, space empty; star high: 1 pixel in row [2], star low: 1 pixel in row [5]; ship 28 pixels
+[PASS] panel: row 24 = ' SCORE 000000  HI 005000  WAVE 01  ^^   ' (^ = ship); all 40 codes in $40-$7F: True; colour RAM all white: True
+[PASS] stars: 48 star cells in rows 0-23 (24 high, 24 low), 0 in a text band, 0 other non-space cells, same cells as the star table: True, colours outside the four: 0
+[PASS] twinkle: 96 frames: one star cell changed colour in each (0 exceptions), 48 different stars in 48 frames, the same order again in the next 48, each step the next of white/light grey/grey/dark grey
+[PASS] idle: 10 frames: X [171], no shot
+[PASS] up-down: X [171], no shot
+[PASS] right: +3 a frame from 171: reaches 318 after 49 frames, then [318] for 20 more
+[PASS] left: -3 a frame from 318: reaches 24 after 98 frames (design: 98), then [24] for 20 more
+[PASS] stop: right 5 frames [27, 30, 33, 36, 39], released: [39, 39, 39, 39, 39]
+[PASS] left+right: both held 10 frames: X [39] (was 39)
+[PASS] fire-hold: 200 frames: 20 shots, never more than 2 in flight; spawn frames [0, 10, 21, 31, 42, 52, 63, 73]...; gaps [10, 11] (cooldown 10); each shot lives [21] frames, Y 213 down to 53 by 8; errors: none; rate 4.77 a second (design feel target 2 says 5)
+[PASS] fire-move: fire + right 40 frames: 4 shots, each spawned at the player's X that frame (X 42 -> 159) and kept it; errors: none
+[PASS] cooldown: a slot always free, fire held 100 frames: 10 shots, gaps [10]
+[PASS] fire-tap: 1-frame press: 1 shot; again 5 frames later: 1 in flight (cooldown); at 10 frames: 2
+[PASS] sprites: hardware sprites enabled: 1: X, Y, colour [(159, 221, 3)]; player X 159; pointer $c0; $D01C (multicolour) = 0
+
+ALL PASS
