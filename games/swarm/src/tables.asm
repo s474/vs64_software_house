@@ -2,7 +2,7 @@
 // main.asm at GAME_TABLES. Only colour_table's address is fixed; the rest follow in the memory
 // map's order and are found by label. So far: colours, stars, custom glyphs, collision pairs,
 // the formation's tables, scores, explosion shapes, the respawn flash, dive paths, fire steps,
-// wave tables, strings.
+// wave tables, strings (the panel's template and the play-area texts).
 
 // ------------------------------------------------------------------------------------------
 // Colours. EVERY colour the game writes comes from here, indexed by a COL_* constant
@@ -271,15 +271,54 @@ panel_template:
         GameText(" SCORE         HI         WAVE          ")
 .errorif * - panel_template != SCREEN_COLS, "panel_template is 40 cells"
 
-// Messages on row 9 (MSG_ROW), centred (design.md "Text cells and the star rule"): first column
-// (40 - length) div 2, all inside the star-free band (columns 10-29).
-.const TEXT_READY_LEN     = 5
-.const TEXT_READY_COL     = floor((SCREEN_COLS - TEXT_READY_LEN) / 2)   // 17
-.const TEXT_GAME_OVER_LEN = 9
-.const TEXT_GAME_OVER_COL = floor((SCREEN_COLS - TEXT_GAME_OVER_LEN) / 2)       // 15
-text_ready:     GameText("READY")
-.errorif * - text_ready != TEXT_READY_LEN, "text_ready's length"
-text_game_over: GameText("GAME OVER")
-.errorif * - text_game_over != TEXT_GAME_OVER_LEN, "text_game_over's length"
-.errorif TEXT_READY_COL != 17 || TEXT_GAME_OVER_COL != 15, "design: READY at columns 17-21, GAME OVER at 15-23"
-.errorif TEXT_GAME_OVER_COL < STAR_BAND_COL_MIN || TEXT_GAME_OVER_COL + TEXT_GAME_OVER_LEN - 1 > STAR_BAND_COL_MAX, "messages must stay inside the star-free band"
+// Play-area texts (design.md "Text cells and the star rule"): the three messages on row 9
+// (MSG_ROW) and the title's six. Each is centred, first column (40 - length) div 2, except the
+// three score lines, which are right-aligned in columns 17-23 (written here with their leading
+// space). All are inside the star-free band (columns 10-29 of a band row), so a text is written
+// and erased without looking at the stars. game_text_draw / game_text_erase (game.asm) take a
+// TEXT_* index into these tables.
+.const TEXT_PRESS_FIRE = 0      // the title's texts are 0-5, in the order the title draws them:
+.const TEXT_SWARM      = 1      // PRESS FIRE in the title's frame 0 (the blink's first "on"), the
+.const TEXT_PTS_A      = 2      // rest one a frame in frames 1-5
+.const TEXT_PTS_B      = 3
+.const TEXT_PTS_C      = 4
+.const TEXT_DIVING     = 5
+.const TEXT_READY      = 6
+.const TEXT_GAME_OVER  = 7
+.const TEXT_WAVE       = 8      // "WAVE 00": game_wave_intro writes the shown wave's digits over the 00
+.const TEXT_COUNT      = 9
+.const TITLE_TEXTS     = 6
+.var text_list = List()         // (string, row, first column; -1 = centred)
+.eval text_list.add(List().add("PRESS FIRE", 19, -1))
+.eval text_list.add(List().add("SWARM", 5, -1))
+.eval text_list.add(List().add("150 PTS", 9, 17))
+.eval text_list.add(List().add(" 80 PTS", 11, 17))
+.eval text_list.add(List().add(" 50 PTS", 13, 17))
+.eval text_list.add(List().add("DIVING SCORES DOUBLE", 16, -1))
+.eval text_list.add(List().add("READY", MSG_ROW, -1))
+.eval text_list.add(List().add("GAME OVER", MSG_ROW, -1))
+.eval text_list.add(List().add("WAVE 00", MSG_ROW, -1))
+.errorif text_list.size() != TEXT_COUNT, "text_list: TEXT_COUNT texts"
+.function TextLen(t) { .return text_list.get(t).get(0).size() }
+.function TextRow(t) { .return text_list.get(t).get(1) }
+.function TextCol(t) { .return text_list.get(t).get(2) < 0 ? floor((SCREEN_COLS - TextLen(t)) / 2) : text_list.get(t).get(2) }
+.function TextLast(t) {         // offset in text_data of the text's last character
+        .var n = -1
+        .for (var i = 0; i <= t; i++) .eval n = n + TextLen(i)
+        .return n
+}
+text_data:
+        .for (var t = 0; t < TEXT_COUNT; t++) { GameText(text_list.get(t).get(0)) }
+.errorif * - text_data > 256, "text_data is indexed by one byte"
+text_last:      .fill TEXT_COUNT, TextLast(i)           // index in text_data of the last character
+text_len1:      .fill TEXT_COUNT, TextLen(i) - 1        // length - 1
+text_scr_lo:    .fill TEXT_COUNT, <(SCREEN + TextRow(i) * SCREEN_COLS + TextCol(i))
+text_scr_hi:    .fill TEXT_COUNT, >(SCREEN + TextRow(i) * SCREEN_COLS + TextCol(i))
+.for (var t = 0; t < TEXT_COUNT; t++) {
+        .errorif !star_band_rows.containsKey(TextRow(t)) || TextCol(t) < STAR_BAND_COL_MIN || TextCol(t) + TextLen(t) - 1 > STAR_BAND_COL_MAX, "text " + t + " is outside the star-free bands"
+}
+.errorif TextCol(TEXT_READY) != 17 || TextCol(TEXT_GAME_OVER) != 15 || TextCol(TEXT_WAVE) != 16, "design: READY at columns 17-21, GAME OVER at 15-23, WAVE nn at 16-22"
+.errorif TextCol(TEXT_SWARM) != 17 || TextCol(TEXT_DIVING) != 10 || TextCol(TEXT_PRESS_FIRE) != 15, "design: SWARM at columns 17-21, DIVING SCORES DOUBLE at 10-29, PRESS FIRE at 15-24"
+.errorif TextCol(TEXT_READY) < TextCol(TEXT_GAME_OVER) || TextCol(TEXT_READY) + TextLen(TEXT_READY) > TextCol(TEXT_GAME_OVER) + TextLen(TEXT_GAME_OVER), "erasing GAME OVER's cells must erase READY"
+.errorif TextCol(TEXT_WAVE) < TextCol(TEXT_GAME_OVER) || TextCol(TEXT_WAVE) + TextLen(TEXT_WAVE) > TextCol(TEXT_GAME_OVER) + TextLen(TEXT_GAME_OVER), "erasing GAME OVER's cells must erase WAVE nn"
+.const MSG_WAVE_DIGITS = MSG + TextCol(TEXT_WAVE) + 5   // the two digits of WAVE nn

@@ -27,7 +27,8 @@
 // No diver: free the three slots.
 // In:  nothing       Out: zp_divers_active = 0
 // Uses: A, X
-// Cost: a new game only. (formation_init parks the enemies themselves.)
+// Cost: a wave's first frame only (game_wave_intro: every diver slot is free at a new wave and a
+//       new game, design Stage 4 rule 4)
 diver_init:
         lda #DIVER_FREE
         ldx #DIVER_SLOTS - 1
@@ -70,7 +71,7 @@ diver_free:
 !no:
 }
 
-// The divers' frame: the launcher (in Play only), then each diver by its state.
+// The divers' frame: the launcher (in Play and Fight only), then each diver by its state.
 // In:  zp_game_state, zp_game_frame, zp_pattern, zp_loop, formation_home_x_lo/hi (this frame's)
 // Out: the divers' multiplexer entries, enemy shots spawned, zp_launch_timer, zp_divers_active
 // Uses: A, X, Y, zp_tmp0-2
@@ -92,9 +93,10 @@ diver_update:
         dey                             // 2   $FF: yes
 !:      sty diver_two                   // 4
 
-        // The launcher. The timer counts down in Play only and stops at 0; at 0 it tries every
+        // The launcher. The timer counts down in Play and Fight only and stops at 0; at 0 it tries every
         // frame until it can launch.
-        lda zp_game_state               // 3
+        lda zp_game_state               // 3   Play and Fight are both 0: the launcher runs only
+        ora zp_wave_phase               // 3   in Play and Fight together (design, Stage 4 rule 3)
         bne !slots+                     // 3 / 2
         lda zp_launch_timer             // 3
         beq !try+
@@ -172,7 +174,8 @@ diver_launch:
         dey
         bpl !slot-
         bmi !none+                      // no free slot (can't happen: fewer than the maximum are out)
-!take:  txa
+!take:  // SFX (part B): the dive sound, voice 3, priority 1: this is WindUp's frame t = 0
+        txa
         sta diver_enemy,y
         inc zp_divers_active
         lda #ENEMY_WINDUP               // frame t = 0 of its WindUp is this frame: the slot code

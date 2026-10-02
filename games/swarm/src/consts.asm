@@ -159,7 +159,7 @@
 .const EXPLOSION_SHAPES      = 4        // design "Sprite shapes": 4 shapes x 4 frames, stationary
 .const EXPLOSION_SHAPE_FRAMES = 4
 .const EXPLOSION_FRAMES      = EXPLOSION_SHAPES * EXPLOSION_SHAPE_FRAMES        // 16
-.const WAVE_CLEAR_PAUSE      = 75       // design "Waves": frames between the last explosion's end and the next formation
+.const WAVE_CLEAR_PAUSE      = 75       // design "Waves": frames between the last explosion's end and the next wave's Intro
 .errorif SPR_ENEMY + ENEMY_COUNT != 24, "the enemies are virtual sprites 6-23"
 .errorif FORM_X0 + FORM_FX_MAX + FORM_COL_DX * (FORM_COLS - 1) != 310, "design: the formation's sprite X is 34-310"
 
@@ -191,8 +191,35 @@
 .const ESHOT_AIM_DEAD  = 15     // a shot's dx is 0 when |player X - shot X| <= 15
 .const LAUNCH_TIMER_START = 50  // the launch timer when Play is entered and when a formation returns
 .const LAUNCH_HALVE_ALIVE = 4   // the interval is halved with 4 or fewer enemies alive
-.const STAGE3_PATTERN  = 2      // Stage 3 rule 1: pattern 3 (index 2) at loop 0 on every formation
+.const FIGHT_LAUNCH_TIMER = LAUNCH_TIMER_START + 1      // set in Fight's first frame, before diver_update counts it
+                                // once in that same frame (in Play): it reads 50 at that frame's end and the
+                                // first launch is 50 frames later, 150 after the wave appeared (design, Stage 4
+                                // rule 8: Fight at d + 191, first launch at d + 241)
+.const PATTERN_COUNT   = 3      // the pattern index cycles 0-2
 .errorif DIVER_WRAP_Y < 30 || DIVER_X_MAX > 511, "divers stay inside the multiplexer's range"
+
+// --- Waves (design.md "Game flow", "Stage 4 rules" 1-8) ----------------------------------------
+// The wave phase, beside the game state. Fight is 0 so that "in Play and in Fight" is one ora.
+.const WAVE_PHASE_FIGHT = 0
+.const WAVE_PHASE_INTRO = 1     // 100 frames: WAVE nn for 75, enemy k appears in frame 2k
+.const WAVE_PHASE_CLEAR = 2     // 75 frames of empty sky after the last explosion ended
+.const INTRO_FRAMES     = 100
+.const INTRO_MSG_FRAMES = 75    // WAVE nn is erased in Intro's frame 75
+.const WAVE_START       = $01   // BCD: a new game's shown wave
+.const WAVE_MAX         = $99   // BCD: the shown wave stops here; the game carries on
+.const WAVE_BONUS_MID   = $10   // + 1,000: BCD, added to the score's middle byte
+#if AUTOPLAY
+.const NEW_GAME_WAVE    = $12   // the budget build plays wave 12: pattern 3 (index 2), loop 3
+.const NEW_GAME_PATTERN = 2     // (memory-map.md "Labels the game must provide")
+.const NEW_GAME_LOOP    = GAME_LOOP_MAX
+#else
+.const NEW_GAME_WAVE    = WAVE_START
+.const NEW_GAME_PATTERN = 0
+.const NEW_GAME_LOOP    = 0
+#endif
+.const NEW_GAME_COOLDOWN = 25   // Stage 4 rule 10: the press that started the game is still held. The ship
+                                // can't fire in the new game's frame or the 24 after it
+.errorif INTRO_MSG_FRAMES < 2 * ENEMY_COUNT || (INTRO_MSG_FRAMES & 1) == 0, "wave_step: the erase frame must be odd or past the last enemy's frame (2 * 17)"
 
 // --- Game core and the game states (design.md "Game flow", "Stage 3 rules" 8-13) --------------
 // The order matters: the ship is shown (and moves and fires) in the states below

@@ -14,7 +14,7 @@
 //                   the state's own code owns it and formation_update leaves mux_x alone. So
 //                   "scores the diving value" is bit 7 set, and "can be hit" is every state but
 //                   DEAD (hidden: mux_y = MUX_OFF, which the collision module never reports) and
-//                   EXPLODING (the highest value: one cmp).
+//                   EXPLODING (the highest value: one cmp). WAITING (stage 4) is hidden like DEAD.
 //   enemy_timer,e   frames left in a timed state (WindUp, Exploding). Unused while Parked.
 //   enemy_row,e / enemy_col,e   constants (tables.asm): the row is the type, so it indexes the
 //                   colour (colour_table + COL_ENEMY_A), the shapes, the score and the dive path.
@@ -28,7 +28,7 @@
 //   1. formation_update writes mux_x_lo of every enemy whose state has bit 7 clear, every frame,
 //      and mux_x_hi only in the columns that can pass X 255 (4 and 5). mux_y, mux_col and the
 //      other columns' mux_x_hi (always 0 at home) are written when an enemy is parked, by
-//      enemy_park: call it to put an enemy (back) in its place (wave start, the end of Return).
+//      enemy_park: call it to put an enemy (back) in its place (the wave's Intro, the end of Return).
 //   2. A dead enemy is state ENEMY_DEAD with mux_y = MUX_OFF. formation_update still writes its
 //      X and shape: harmless, the sprite is hidden.
 //   3. The animation swap writes mux_ptr of ALL 18 without looking at their states (it is the
@@ -40,8 +40,8 @@
 // first explosion shape, orange, and the enemy's index goes in one of the EXPLOSION_SLOTS entries
 // of explosion_enemy. formation_update's tail walks those entries (not the 18 states) after the
 // animation swap: it counts the timer down, writes the shape for the frames left, and when the
-// timer reaches 0 calls enemy_kill: Dead, hidden, zp_enemies_alive - 1, and at 0 alive the pause
-// before the next formation starts (zp_clear_timer; game.asm). So zp_enemies_alive counts every
+// timer reaches 0 calls enemy_kill: Dead, hidden, zp_enemies_alive - 1, and at 0 alive the wave
+// is cleared (the bonus and the Clear phase: game_wave_clear, game.asm). So zp_enemies_alive counts every
 // enemy that isn't Dead, an exploding one included: it reaches 0 when the last explosion ends
 // (design: "all 18 dead and exploded").
 // The sprite is shown exploding for exactly 16 frames: the hit's frame and the 15 after it.
@@ -51,6 +51,8 @@
 
 .const ENEMY_DEAD      = $00    // slot hidden
 .const ENEMY_PARKED    = $01
+.const ENEMY_WAITING   = $02    // stage 4: hidden until its turn to appear in the wave's Intro. Not
+                                // Parked (can't be hit or launched), not Dead (it counts as alive)
 .const ENEMY_OWN_X     = $80    // bit 7: not the formation's to place
 .const ENEMY_WINDUP    = $80    // stage 3
 .const ENEMY_DIVE      = $81    // stage 3
@@ -63,14 +65,16 @@
 .const FORM_HI_COL = floor((255 - FORM_FX_MAX - FORM_X0) / FORM_COL_DX) + 1    // 4
 .errorif FORM_X0 + FORM_FX_MAX + FORM_COL_DX * (FORM_COLS - 1) > 511, "home X is 9 bits"
 
-// Start a wave's formation: fx = 48 moving right, animation frame 0, all 18 enemies Parked at
-// their home positions in their type's colour and first shape.
-// (The design's wave start, one enemy appearing every 2 frames, is the wave stage's.)
-// Also the stand-in for the next wave after a clear (main.asm): it may be called in a frame.
+// Reset the formation for a wave's Intro (design, Stage 4 rule 2; memory-map.md "Stage 4" (b):
+// formation_init split in two, this is the reset): fx = 48 moving right, the drift and animation
+// timers, animation frame 0, no explosion, the six home X, and all 18 enemies Waiting: hidden,
+// not Parked, counted as alive. Nothing is parked here: game.asm's wave phase parks enemy k in
+// Intro's frame 2k (enemy_park), one every 2 frames.
 // In:  zp_loop (the drift's speed)   Out: zp_enemies_alive = 18, no explosion running
-// Uses: A, X, Y
-// Cost: init only (about 2,000 cycles, counted: 18 enemy_park calls)
-formation_init:
+// Uses: A, X
+// Cost: about 420 cycles + jsr/rts (counted: 30 the slots, 30 the timers, 108 the home X, 18 x
+//       14 the enemies); only in a wave's first frame (a one-off frame)
+formation_reset:
         ldx #EXPLOSION_SLOTS - 1
         lda #EXPLOSION_FREE
 !:      sta explosion_enemy,x
@@ -98,14 +102,15 @@ formation_init:
         dex
         bpl !col-
         ldx #ENEMY_COUNT - 1
-!enemy: lda #0
-        sta enemy_timer,x
-        jsr enemy_park
-        dex
-        bpl !enemy-
+!enemy: lda #ENEMY_WAITING              // 2
+        sta enemy_state,x               // 5
+        lda #MUX_OFF                    // 2
+        sta mux_y + SPR_ENEMY,x         // 5
+        dex                             // 2
+        bpl !enemy-                     // 3
         lda #ENEMY_COUNT
-        sta zp_enemies_alive
-        rts
+        sta zp_enemies_alive            // 18 from Intro's frame 0: the wave can't read as cleared
+        rts                             // while it is still arriving
 
 // Put enemy X in its place in the formation: state Parked, at this frame's home position, in
 // its type's colour and the current animation shape. For the wave start and, from stage 3, the
@@ -163,11 +168,12 @@ enemy_explode:
         sta explosion_enemy,y           // 5
         rts
 
-// Enemy X is dead: hide its sprite, count it, and when it was the last one start the pause
-// before the next formation (design "Waves": 75 frames; game_state_update counts it).
+// Enemy X is dead: hide its sprite, count it, and when it was the last one the wave is cleared:
+// game_wave_clear (game.asm) pays the bonus and starts the Clear phase in this same frame.
 // In:  X = enemy index 0-17      Out: X preserved
 // Uses: A
-// Cost: 28 cycles + jsr/rts (counted); only when an explosion ends
+// Cost: 28 cycles + jsr/rts (counted); + game_wave_clear's 62-78 for the last enemy of a wave.
+//       Only when an explosion ends
 enemy_kill:
         lda #ENEMY_DEAD
         sta enemy_state,x
@@ -175,8 +181,7 @@ enemy_kill:
         sta mux_y + SPR_ENEMY,x
         dec zp_enemies_alive
         bne !+
-        lda #WAVE_CLEAR_PAUSE
-        sta zp_clear_timer
+        jmp game_wave_clear             // X preserved
 !:      rts
 
 // The formation's frame: step the drift, work out the six columns' home X and write it to every
@@ -200,7 +205,9 @@ enemy_kill:
 //       eshot_update and the state step; wrapped divers' sprites at Y 30-50 can be on those
 //       lines); 616-620 in the game with 3 explosions ending and 1 animating on a turn-and-swap
 //       frame (counted 627). It must end above line 51 (the first badline): it does in every
-//       frame but the two one-off frames in which formation_init runs before it (main.asm)
+//       frame but the one-off frames in which a wave's set-up runs before it (main.asm).
+//       Stage 4 (stage4_costs.py): the wave-clear bonus is paid inside it, in enemy_kill, in the
+//       frame the last explosion ends: figures in tests/games/swarm/stage4_costs.txt
 formation_update:
         dec zp_drift_timer              // 5
         bne !placed+                    // 3 / 2

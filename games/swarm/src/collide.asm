@@ -33,7 +33,7 @@
 // enemy stays (a diver carries on); a hit on the player is counted in autoplay_player_hits and
 // not answered, (b) and (c) run in every frame whatever the invulnerability timer, and (c) runs
 // after a hit in (b) too. So nothing dies there: the answers are measured on the game build.
-// Sound (the design's effects) is stage 4's: engine/sfx.asm isn't built.
+// Sound is stage 4 part B's: the places are marked "SFX (part B)".
 
 // The frame's collisions: (a), (b), (c) above.
 // In:  zp_fx (this frame's), zp_game_state, zp_player_invuln
@@ -208,6 +208,9 @@ collide_update:
 #endif
 !no:
         }
+        // SFX (part B): the enemy explosion sound, voice 2, priority 2, asked for ONCE here if a
+        // player shot hit an enemy this frame (a flag set in collide_enemy_hit's shot path; not for
+        // a ram: memory-map.md "Stage 4" (a)). Every jmp to collide_update_end must pass through it
 collide_update_end:
         rts
 

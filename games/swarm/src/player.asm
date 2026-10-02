@@ -60,6 +60,7 @@ player_respawn:
 // Uses: A
 // Cost: 60 cycles + jsr/rts (counted); at most once a frame, from collide_update
 player_hit:
+        // SFX (part B): the player hit, two effects started together, voices 2 and 3, priority 3
         dec zp_lives                            // 5
         lda panel_dirty                         // 4
         ora #PANEL_DIRTY_LIVES                  // 2
@@ -181,7 +182,8 @@ player_update:
         bne player_update_end           // always
 
         // The longest path ends here with no jump: the shot and the ship take the same X.
-!spawn: lda #PSHOT_SPAWN_Y
+!spawn: // SFX (part B): the player shot sound, voice 1, priority 1 (X is the shot's slot)
+        lda #PSHOT_SPAWN_Y
         sta mux_y + SPR_PSHOT,x
         lda #PSHOT_COOLDOWN
         sta zp_player_cooldown

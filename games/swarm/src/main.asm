@@ -96,7 +96,9 @@ start:
         lda #<GAME_RNG_SEED             // a fixed seed until stage 4's title seeds from zp_irq_frame
         ldx #>GAME_RNG_SEED             // and $D012 at the press of fire (engine/rng.md); AUTOPLAY
         jsr rng_seed                    // keeps this constant
-        jsr game_new                    // score 0, lives 3, the formation, the ship, state Play
+        jsr game_new                    // score 0, lives 3, wave 1's Intro frame 0, the ship, state Play
+        dec zp_wave_timer               // game_new ran Intro's frame 0 outside a frame: the first frame
+                                        // of the main loop counts the timer back to 0 and is frame 0
         lda #0
 #if DEBUG
         sta game_overrun_count

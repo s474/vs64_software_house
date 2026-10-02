@@ -1,83 +1,208 @@
-// Swarm: the game state machine (design.md "Game flow" and "Stage 3 rules" 8-13). Stage 3 has
-// four states; the title, the wave intro and the wave clear are stage 4's.
+// Swarm: the two state machines (design.md "Game flow", "Stage 3 rules" 8-13, "Stage 4 rules").
 //
+// THE GAME STATE (zp_game_state, zp_state_timer): what the player is doing.
 //   Play ----------- the player is hit (collide_update -> player_hit) ----------> PlayerDying
 //   PlayerDying ---- first frame, 100 or later, with no diver out, lives left --> Respawn
 //   PlayerDying ---- frame 100, no lives left, whatever is diving --------------> GameOver
-//   Respawn -------- 50 frames of READY ----------------------------------------> Play
-//   GameOver ------- 200 frames, or a NEW press of fire from its frame 50 ------> a new game (Play)
-//                    (stage 4: the title)
-//
+//   Respawn -------- 50 frames (READY, if the phase was Fight in its frame 0) --> Play
+//   GameOver ------- 200 frames, or a NEW press of fire from its frame 50 ------> a new game
 // zp_state_timer is the number of frames the state has run: 0 in the frame the state is entered,
 // + 1 at the top of every later frame (game_state_update), stopping at 255. It isn't counted in
 // Play. The player's hit happens in collide_update, so frame 0 of PlayerDying is the hit's frame;
 // Respawn and GameOver are entered here, at the top of a frame, which is their frame 0.
-// The formation's return after a clear (Stage 2 rule 3) runs on its own timer, zp_clear_timer,
-// in every state (Stage 3 rule 12).
-// What the other files do with the state: diver_update counts the launch timer and launches only
-// in Play; eshot_spawn fires only in Play; collide_update tests the player only in Play with
-// zp_player_invuln 0; player_update moves and fires in Play and Respawn (the states in which the
-// ship is shown).
-// Stage 3 stand-in for waves (Stage 3 rule 1): every game is pattern 3 at loop 0, set in the
-// pattern and loop stores by game_new and read from them everywhere, so a test can set them.
+//
+// THE WAVE PHASE (zp_wave_phase, zp_wave_timer): what the formation is doing, beside the state.
+//   Intro ---------- 100 frames: WAVE nn on row 9 for 75, enemy k appears in frame 2k --> Fight
+//   Fight ---------- the last explosion ends (formation_update -> enemy_kill) ----------> Clear
+//   Clear ---------- + 1,000 in its frame 0; 75 frames of empty sky; then the next wave -> Intro
+// zp_wave_timer is the number of frames the phase has run, 0 in its first frame. It counts in
+// every frame in which lives > 0, whatever the game state, and stands still with the last life
+// gone (Stage 4 rule 1). It isn't counted in Fight.
+// The three wave stores (zp_wave BCD and sticking at 99, zp_pattern cycling 0-2, zp_loop sticking
+// at 3) change only in the frame after Clear's 75th and in game_new (Stage 4 rule 5); everything
+// a loop or a pattern changes is read from them where it is used.
+//
+// What the other files do with them: diver_update counts the launch timer and launches only in
+// Play and Fight together; eshot_spawn fires only in Play; collide_update tests the player only
+// in Play with zp_player_invuln 0; player_update moves and fires in Play and Respawn (the states
+// in which the ship is shown).
+//
+// ROW 9 HOLDS ONE MESSAGE AT A TIME (Stage 4 rule 6): WAVE nn in Intro's frames 0-74; READY in
+// Respawn, written only if the phase is Fight in Respawn's frame 0 and erased only if written
+// (game_ready); GAME OVER over whatever is there.
 
-// Start a game: score 0, lives 3, the formation as at power-on (all 18 Parked, fx 48, no diver,
-// shot or explosion), the ship at X 171 with no invulnerability, the launch timer at 50, state
-// Play. The high score is kept. Also called once at power-on (after panel_init, before irq_init).
+// Start a game (design, Stage 4 rule 10), all in one frame, which is Intro's frame 0 of wave 1:
+// score 0, lives 3, the wave stores at 01 / 0 / 0, no shot of either kind, the ship at X 171,
+// shown, no invulnerability, the fire cooldown at 25, state Play, all four panel fields redrawn;
+// then the wave's Intro (the formation reset, every diver slot free, WAVE 01, enemy 0). The high
+// score is kept.
 // In:  nothing       Out: nothing
-// Uses: A, X, Y
-// Cost: about 2,400 cycles (counted: formation_init's 2,000 and the other inits); the frame it
-//       runs in has no collisions to speak of. Measured as game_update for that frame:
-//       tests/games/swarm/stage3_costs.txt
+// Uses: A, X, Y, zp_tmp4-5
+// Cost: about 950 cycles (counted: game_wave_intro's 720 and the other inits). Measured as
+//       game_update for the frame it runs in: tests/games/swarm/stage4_costs.txt
 game_new:
-        jsr game_text_clear
+        ldx #TEXT_GAME_OVER             // row 9: the widest message's cells
+        jsr game_text_erase
         lda #0
         sta game_score
         sta game_score + 1
         sta game_score + 2
         sta zp_state_timer
-        sta zp_clear_timer
+        sta game_ready
         lda #PLAYER_LIVES
         sta zp_lives
-        lda panel_dirty
-        ora #PANEL_DIRTY_SCORE | PANEL_DIRTY_LIVES
-        sta panel_dirty
-        lda #STAGE3_PATTERN             // the stand-in for waves: pattern 3 ...
+        lda #NEW_GAME_WAVE              // 01 / 0 / 0 (the budget build: wave 12's stores)
+        sta zp_wave
+        lda #NEW_GAME_PATTERN
         sta zp_pattern
-#if AUTOPLAY
-        lda #GAME_LOOP_MAX              // the budget build plays wave 12: pattern 3, loop 3
-#else                                   // (memory-map.md "Labels the game must provide")
-        lda #0                          // ... at loop 0
-#endif
+        lda #NEW_GAME_LOOP
         sta zp_loop
-        jsr formation_init              // after zp_loop: the drift's period depends on it
-        jsr diver_init                  // no diver: formation_init has parked them all
+        lda #PANEL_DIRTY_ALL            // all four fields, drawn at the top of the next frame: the
+        sta panel_dirty                 // third place that sets PANEL_DIRTY_HI (memory-map.md)
         jsr eshot_init
         jsr pshot_init
         jsr player_init
+        lda #NEW_GAME_COOLDOWN + 1      // player_update, later in this frame, counts it once: 25 at
+        sta zp_player_cooldown          // the frame's end, and no shot in this frame or the 24 after
         lda #LAUNCH_TIMER_START
         sta zp_launch_timer
         lda #GAME_STATE_PLAY
         sta zp_game_state
+        // falls through: the first wave's Intro, without advancing the stores
+
+// Intro's frame 0 (design, Stage 4 rule 2): the formation reset with all 18 Waiting and 18 alive,
+// every diver slot free, WAVE nn on row 9, the panel's wave redrawn, and enemy 0 Parked.
+// In:  zp_wave, zp_loop      Out: zp_wave_phase = Intro, zp_wave_timer = 0
+// Uses: A, X, Y, zp_tmp4-5
+// Cost: about 720 cycles + jsr/rts (counted: formation_reset 430, diver_init 40, the text 150,
+//       enemy_park 86); a one-off frame
+game_wave_intro:
+        lda #WAVE_PHASE_INTRO
+        sta zp_wave_phase
+        lda #0
+        sta zp_wave_timer
+        jsr formation_reset             // after the stores: the drift's period depends on zp_loop
+        jsr diver_init                  // divers active 0 and every slot free (Stage 4 rule 4)
+        ldx #TEXT_WAVE
+        jsr game_text_draw              // "WAVE 00", then the shown wave's two digits
+        lda zp_wave
+        lsr
+        lsr
+        lsr
+        lsr
+        ora #GLYPH_ZERO
+        sta MSG_WAVE_DIGITS
+        lda zp_wave
+        and #$0f
+        ora #GLYPH_ZERO
+        sta MSG_WAVE_DIGITS + 1
+        lda panel_dirty
+        ora #PANEL_DIRTY_WAVE
+        sta panel_dirty
+        // SFX (part B): the wave start sound, voice 3, priority 2
+        ldx #0                          // enemy k appears in frame 2k: enemy 0 now
+        jmp enemy_park
+
+// The wave is cleared: called by enemy_kill (inside formation_update) in the frame the last
+// explosion ends, whatever the game state. + 1,000 (the score stops at 999,990), the panel's score
+// marked for redraw, and the Clear phase starts: this is its frame 0.
+// In:  nothing       Out: X preserved
+// Uses: A
+// Cost: 62 cycles + rts, 78 when the score stops (counted); inside formation_update's row
+game_wave_clear:
+        lda #WAVE_PHASE_CLEAR           // 2
+        sta zp_wave_phase               // 3
+        lda #0                          // 2
+        sta zp_wave_timer               // 3
+        sed                             // 2   decimal mode is allowed (memory-map.md (c) 2)
+        clc                             // 2
+        lda game_score + 1              // 4
+        adc #WAVE_BONUS_MID             // 2
+        sta game_score + 1              // 4
+        lda game_score                  // 4
+        adc #0                          // 2
+        sta game_score                  // 4
+        cld                             // 2
+        bcc !+                          // 3 / 2
+        lda #$99                        // past 999,990: stop there
+        sta game_score
+        sta game_score + 1
+        lda #$90
+        sta game_score + 2
+!:      lda panel_dirty                 // 4
+        ora #PANEL_DIRTY_SCORE          // 2
+        sta panel_dirty                 // 4
+        // SFX (part B): the wave clear sound, voice 3, priority 2 (X must be preserved)
         rts
 
-// The frame's timers and state changes. Called after the shots have moved and before
-// formation_update (memory-map.md "Order of the frame").
-// In:  zp_game_state, zp_state_timer, zp_clear_timer, zp_joy_pressed
-// Out: the state, texts on row 9, the ship (Respawn), the high score (GameOver), a new game
-// Uses: A, X, Y
-// Cost: 12 cycles in Play with no pause running (counted: the usual frame); up to about 60 in the
-//       other states' ordinary frames; a state change up to about 150; the formation's return
-//       about 2,000 and a new game about 2,400 (formation_init: frames with nothing to hit).
-//       Inside game_update's figure (memory-map.md row 1)
-game_state_update:
-        lda zp_clear_timer              // 3   the pause after a cleared formation
-        beq !state+                     // 3
-        dec zp_clear_timer
-        bne !state+
-        jsr formation_init              // the same 18 again (stage 4: the next wave's intro)
-        lda #LAUNCH_TIMER_START
+// The wave phase's frame, for Intro and Clear (Fight has nothing to count).
+// In:  A = zp_wave_phase (Intro or Clear), lives > 0
+// Out: enemies parked, WAVE nn erased, Fight entered; or the next wave's Intro
+// Uses: A, X, Y, zp_tmp4-5
+// Cost: about 25 cycles in an ordinary frame; 105 in a frame an enemy appears (enemy_park), 110
+//       when WAVE nn is erased, about 790 when the next wave starts (counted)
+game_wave_step:
+        inc zp_wave_timer
+        ldx zp_wave_timer
+        cmp #WAVE_PHASE_CLEAR
+        beq !clear+
+        cpx #INTRO_FRAMES               // Intro
+        bcs !fight+
+        cpx #INTRO_MSG_FRAMES
+        beq !erase+
+        cpx #2 * ENEMY_COUNT
+        bcs !out+                       // all 18 have appeared (the last in frame 34)
+        txa
+        lsr
+        bcs !out+                       // an odd frame
+        tax
+        jmp enemy_park                  // enemy k appears in frame 2k, Parked at its home
+!erase: ldx #TEXT_WAVE
+        jmp game_text_erase
+!fight: lda #WAVE_PHASE_FIGHT           // the frame after Intro's frame 99
+        sta zp_wave_phase
+        lda #FIGHT_LAUNCH_TIMER         // 50 once diver_update has counted this frame (consts.asm)
         sta zp_launch_timer
+!out:   rts
+!clear: cpx #WAVE_CLEAR_PAUSE
+        bcc !out-
+        // The frame after Clear's 75th: the three stores advance, here and nowhere else in a game
+        // (Stage 4 rule 5), then Intro's frame 0 with the new numbers.
+        lda zp_wave
+        cmp #WAVE_MAX
+        beq !+                          // the shown wave stops at 99
+        sed
+        clc
+        adc #1
+        cld
+        sta zp_wave
+!:      ldx zp_pattern
+        inx
+        cpx #PATTERN_COUNT
+        bcc !+
+        ldx #0                          // the pattern wraps: the next loop, up to 3
+        lda zp_loop
+        cmp #GAME_LOOP_MAX
+        bcs !+
+        inc zp_loop
+!:      stx zp_pattern
+        jmp game_wave_intro
+
+// The frame's timers and state changes: the wave phase, then the game state. Called after the
+// shots have moved and before formation_update (memory-map.md "Order of the frame").
+// In:  zp_game_state, zp_state_timer, zp_wave_phase, zp_wave_timer, zp_lives, zp_joy_pressed
+// Out: both machines stepped: texts on row 9, the ship (Respawn), the high score (GameOver), a
+//      new wave, a new game
+// Uses: A, X, Y, zp_tmp4-5
+// Cost: 22 cycles in Play and Fight (counted: the usual frame); up to about 60 in the other
+//       states' ordinary frames; a state change up to about 300; the wave phase's frames as
+//       game_wave_step; a new game about 950. Inside game_update's figure (memory-map.md row 1)
+game_state_update:
+        lda zp_lives                    // 3   the wave timer stands still with the last life gone
+        beq !state+                     // 2
+        lda zp_wave_phase               // 3
+        beq !state+                     // 3   Fight: nothing to count
+        jsr game_wave_step
 !state: ldx zp_game_state               // 3
         beq !out+                       // 3   Play: nothing to count
         inc zp_state_timer
@@ -86,13 +211,20 @@ game_state_update:
 !:      lda zp_state_timer
         cpx #GAME_STATE_DYING
         beq !dying+
-        bcs !over+
+        bcc !respawn+
+        jmp game_over_step
 
-        // Respawn: READY for 50 frames, then Play.
+!respawn:
+        // Respawn: 50 frames (READY, if it was written), then Play.
         cmp #RESPAWN_FRAMES
         bcc !out+
-        jsr game_text_clear
-        lda #LAUNCH_TIMER_START
+        lda game_ready
+        beq !+                          // erased only if it was written
+        ldx #TEXT_READY
+        jsr game_text_erase
+        lda #0
+        sta game_ready
+!:      lda #LAUNCH_TIMER_START
         sta zp_launch_timer
         lda #GAME_STATE_PLAY
         sta zp_game_state
@@ -107,17 +239,18 @@ game_state_update:
         lda zp_divers_active
         bne game_state_update_end
         jsr player_respawn              // X 171, shown, invulnerable for 150 frames from this one
-        ldx #TEXT_READY_LEN - 1
-!:      lda text_ready,x
-        sta MSG + TEXT_READY_COL,x
-        dex
-        bpl !-
-        lda #GAME_STATE_RESPAWN
+        lda zp_wave_phase               // READY only if the phase is Fight in Respawn's frame 0:
+        bne !+                          // in a Clear or an Intro row 9 is WAVE nn's (Stage 4 rule 6)
+        ldx #TEXT_READY
+        jsr game_text_draw
+        lda #1
+        sta game_ready
+!:      lda #GAME_STATE_RESPAWN
         bne !enter+                     // always
 
 !gameover:
-        lda game_score                  // the high score changes here and nowhere else
-        cmp game_hiscore
+        lda game_score                  // the high score is compared and copied here, once, and
+        cmp game_hiscore                // nowhere else (Stage 4 rule 14)
         bcc !text+
         bne !higher+
         lda game_score + 1
@@ -135,46 +268,74 @@ game_state_update:
         sta game_hiscore + 1
         lda game_score + 2
         sta game_hiscore + 2
-        lda panel_dirty                 // the only place but panel_init that asks for the
-        ora #PANEL_DIRTY_HI             // high score's redraw (memory-map.md "The panel's budget")
+        lda panel_dirty                 // one of the three places that ask for the high score's
+        ora #PANEL_DIRTY_HI             // redraw (memory-map.md "The panel's budget")
         sta panel_dirty
-!text:  ldx #TEXT_GAME_OVER_LEN - 1
-!:      lda text_game_over,x
-        sta MSG + TEXT_GAME_OVER_COL,x
-        dex
-        bpl !-
+!text:  ldx #TEXT_GAME_OVER             // over whatever is there: its cells cover the other two
+        jsr game_text_draw
+        // SFX (part B): the game over sound, voice 1, priority 3: this is GameOver's frame 0
         lda #GAME_STATE_GAMEOVER
 !enter: sta zp_game_state
         lda #0
         sta zp_state_timer
         beq game_state_update_end       // always
 
-        // GameOver: 200 frames; from frame 50 a new press of fire ends it. The new game starts
-        // in the next frame.
-!over:  cmp #GAMEOVER_FRAMES
-        bcs !new+
-        cmp #GAMEOVER_SKIP_FRAME
-        bcc game_state_update_end
-        lda zp_joy_pressed              // a NEW press: held fire doesn't skip the screen the
-        and #JOY_FIRE                   // player died holding it on
-        beq game_state_update_end
-        lda #GAMEOVER_FRAMES - 1        // this is GameOver's last frame
-        sta zp_state_timer
-        bne game_state_update_end       // always
-!new:   jsr game_new
 game_state_update_end:
         rts
 
-// Erase the message on row 9 (READY or GAME OVER): spaces over the longest text's cells. No star
-// is ever in these cells (the band rule), so nothing is looked up.
-// In:  nothing       Out: nothing
-// Uses: A, X
-// Cost: about 110 cycles (counted); only on a state change
-game_text_clear:
+// GameOver's frames after its first: 200 frames; from frame 50 a new press of fire ends it.
+// In:  A = zp_state_timer (1 or more)     Out: a new game when it ends
+// Uses: A, X, Y, zp_tmp4-5
+// Cost: about 20 cycles a frame (counted)
+game_over_step:
+        cmp #GAMEOVER_FRAMES
+        bcs !new+
+        cmp #GAMEOVER_SKIP_FRAME
+        bcc !out+
+        lda zp_joy_pressed              // a NEW press: held fire doesn't skip the screen the
+        and #JOY_FIRE                   // player died holding it on
+        beq !out+
+        lda #GAMEOVER_FRAMES - 1        // this is GameOver's last frame
+        sta zp_state_timer
+!out:   rts
+!new:   jmp game_new
+
+// Write text X (a TEXT_* index: tables.asm) to its cells in the play area. Screen codes only: the
+// play area's colour RAM has been the message colour since screen_init and no star is in a text's
+// cells (the band rule).
+// In:  X = text index        Out: nothing
+// Uses: A, X, Y, zp_tmp4-5
+// Cost: 47 + 17 a character + rts (counted): 132 for READY, 387 for the longest (20 cells).
+//       Only on a state change; the title draws one text a frame
+game_text_draw:
+        lda text_scr_lo,x               // 4
+        sta zp_tmp4                     // 3
+        lda text_scr_hi,x               // 4
+        sta zp_tmp5                     // 3
+        ldy text_len1,x                 // 4
+        lda text_last,x                 // 4
+        tax                             // 2
+!:      lda text_data,x                 // 4
+        sta (zp_tmp4),y                 // 6
+        dex                             // 2
+        dey                             // 2
+        bpl !-                          // 3
+        rts
+
+// Erase text X's cells: spaces. Erasing GAME OVER's cells erases any message on row 9.
+// In:  X = text index        Out: nothing
+// Uses: A, Y, zp_tmp4-5. X preserved
+// Cost: 27 + 11 a character + rts (counted): 126 for GAME OVER's 9 cells
+game_text_erase:
+        lda text_scr_lo,x
+        sta zp_tmp4
+        lda text_scr_hi,x
+        sta zp_tmp5
+        ldy text_len1,x
         lda #GLYPH_SPACE
-        ldx #TEXT_GAME_OVER_LEN - 1
-!:      sta MSG + TEXT_GAME_OVER_COL,x
-        dex
+!:      sta (zp_tmp4),y
+        dey
         bpl !-
         rts
-.errorif TEXT_READY_COL < TEXT_GAME_OVER_COL || TEXT_READY_COL + TEXT_READY_LEN > TEXT_GAME_OVER_COL + TEXT_GAME_OVER_LEN, "game_text_clear erases GAME OVER's cells: READY must be inside them"
+
+game_ready:     .byte 0         // 1 while READY is on row 9: it is erased at Respawn's end only if written

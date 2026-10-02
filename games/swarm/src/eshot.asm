@@ -103,7 +103,8 @@ eshot_spawn:
         lda mux_y + SPR_ESHOT + 2
         cmp #MUX_OFF
         bne !none+                      // all three in flight
-!got:   lda mux_y + SPR_ENEMY,x
+!got:   // SFX (part B): the enemy shot sound, voice 1, priority 1 (X and Y are in use here)
+        lda mux_y + SPR_ENEMY,x
         sta mux_y + SPR_ESHOT,y
         lda mux_x_hi + SPR_ENEMY,x
         sta mux_x_hi + SPR_ESHOT,y
