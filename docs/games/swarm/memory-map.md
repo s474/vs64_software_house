@@ -17,9 +17,9 @@ replaces it with a measurement at the stage named.
 ## Verdict
 
 **The approved design fits the machine and engine v1.** The one correction this page asked for
-(the panel's colours) is decided and in the design: [The panel](#the-panel). Budgeted game logic and sound: **6,300** raster cycles a frame against the engine's promise
+(the panel's colours) is decided and in the design: [The panel](#the-panel). Budgeted game logic and sound: **6,265** raster cycles a frame against the engine's promise
 of **7,200** ([engine/README.md](../../../engine/README.md#the-v1-promise-and-its-one-exception),
-**measured**): **900 of headroom (12.5%)**, all of it on *estimated* game costs. In a normal frame
+**measured**): **935 of headroom (13.0%)**, nearly all of it on *estimated* game costs (input is **measured**). In a normal frame
 the game has about 11,600 available, so the headroom there is about 5,300.
 
 ## Configuration
@@ -111,7 +111,7 @@ against the next block's start.
 | `$0400–$07E7` | Screen: play area rows 0–23, panel row 24 | 1,000 B | Game (panel, stars, messages) |
 | `$07F8–$07FF` | Sprite pointers | 8 B | Multiplexer only |
 | `$0801–$080F` | BASIC upstart | | |
-| `$0810–$27FF` | **Engine block**: `irq.asm`, `multiplexer.asm` (+ `multiplexer_flicker.asm`), `input.asm`, `rng.asm`, `collision.asm`, `sfx.asm`, then the chain tables | 8,176 B reserved. IRQ + multiplexer: **6,045 measured** (DEBUG, [README](../../../engine/README.md#zero-page)); the four new modules: about 1,000 *estimate* (sfx 500, collision 300, input 60, rng 40, slack) | raster-engineer |
+| `$0810–$27FF` | **Engine block**: `irq.asm`, `multiplexer.asm` (+ `multiplexer_flicker.asm`), `input.asm`, `rng.asm`, `collision.asm`, `sfx.asm`, then the chain tables | 8,176 B reserved. IRQ + multiplexer: **6,045 measured** (DEBUG, [README](../../../engine/README.md#zero-page)); the four new modules: about 1,000 *estimate* (sfx 500, collision 300, slack; input 32 and rng 37 are **measured**) | raster-engineer |
 | `$2800–$29FF` | Charset: 64 glyphs ([above](#character-set)). Copied from the character ROM at init (`$01=$33`, interrupts off, **before** `irq_init`), then codes 27–29 patched: star high, star low, ship | 512 B (zeros in the PRG) | Game init |
 | `$2A00–$2FFF` | Unused: the rest of the charset slot. In ECM the VIC-II never fetches a glyph above code 63, so nothing is shown from here. Kept empty | 1,536 B | |
 | `$3000–$37FF` | Sprite shapes, pointers `$C0–$DF`. 13 used (`$C0–$CC`, `$3000–$333F`) from `png2sprites`; 19 spare for art changes | 2 KB | tools-engineer (art), game |
@@ -295,7 +295,7 @@ Why these lines:
 | `mux_update` | 3,563–6,783, **average 4,261** | 4,665–12,330 in the spike, average 6,711, at about 8 evictions and drops a frame |
 | **Left for the game** | **about 11,600** at the IRQ maximum | **≥ 7,200 promised** in every frame but one case (below); worst measured 5,328 idle + 1,909 = 7,237 over about 800,000 frames |
 
-### The game's budget (raster cycles a frame, worst case; every figure an *estimate*)
+### The game's budget (raster cycles a frame, worst case; an *estimate* unless marked **measured**)
 
 Worst case = full formation, 3 divers taking 2 path steps each, 2 player shots and 3 enemy shots
 in flight, 2 enemy hits and a launch in the same frame.
@@ -303,21 +303,41 @@ in flight, 2 enemy hits and a launch in the same frame.
 | # | Subsystem | Budget (raster) | CPU count behind it | Check in `budget.json` (labels), from stage |
 |---|---|---|---|---|
 | 1 | Main loop, state machine, timers | 150 | 100 | part of `game_update` |
-| 2 | Input (`input_read`) | 75 | 42; runs in the border, no DMA | `tests/engine/input`; part of `game_update` |
+| 2 | Input (`jsr input_read`, the whole call) | **40**, **measured** | 40: `jsr` 6 + 28 + `rts` 6 ([engine/input.md](../../../engine/input.md#cycle-budget)). No DMA allowance: see below | `tests/engine/input` (locks the 28); part of `game_update` |
 | 3 | Player: move, clamp, cooldown, fire, flash, explosion timer | 200 | 150 | `player_update`, 1 |
 | 4 | Player shots (2): move, remove | 150 | 100 | `pshot_update`, 1 |
 | 5 | Formation: drift, 18 home X (9 bits), animation frame, wind-up wobble, explosion timers | 750 | 550: unrolled by column (6 × about 35) + frame swap 90 + 3 explosions and wind-ups 150 | `formation_update`, 2 |
-| 6 | Divers (3): 2 path steps each (about 90 a step), return, shot spawn; the launcher's scan of 18 on a launch frame (about 300) | 1,350 | 1,050 | `diver_update`, 3 |
+| 6 | Divers (3): 2 path steps each (about 90 a step), return, shot spawn; the launcher's pick and scan of 18 on a launch frame (about 300, of which at most 2 `rng_next` calls: 84, **measured**) | 1,350 | 1,050 | `diver_update`, 3 |
 | 7 | Enemy shots (3): move, remove | 200 | 150 | `eshot_update`, 3 |
 | 8 | Collisions: 42 box tests (2,100) and the responses to 2 enemy hits or a player hit: state, score add, explosion start (375) | 2,475 | 1,641 + 295 | `collide_update`, 2 |
 | 9 | Panel: redraw the score digits that changed, lives, wave | 250 | 200 | `panel_update`, 1 |
 | 10 | Star twinkle: one colour RAM write | 100 | 60 | `stars_update`, 1 |
 | 11 | Sound: `sfx_play` calls from the main loop (up to 3) | 100 | 75 | inside the routines that call it |
-| | **Main loop, `game_update` in all** | **5,800** | | `game_update`, 1 |
+| | **Main loop, `game_update` in all** | **5,765** | | `game_update`, 1 (the check's limit is still 5,800: below) |
 | 12 | Sound tick in `game_irq_bottom` (IRQ time, no DMA): three effects starting in one frame | 500 | 500 | `game_irq_bottom`, 4 |
-| | **Game logic and sound in all** | **6,300** | | |
+| | **Game logic and sound in all** | **6,265** | | |
 | | **Engine's promise** | 7,200 | | |
-| | **Headroom** | **900 (12.5%)** | | `game_idle_min` × 16 ≥ 900, 1 |
+| | **Headroom** | **935 (13.0%)** | | `game_idle_min` × 16 ≥ 900, 1 (the check's limit is still 900: below) |
+
+**Measured rows** (2026-10-02, M4 stage 1; the span convention is
+[engine/README.md](../../../engine/README.md#which-span-a-figure-is)):
+
+- **Input, 40.** The whole call, no DMA: `input_read` is called straight after `irq_wait_frame`,
+  which returns when `mux_irq_top` has finished, in the top border around line 23 (*derived*: line
+  16 + 32 + 393 + 6 cycles), and the first line with sprite DMA is 30 (`MUX_Y_MIN`). The earlier 75
+  was an estimate with a DMA allowance it doesn't need. Saves 35: the totals fell from 5,800 /
+  6,300 and the headroom rose from 900.
+- **Random numbers, 42 a call** (`jsr rng_next`, constant time, no DMA;
+  [engine/rng.md](../../../engine/rng.md#cycle-budget)). The launcher calls it in the display, so
+  budget about **54 raster** a call (× 1.27). **Rule for the gameplay-engineer: at most 2
+  `rng_next` calls in a frame.** A pick that needs a number below 18 by mask-and-retry and fails
+  twice, or lands on an enemy that isn't parked, is settled without another call (scan on from that
+  index to the next parked enemy, or try again next frame): an unbounded retry loop has no worst
+  case to budget. Row 6 is unchanged: its 300 for a launch frame covers the two calls (84 CPU) and
+  the scan, and stays an *estimate* until stage 3.
+- **`tests/games/swarm/budget.json` still has 5,800 for `game_update` and 900 for the idle
+  check.** Both hold with the new totals (they are looser by 35); the Technical Director brings
+  them to 5,765 and 935 when that file is next re-baselined.
 
 The rows are simultaneous worst cases that can't all happen in one frame (a launch scan, two hits
 and a player hit together), so the measured `game_update` should come in under the sum.
@@ -354,9 +374,9 @@ gameplay-engineer's to propose with a measurement, not to do unasked.
 
 | Frame | `mux_update` | IRQs incl. sound tick | Game | Idle left | Basis |
 |---|---|---|---|---|---|
-| Normal (89.5–100% of frames) | 4,261 avg, ≤ 6,783 | ≤ 4,300 | ≤ 5,800 | **≥ about 2,800**, typically about 7,000 | Engine **measured**, game *estimate* |
-| Overflow (0–10.5% of frames, *model*) | about 5,400–6,500 *estimate*: 1–3 evictions and drops against the spike's 8 | ≤ 4,300 | ≤ 5,800 | about 3,000 *estimate*; **≥ 900 by the promise** | Promise **measured** in a harsher spike |
-| The README's excepted case, if it could happen | ≤ 12,342 | ≤ 4,300 | ≤ 5,800 | about 100 (game left about 6,400, **measured**, against 6,300) | Doesn't occur in this design: see (b) |
+| Normal (89.5–100% of frames) | 4,261 avg, ≤ 6,783 | ≤ 4,300 | ≤ 5,765 | **≥ about 2,800**, typically about 7,000 | Engine **measured**, game *estimate* |
+| Overflow (0–10.5% of frames, *model*) | about 5,400–6,500 *estimate*: 1–3 evictions and drops against the spike's 8 | ≤ 4,300 | ≤ 5,765 | about 3,000 *estimate*; **≥ 935 by the promise** | Promise **measured** in a harsher spike |
+| The README's excepted case, if it could happen | ≤ 12,342 | ≤ 4,300 | ≤ 5,765 | about 135 (game left about 6,400, **measured**, against 6,265) | Doesn't occur in this design: see (b) |
 
 ### (a) Pinned evictions in the player's zone
 
@@ -371,7 +391,7 @@ gameplay-engineer's to propose with a measurement, not to do unasked.
   filling the kept list 356, pinned pass 340, the fail decision 244 and eviction 302, restoring ages
   74, rebuild from a late slot about 600): **about 1,900** for one pinned eviction, about 2,500 for
   two. `mux_update` goes from about 4,300 to about 6,200–6,800 in that frame, which leaves the game
-  about 9,100 (frame − engine IRQs − `mux_update`) against its 6,300. Budgeted: nothing extra, because the engine's promise already covers it.
+  about 9,100 (frame − engine IRQs − `mux_update`) against its 6,265. Budgeted: nothing extra, because the engine's promise already covers it.
 
 ### (b) Overflow frames
 
@@ -381,7 +401,7 @@ gameplay-engineer's to propose with a measurement, not to do unasked.
   engine's 12,342 worst case comes from.
 - **Does the game still fit, or repeat frames? It fits; no repeated frame is expected.** The promise
   of 7,200 was measured in a spike with 65% overflow frames and 4 pinned sprites sweeping through
-  crowds; Swarm's 6,300 is inside it by 900, and its overflow frames are lighter.
+  crowds; Swarm's 6,265 is inside it by 935, and its overflow frames are lighter.
 - **The excepted case** (a mass re-sort **and** pinned sprites evicting in the same frame, about
   6,400 left) needs many sprites to change places in Y order at once. The model's busiest frame has
   **43 shifts** (a full reversal is 276; the spike's stress frames re-order three groups of 8), from
@@ -389,7 +409,7 @@ gameplay-engineer's to propose with a measurement, not to do unasked.
   (*estimate*: 276 shifts ≈ 6,000, README). Frames with 20 or more shifts that also overflow: at
   most 72 in 6,000 (1.2%), 39 with a pinned eviction. Estimated `mux_update` there: about 7,500–8,100,
   leaving the game about 7,800–8,400. Even at the README's measured floor for the excepted case (6,400)
-  the 6,300 budget fits, by 100.
+  the 6,265 budget fits, by 135.
 - **If the estimates are wrong** the effect is one repeated frame of sprites (a 1/50 s stutter), no
   corruption. `game_overrun_count` counts them and `make test` requires 0.
 
@@ -405,7 +425,7 @@ gameplay-engineer's to propose with a measurement, not to do unasked.
 
 ### Risks, in order
 
-1. **Every game figure is an estimate.** The 900 of headroom is 14% of the game's budget. The
+1. **Every game figure but input's is an estimate.** The 935 of headroom is 15% of the game's budget. The
    largest and least certain rows are collisions (2,475) and divers (1,350). Stage 2's
    `collide_update` and stage 3's `diver_update` checks are the ones to watch.
 2. **The promise itself has almost no margin** (28 cycles over about 800,000 frames in the spike), so

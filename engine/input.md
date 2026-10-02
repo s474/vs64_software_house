@@ -27,7 +27,8 @@ input_init:
 // Out: zp_joy = the stick now; zp_joy_pressed = bits that are 1 now and were 0 at the last call;
 //      A = zp_joy
 // Uses: A
-// Cost: measured 28 raster cycles to its rts (no DMA) + jsr/rts 12 = 40
+// Cost: the whole call is 40 cycles (measured, no DMA): the caller's jsr 6 + 28 from input_read
+//       to input_read_end + rts 6. The profile check's span is the 28
 input_read:
 ```
 
@@ -51,6 +52,17 @@ invert and a mask.
   `input_read` twice in a frame, loses edges: once a frame, always.
 - Left and right together (impossible on a real stick, possible in an emulator) are reported as
   they are; the game decides.
+
+**Rules for a game** (from the implementation, raster-engineer's report, M4 stage 1):
+
+1. Call `input_read` **exactly once a frame, straight after `irq_wait_frame`**. Twice in a frame
+   loses edges; later in the frame adds up to a frame of lag and moves the call into the display's DMA.
+2. **No IRQ handler reads `zp_joy_pressed`** (or writes either byte). Inside `input_read` it holds
+   scratch, not the edges, for 15 cycles (*counted* by the raster-engineer from the routine), and an
+   IRQ can land there. A handler that needs the stick gets it from the main loop.
+3. **Nothing else writes `$DC00` or `$DC02`.**
+4. **The keyboard can't be scanned after `input_init`** (`$DC02` = `$00`). A game that wants keys
+   as well needs a new contract, not a second write to `$DC02`.
 
 ## Hardware it owns
 
@@ -79,14 +91,21 @@ Not read or written by any IRQ. `input.asm` checks both labels are in zero page 
 
 ## Cycle budget
 
-| Routine | Budget | Basis |
-|---|---|---|
-| `input_read` → `input_read_end` (its `rts`) | **28** raster cycles, locked (`min_cycles` = `max_cycles`) | **measured** 28 in every pass (`make test`, and `vice_profile` over 50 passes, 2026-10-02), equal to the instruction count. The estimate was 40 including the `rts`; the span stops at the `rts`, so the like-for-like figure is 34. The spike calls it on lines 17–18 (top border, no DMA, the frame's IRQ already over). With `jsr` and `rts`: 40 |
-| `input_init` | not budgeted (called once) | 16 + `rts` 6, counted |
-| Size | 32 bytes (`input_init` 10, `input_read` 22) | **measured** (estimate was 60) |
+Two spans, as everywhere in the engine ([README](README.md#which-span-a-figure-is)): the **profile
+span** is what `make test` measures, from the routine's label to its `_end` label, which is on the
+`rts`, so the `rts` isn't in it; the **whole call** adds the caller's `jsr` (6) and the `rts` (6),
+and is the figure a game puts in its frame budget.
 
-In Swarm's frame budget the row is 75 (the call and DMA allowance):
-[memory-map.md](../docs/games/swarm/memory-map.md#frame-budget).
+| Routine | Profile span | Whole call | Basis |
+|---|---|---|---|
+| `input_read` → `input_read_end` | **28** raster cycles, locked (`min_cycles` = `max_cycles`) | **40** | **measured** 28 in every pass (`make test`, and `vice_profile` over 50 passes, 2026-10-02), equal to the instruction count. The spike calls it on lines 17–18 (top border, no DMA, the frame's IRQ already over). The design estimate was 40 for the routine with its `rts` (measured like for like: 34) |
+| `input_init` | not budgeted (called once) | 16 + `rts` 6 + `jsr` 6 = 28 | counted |
+
+Size: 32 bytes (`input_init` 10, `input_read` 22), **measured** (estimate was 60).
+
+In Swarm's frame budget the row is **40**, the whole call with no DMA allowance: called straight
+after `irq_wait_frame` it runs in the top border before any sprite's DMA
+([memory-map.md](../docs/games/swarm/memory-map.md#frame-budget)).
 
 ## Spike: `tests/engine/input/`
 
@@ -128,6 +147,11 @@ lists the cases). All 17 pass in the DEBUG and the release build:
 | 2 | `hold-50`, `press-10`, `edge-add` | Fire held 50 frames: one edge, `spike_fire_presses` +1. Ten one-frame presses: +10. Left added while fire is held: `zp_joy_pressed` = left only |
 | 3 | `start`, `ddr` ×4 | Started with `RUN`, then `irq_init` (`$01=$35`): works. The `$DC02` findings are under [Hardware it owns](#hardware-it-owns) |
 | 4 | `make test ARGS=input` | `input_read` 28, every pass |
+
+Two joystick devices are in play: `check.py` and the MCP server's `vice_joystick` attach VICE's I/O
+simulation device (idle raw `$DC00` = `$1F`), while `make test` starts VICE with the default
+joystick device (idle raw `$7F`, raster-engineer's report). `input_read` masks bits 5–7, so
+`zp_joy` is 0 in both.
 
 Not covered: `input_init` called *after* `irq_init` (the spike calls it before; the routine touches
 nothing `irq_init` does), and switch bounce on real hardware.

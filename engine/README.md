@@ -10,8 +10,8 @@ the code, not after.
 |---|---|---|
 | IRQ framework | `engine/irq.asm` | **Implemented** (M3 stage 1). Costs measured in `tests/engine/irq_chain` |
 | Sprite multiplexer v1 | `engine/multiplexer.asm` (+ `engine/multiplexer_flicker.asm`, the slow path) | **Stage 4 implemented** (sort, fast-path select with the build merged in, fair flicker, [pinned sprites](#pinned-sprites), zone IRQs, double buffer), with the stage 3.5 [wrap-ghost fix](#wrap-ghosts). Measured in `tests/engine/multiplexer`, `tests/engine/multiplexer_ghost` and `tests/engine/multiplexer_top` |
-| Joystick input | `engine/input.asm` | Contract: [engine/input.md](input.md). Not implemented |
-| Random numbers | `engine/rng.asm` | Contract: [engine/rng.md](rng.md). Not implemented |
+| Joystick input | `engine/input.asm` | **Implemented** (M4 stage 1). `input_read` **40** cycles for the whole call (28 in the profile span, **measured**), 32 bytes. Contract and results: [engine/input.md](input.md); spike `tests/engine/input` |
+| Random numbers | `engine/rng.asm` | **Implemented** (M4 stage 1). `rng_next` **42** cycles for the whole call (30 in the profile span, **measured**), constant time, 37 bytes. Contract and results: [engine/rng.md](rng.md); spike `tests/engine/rng` |
 | Collision | `engine/collision.asm` | Contract: [engine/collision.md](collision.md). Not implemented |
 | Sound effects | `engine/sfx.asm` | Contract: [engine/sfx.md](sfx.md). Not implemented |
 
@@ -52,6 +52,8 @@ What a game must provide:
 | Item | Where | Needed by |
 |---|---|---|
 | The engine's zero-page labels (`zp_irq_*`, `zp_mux_*`) and `zp_tmp0`–`zp_tmp3` | `games/<title>/src/zp.asm` | [Zero page](#zero-page) |
+| `zp_joy`, `zp_joy_pressed` (1 byte each, main loop only) | `games/<title>/src/zp.asm` | `input.asm` |
+| `zp_rng_lo`, `zp_rng_hi` (1 byte each, main loop only) | `games/<title>/src/zp.asm` | `rng.asm` |
 | A chain: `IrqChainBegin()`, 1–16 entries, `IrqChainEnd()` | Game source | IRQ framework |
 | Handlers that end in `IrqDone()` | Game source | IRQ framework |
 | `MUX_SCREEN`: the screen whose last 8 bytes are the sprite pointers | `.const` before the import | Multiplexer |
@@ -65,6 +67,19 @@ The M4 modules (input, random numbers, collision, sound effects) each have a con
 the API, zero page and costs: [input.md](input.md), [rng.md](rng.md), [collision.md](collision.md),
 [sfx.md](sfx.md). Check the status table at the top before importing one: a contract is not an
 implementation.
+
+**Rules for a game that imports `input.asm`** ([input.md](input.md)):
+
+- `jsr input_init` once at start-up, then `jsr input_read` **exactly once a frame, straight after
+  `irq_wait_frame`**. A second call in a frame loses the edges in `zp_joy_pressed`.
+- **No IRQ handler reads `zp_joy_pressed`**: it holds scratch for 15 cycles inside `input_read`.
+  Neither byte is written outside the module.
+- **Nothing else writes `$DC00` or `$DC02`.**
+- **The keyboard can't be scanned after `input_init`** (it sets `$DC02` to `$00`).
+
+**For a game that imports `rng.asm`** ([rng.md](rng.md#low-bit-limits)): main loop only; `rng_next`
+changes only A; and no code may depend on a particular value turning up within some number of
+calls (a 5-bit value can be absent from 256 calls in a row, as with dice).
 
 ---
 
@@ -1483,6 +1498,26 @@ So:
 - **The common case is checked by its average** (`max_avg_cycles` on `mux_update`, 600 passes),
   which is much steadier than the max. Build rule 3 is about the common case.
 
+#### Which span a figure is
+
+Two spans are in use for a routine's cost, and every figure says which it is:
+
+| Span | What it covers | Used for |
+|---|---|---|
+| **Profile span** | From executing the routine's label to executing its `_end` label. The convention from M4 on (the M4 modules, Swarm's routines) is `_end` **on the routine's final `rts`**, so the `rts` itself (6 cycles) is **not** in the span, and neither is the caller's `jsr` (6). (`mux_update_end` is on the `clc` before its `rts`: 2 more left out) | The `profile` checks on main-loop routines in a `budget.json`, and the cost in a routine's header |
+| **Whole call** | The profile span + 12: the caller's `jsr` and the `rts` | A game's frame budget rows, and any sum of costs |
+
+- A contract's estimate is written as both ("30 in the profile span, 42 for the whole call"), never
+  as "including `rts`" on its own.
+- **Measured**: `input_read` 28 / 40, `rng_next` 30 / 42 (`tests/engine/input`, `tests/engine/rng`,
+  no DMA).
+- For a routine of thousands of cycles (`mux_update`) the 12 is inside the noise and the profile
+  span is used as the cost. For a small routine called often it is a third of the cost: use the
+  whole call.
+- A span that isn't label-to-`rts` says so where it's defined: IRQ spans run to `irq_exit_rti`
+  (the `rti` itself), and a game's `game_update` → `game_update_end` is a stretch of the main loop
+  with no `jsr` or `rts` of its own.
+
 Moving `mux_update` into the lower border is **not** a fast path. DMA is a fixed tax on the
 frame, about 3,500 cycles with 24 sprites. Running the multiplexer in the border only moves its
 share onto game logic, which would then run through the display, and the free time per frame
@@ -1555,8 +1590,11 @@ is an assembly error ("unknown symbol"); each module also checks
 | `zp_mux_slot` | 1 | IRQ | Next slot `mux_irq_zone` writes (includes the base) |
 | `zp_mux_end` | 1 | IRQ | End index of the front buffer (includes the base) |
 | `zp_tmp0`–`zp_tmp3` | (4) | Main loop (the game's scratch) | Used by `mux_update`; the caller mustn't hold them across the call |
+| `zp_joy` | 1 | Main loop (`input.asm`) | The stick this frame, active high. Only if the game imports `input.asm` |
+| `zp_joy_pressed` | 1 | Main loop (`input.asm`) | Newly pressed this frame. **Never read in an IRQ** (scratch for 15 cycles inside `input_read`) |
+| `zp_rng_lo`, `zp_rng_hi` | 2 | Main loop (`rng.asm`) | Generator state. Only if the game imports `rng.asm` |
 
-6 bytes of the engine's own, plus 4 of the game's scratch. The register saves in
+6 bytes of the IRQ framework's and multiplexer's own, 4 more for `input.asm` and `rng.asm`, plus 4 of the game's scratch. The register saves in
 `irq_dispatch` are self-modified operands, not zero page. A game without the multiplexer
 defines only the two `zp_irq_*` labels.
 
@@ -1570,6 +1608,10 @@ Suggested block for `zp.asm`, after the scratch registers:
 .label zp_mux_ready = $0d   // shared: main sets 1, IRQ clears on swap
 .label zp_mux_slot  = $0e   // IRQ: next slot the zone IRQ writes
 .label zp_mux_end   = $0f   // IRQ: end of the front buffer
+.label zp_joy         = $10 // main loop: input.asm, the stick this frame
+.label zp_joy_pressed = $11 // main loop: input.asm, newly pressed (never read in an IRQ)
+.label zp_rng_lo      = $12 // main loop: rng.asm, generator state
+.label zp_rng_hi      = $13
 ```
 
 Non-zero-page engine RAM (in the engine block): the IRQ chain tables (6 bytes per entry, ≤ 96),
@@ -1807,6 +1849,13 @@ budget-runner: 23/23 checks passed, 2 pending a later stage (2 spikes run, 1 ski
 
 A PENDING check runs no frames, so the `memory` checks after it see the same frames as if it
 weren't there.
+
+**Joystick device.** The budget runner starts VICE with the **default joystick device**: an idle
+port 2 reads raw `$DC00` = `$7F` (raster-engineer's report, M4 stage 1, from the `input` spike).
+The MCP server (`vice_start`, `vice_joystick`) and the driver scripts that press buttons
+(`tests/engine/input/check.py`) attach VICE's **I/O simulation device** instead, where idle is
+`$1F` (bits 5–7 low; **measured**, `check.py`'s `idle` case). `make test` can't press buttons, and
+code under test must mask bits 5–7 of `$DC00` (as `input_read` does) to behave the same under both.
 
 ```
 irq_chain  irq_exit overhead                     max 60 / budget 50  FAIL  (measured)
