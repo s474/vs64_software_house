@@ -161,6 +161,28 @@ settings: waves 1 and 2 are gentler still (wave 1 has a third of wave 3's enemy 
 | 12 | Wave-start and wave-clear sounds | On voice 3 (the divers' voice), so they don't silence the player's shots |
 | 13 | A held fire button at the start of a new game | A 25-frame fire hold at a new game |
 
+### Stage 4 result: the whole game, with sound (2026-10-02)
+
+Part A added the title screen, the wave loop with its clear bonus, and the return to the title. The
+raster-engineer built `engine/sfx.asm` and the designer's ten effects (`games/swarm/src/sfx_data.asm`).
+Part B wired the nine sound requests into the game and applied the corrected title layout (enemies 24
+lines apart, each beside its own points line). `make test` passes 105/105 with the 4 soak checks
+pending stage 5; `tests/games/swarm/check.py` has 122 cases, passing on DEBUG and release.
+
+| Item | Result |
+|---|---|
+| Sound tick | 498 cycles at worst (three effects starting), as locked; the IRQ returns by line 259 |
+| Collisions with sound | Placed worst frames 2,013 / 2,553 / 2,571 against 2,825 |
+| All IRQ time | 2,817 a frame at worst against 4,500 |
+| Headroom | 5,440 idle cycles in AUTOPLAY's worst frame (670 required) |
+| Fallbacks | None fired; no limit changed |
+
+Open after stage 4: nobody has heard the effects (Simon's ears decide the tuning, and whether late
+starts need the extra write, [sid.md](../reference/sid.md)); two memory-map sentences are no longer
+exact (the `$D012` read at the title press is line 26 or 27; a later wave's Intro frame 0 ends
+`formation_update` on line 49, under the one-off rule); the new game's frame grew by 103 cycles where
+about 40 was expected, untraced. These go to the Technical Director's stage 5 review.
+
 ## The game (scope for M4)
 
 **In:**
