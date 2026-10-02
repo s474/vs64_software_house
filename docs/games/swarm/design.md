@@ -10,7 +10,10 @@ truth for behaviour; what Simon decided at approval is in [Decisions](#decisions
 screen use extended colour mode, with a 64-glyph character set
 ([Screen layout](#screen-layout), [Character set](#character-set-64-glyphs), decision 8); and the
 rules for whoever draws the sprites are collected in [Art rules](#art-rules), including the new one
-that enemy shapes keep their bottom row empty.
+that enemy shapes keep their bottom row empty. **2026-10-02, no behaviour change:** stars are kept
+out of every cell that text uses ([Text cells and the star rule](#text-cells-and-the-star-rule)),
+sprite and text colours have a table ([Colours](#colours)), and the hit boxes and the area the art
+may occupy are exact ([Hit boxes](#hit-boxes)).
 
 Every number that can be checked without the game is checked by
 [tests/games/swarm/check_design.py](../../../tests/games/swarm/check_design.py)
@@ -62,11 +65,36 @@ shooting the thing that's trying to kill you.
   digits 31–32; spare ships 35–37 (one ship character each, 2 at the start of a game).
 - Messages in the play area, row 12, centred: `WAVE nn`, `READY`, `GAME OVER`.
 - **Star field:** 48 stars at fixed cells in rows 0–23, from a table (built once from a fixed seed;
-  none in row 12, columns 14–25, where messages go). Two star characters (dot high, dot low: one
+  none in the cells reserved for text: [the star rule](#text-cells-and-the-star-rule)). Two star characters (dot high, dot low: one
   pixel each). Twinkle:
   each frame one star, in turn, steps its colour through white, light grey, grey, dark grey. That's
   **one colour RAM write a frame**; each star changes every 48 frames. The stars twinkle only: they
   don't move.
+
+### Text cells and the star rule
+
+Every text the design shows in the play area, with its cells (a text of n characters is centred:
+first column (40 − n) div 2):
+
+| Screen | Row | Text | Columns |
+|---|---|---|---|
+| Title | 5 | `SWARM` | 17–21 |
+| Title | 9 / 11 / 13 | `150 PTS` / ` 80 PTS` / ` 50 PTS` (right-aligned) | 17–23 |
+| Title | 16 | `DIVING SCORES DOUBLE` | 10–29 |
+| Title | 19 | `PRESS FIRE` | 15–24 |
+| Game | 12 | `WAVE nn` | 16–22 |
+| Game | 12 | `READY` | 17–21 |
+| Game over | 12 | `GAME OVER` | 15–23 |
+
+**The star rule: no star in columns 10–29 of rows 5, 9, 11, 12, 13, 16 and 19.** That is one
+20-column band on each of the seven text rows (140 of the 960 play-area cells), wide enough for the
+longest text, so the same test serves every row. The 48 stars are drawn from the other 820 cells;
+the count doesn't change. Because of the rule, a text is written and erased (with spaces) without
+looking at the star table, and the twinkle's colour write never lands on a letter.
+
+**If a text is added, moved or lengthened:** it must stay inside those bands, or the band list
+(rows, columns 10–29) changes here first and the star table is rebuilt from it. The title's parked
+sprites may pass over stars, as sprites do in play.
 
 ### Title and game-over screens
 
@@ -146,15 +174,21 @@ missing in up to 3.8% of theirs (`check_design_results.txt`, both tables).
 
 ### Hit boxes
 
-Offsets inside the 24 × 21 sprite cell (x from the left, y from the top), inclusive. The art must
-keep each shape inside its box plus about 2 pixels.
+In sprite pixels inside the 24 × 21 cell: columns 0–23 from the left, rows 0–20 from the top,
+ranges inclusive. The **hit box** is what the collision code tests. The **art area** is every pixel
+the shape may use: nothing is drawn outside it. For the player and the enemies it is the box plus
+exactly 2 pixels on each side, cut off at the cell's edge; for the shots it is the box.
 
-| Kind | x | y | Size |
-|---|---|---|---|
-| Player | 6–17 | 6–20 | 12 × 15 (smaller than the ship: near misses are misses) |
-| Enemy (all types, all states but exploding) | 4–19 | 3–17 | 16 × 15 |
-| Player shot | 11–12 | 0–7 | 2 × 8, drawn at the top of the cell |
-| Enemy shot | 11–12 | 14–20 | 2 × 7, drawn at the bottom of the cell |
+| Kind | Hit box: left, top, width, height | Hit box columns, rows | Art area columns, rows | Art area size |
+|---|---|---|---|---|
+| Player | 6, 6, 12, 15 | 6–17, 6–20 | **4–19, 4–20** | 16 × 17 (the ship is bigger than its box: near misses are misses) |
+| Enemy (types A, B, C, both frames; every state but exploding) | 4, 3, 16, 15 | 4–19, 3–17 | **2–21, 1–19** (rows 0 and 20 empty) | 20 × 19 |
+| Player shot | 11, 0, 2, 8 | 11–12, 0–7 | **11–12, 0–7**: the box, every pixel set | 2 × 8, at the top of the cell |
+| Enemy shot | 11, 14, 2, 7 | 11–12, 14–20 | **11–12, 14–20**: the box, every pixel set | 2 × 7, at the bottom of the cell |
+| Explosion (4 shapes) | none: an explosion hits nothing and can't be hit | – | 0–23, 0–20: the whole cell | 24 × 21 |
+
+The player and enemy shapes must also **reach** their box: some pixel on each of the box's four
+edges, so that a hit is never scored on empty space more than a pixel or two from the drawing.
 
 Consequences (checked): an enemy can touch the player only at **Y ≥ 210**; an enemy shot hits from
 Y ≥ 207; a player shot moving 8 a frame can't pass through a 15-line enemy box.
@@ -171,13 +205,14 @@ For whoever draws the sprites. Colours are set by the game, per sprite, not by t
 
 1. **24 × 21 pixels, hires, one colour plus transparent.** No multicolour, no expanded sprites, and
    no exceptions: every sprite on screen is in the same mode (decision 7).
-2. **13 shapes**, as listed above. Each fits its [hit box](#hit-boxes) plus about 2 pixels, and is
-   centred on it: a shape that overhangs its box makes deaths look unfair.
+2. **13 shapes**, as listed above. Each stays inside its **art area** in the
+   [hit box table](#hit-boxes) (exact columns and rows) and is centred on its box: a shape that
+   overhangs its box makes deaths look unfair.
 3. **Enemy shapes (types A, B, C, both frames) keep sprite row 20, the bottom row, empty.** A
    wrapping diver re-enters at Y 30, which is displayed on raster lines 31–51, and line 51 is the
    first line of the display window: anything drawn in row 20 would show for a frame as a line of
-   pixels at the top of the screen, above the enemy's home. The enemy box plus 2 is rows 1–19, so
-   this costs nothing; it makes the "about" in rule 2 exact for the bottom edge.
+   pixels at the top of the screen, above the enemy's home. The enemy art area is rows 1–19, so
+   this costs nothing.
 4. **Player shot:** 2 pixels wide, in columns 11–12, rows 0–7 (the top of the cell). **Enemy
    shot:** 2 pixels wide, columns 11–12, rows 14–20 (the bottom of the cell). The rest of each cell
    is empty: the shape is the hit box.
@@ -185,9 +220,34 @@ For whoever draws the sprites. Colours are set by the game, per sprite, not by t
    16-frame swap doesn't look like movement.
 6. **One set of 4 explosion shapes** serves enemies and the player; they are drawn in the dead
    object's slot and may fill the cell.
-7. **White is reserved**: the wind-up flash, the player's explosion and the panel text are white, so
-   an enemy's own colour is not white (or light enough to be mistaken for it), and nothing is blue
-   that could be lost against the panel.
+7. **Among sprites, white is reserved** for the wind-up flash and the player's explosion (text is
+   white too: the panel and the messages). No sprite's own colour is white or light grey, and none
+   is blue, which is the panel's colour. The colours are in the table below.
+
+### Colours
+
+**The designer's proposal for placeholder art.** Simon is art director and reviews the colours in
+the first playable build: **this is the one table to change**, and the code takes its colours from
+one table to match. Colour changes don't touch behaviour. Names and numbers are the C64's 16.
+
+| Thing | Colour | Why |
+|---|---|---|
+| Player | **Cyan** (3) | Bright and cool; nothing else on screen is cyan but its own shots |
+| Player shot | **Cyan** (3) | Reads as the player's |
+| Enemy type A (row 0, 150 / 300) | **Purple** (4) | The three types are a warm, a cool-dark and a green hue, far apart on black |
+| Enemy type B (row 1, 80 / 160) | **Yellow** (7) | |
+| Enemy type C (row 2, 50 / 100) | **Light green** (13) | |
+| Enemy animation frames | Both frames of a type are the type's colour | The colour is the type; the animation is only the shape |
+| Enemy in WindUp | Its type's colour, and **white** (1) on alternate 4-frame periods | The warning (behaviour table) |
+| Enemy shot | **Light red** (10) | The only red thing on screen: the thing that kills. Can't be taken for a cyan player shot or for any enemy |
+| Enemy explosion | **Orange** (8), all 4 shapes | Used for nothing else, so a kill reads the same whatever died |
+| Player explosion | **White** (1), all 4 shapes | As designed |
+| Player after a respawn (100 frames) | **Cyan** (3) and **dark grey** (11), alternating every 4 frames | A ghost of the ship: visibly there, visibly not normal. Not white, so it isn't read as an explosion |
+| Title screen's three parked enemies | Their types' colours | |
+| Panel text and ship markers | **White** (1) on **blue** (6) | Decision 8 |
+| Messages and title text | **White** (1) on black | |
+| Stars | White, light grey (15), grey (12), dark grey (11), in turn | The twinkle |
+| Background and border | **Black** (0) | |
 
 ## The formation
 
