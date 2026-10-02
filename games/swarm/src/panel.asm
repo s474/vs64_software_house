@@ -6,6 +6,11 @@
 // The values shown are the game's own variables, declared at the end of this file: game_score
 // and game_hiscore (BCD), zp_wave (BCD) and zp_lives. Whoever changes one sets its PANEL_DIRTY_*
 // bit in panel_dirty; panel_update redraws the fields whose bits are set and clears them.
+// panel_update is the first update of the frame (straight after input_read), so it draws what
+// the PREVIOUS frame's updates made dirty, in the frame the sprites that caused it appear.
+// RULE (memory-map.md "The panel's budget"): PANEL_DIRTY_HI is set only by panel_init and by the
+// state machine on entering game over, never by a play-state routine: the four-field redraw
+// (about 325 cycles) is over the 250 budgeted for a frame of play.
 
 .const PANEL_DIRTY_SCORE = $01
 .const PANEL_DIRTY_LIVES = $02

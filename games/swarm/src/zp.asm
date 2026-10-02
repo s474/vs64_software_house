@@ -41,14 +41,17 @@
 .label zp_player_cooldown = $22 // frames until the player may fire again (0 = may fire)
 .label zp_player_invuln   = $23 // frames of invulnerability left after a respawn (stage 3)
 .label zp_lives           = $24 // lives, the ship in play included (3 at the start of a game)
-.label zp_fx              = $25 // formation drift offset 0-96 (stage 2)
-.label zp_drift_dir       = $26 // formation drift direction (stage 2)
+.label zp_fx              = $25 // formation drift offset 0-96
+.label zp_drift_dir       = $26 // formation drift direction: 1 = right, $FF = left (added to zp_fx)
 .label zp_launch_timer    = $27 // frames until the next dive launch (stage 3)
 .label zp_divers_active   = $28 // enemies in WindUp, Dive or Return (stage 3)
 .label zp_enemies_alive   = $29 // enemies not dead (stage 2)
 .label zp_wave            = $2a // wave number as shown, BCD 01-99
-.label zp_loop            = $2b // difficulty loop 0-3 (stage 4)
-                                // $2c-$2f free
+.label zp_loop            = $2b // difficulty loop 0-3 (counted from stage 4; 0 until then)
+.label zp_drift_timer     = $2c // frames until the drift's next 1-pixel step
+.label zp_anim_timer      = $2d // frames until the enemies' next animation swap
+.label zp_anim_frame      = $2e // the enemies' animation frame, 0 or 1
+                                // $2f free
 
 // $30-$3F: pointers and per-call scratch for game routines
 .label zp_star_ptr  = $30       // 2 bytes: colour RAM cell of the star being twinkled

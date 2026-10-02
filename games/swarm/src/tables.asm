@@ -1,6 +1,7 @@
 // Swarm: game tables, $3800-$3FFF (docs/games/swarm/memory-map.md#game-tables). Imported by
 // main.asm at GAME_TABLES. Only colour_table's address is fixed; the rest follow in the memory
-// map's order and are found by label. Stage 1 has: colours, stars, custom glyphs, strings.
+// map's order and are found by label. So far: colours, stars, custom glyphs, the
+// formation's tables, strings.
 
 // ------------------------------------------------------------------------------------------
 // Colours. EVERY colour the game writes comes from here, indexed by a COL_* constant
@@ -115,6 +116,20 @@ glyph_data:
 glyph_data_end:
 .const GLYPH_DATA_SIZE = glyph_data_end - glyph_data
 .errorif GLYPH_DATA_SIZE != 24, "glyph_data is 3 glyphs"
+
+// ------------------------------------------------------------------------------------------
+// The formation (design.md "The formation"; formation.asm).
+// Column X with fx = 0, and row Y: the design's "one table" each. formation_update's unrolled code
+// takes the same FORM_* constants as immediates, so a change is made in consts.asm, not by a poke.
+formation_col_x:        .fill FORM_COLS, FORM_X0 + FORM_COL_DX * i      // 34, 70, 106, 142, 178, 214
+formation_row_y:        .fill FORM_ROWS, FORM_ROW_Y0 + FORM_ROW_DY * i  // 56, 96, 136
+// Frames between 1-pixel drift steps, by loop 0-3 (design "What faster means": 1 px / 2 frames,
+// 1 px / frame from loop 2).
+formation_drift_period: .byte 2, 2, 1, 1
+.errorif * - formation_drift_period != GAME_LOOP_MAX + 1, "formation_drift_period: one entry per loop"
+// Each enemy's row (its type, colour, score and path) and column, by enemy index 0-17.
+enemy_row:              .fill ENEMY_COUNT, floor(i / FORM_COLS)
+enemy_col:              .fill ENEMY_COUNT, mod(i, FORM_COLS)
 
 // ------------------------------------------------------------------------------------------
 // Strings. Stored as glyph codes 0-63 and written to the play area as they are; the panel

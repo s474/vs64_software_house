@@ -1,0 +1,6 @@
+# uv run --package budget-runner python tests/games/swarm/stage2a_costs.py   (AUTOPLAY budget build, DEBUG, VICE 3.10 x64sc PAL, 2026-10-02)
+[PASS] formation_update -> formation_update_end: 600 passes, min 323, avg 330.5, max 437 raster cycles (limit 750); starts on raster lines 29-29, ends on 34-36
+[PASS] game_update -> game_update_end: 600 passes, min 841, avg 863.4, max 1007 raster cycles (limit 5765); starts on raster lines 23-23, ends on 36-39
+[PASS] mux_update -> mux_update_fast: 600 passes, min 3729, avg 4069.4, max 5847 raster cycles (limit 7400); starts on raster lines 36-39, ends on 104-151
+[PASS] mux_update -> mux_update_end: 600 passes, min 3734, avg 4072.9, max 5852 raster cycles (limit 13000); starts on raster lines 36-39, ends on 104-151
+[PASS] after 3000 more frames: idle in the worst frame 10240 cycles (required >= 935); game_overrun_count 0, game_flicker_frames 0, mux_max_age 0, mux_late_count 0, irq_late_count 0 (all expected 0)

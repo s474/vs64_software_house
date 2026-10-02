@@ -1,9 +1,13 @@
-# uv run --package budget-runner python tests/games/swarm/check.py   (DEBUG build, 2026-10-02; the release build gives the same lines)
-[PASS] setup: $D011=$5b $D018=$1b $D020-22=[0, 0, 6] $D017/$D01D/$D01B=0/0/0 $DC02=$00 $01=$35; pinned flags [128, 128, 128, 128, 0, 0]...; player (171, 221), sprites 1-23 hidden: True; lives 3
+# uv run --package budget-runner python tests/games/swarm/check.py   (DEBUG build, 2026-10-02, stage 2 part A; the release build gives the same lines except no-drop, which there ends 'no DEBUG counters in this build: drops not measured')
+[PASS] setup: $D011=$5b $D018=$1b $D020-22=[0, 0, 6] $D017/$D01D/$D01B=0/0/0 $DC02=$00 $01=$35; pinned flags [128, 128, 128, 128, 0, 0]...; player (171, 221), sprites 1-5 hidden: True; lives 3
+[PASS] formation: first frame: fx 48 (design: starts at 48), second: fx 49, direction 1 (1 = right); 18 enemies at their homes for that fx: True (row 0: X [83, 119, 155, 191, 227, 263], Y [56]; rows 1, 2: Y [96], [136]); colours by row [4, 7, 13]; shapes by row ['0xc3', '0xc5', '0xc7'] (animation frame [0]); unpinned: True; all Parked: True; alive 18
 [PASS] charset: 'A' and '0' are the ROM's, space empty; star high: 1 pixel in row [2], star low: 1 pixel in row [5]; ship 28 pixels
 [PASS] panel: row 24 = ' SCORE 000000  HI 005000  WAVE 01  ^^   ' (^ = ship); all 40 codes in $40-$7F: True; colour RAM all white: True
 [PASS] stars: 48 star cells in rows 0-23 (24 high, 24 low), 0 in a text band, 0 other non-space cells, same cells as the star table: True, colours outside the four: 0
 [PASS] twinkle: 96 frames: one star cell changed colour in each (0 exceptions), 48 different stars in 48 frames, the same order again in the next 48, each step the next of white/light grey/grey/dark grey
+[PASS] drift: 420 frames: fx 0..96, every value held [2] frames (the extremes too), steps of 1 only; turned at (frame, fx) [(189, 0), (381, 96)]; one sweep 192 frames (design: 96 pixels x 2 = 192); enemy X 34..310 (design: 34-310); every enemy at 34 + fx + 36 * column and its row's Y in every frame; errors: none
+[PASS] animation: 420 frames: all 18 on the same animation frame in every frame, shapes $C3/$C4, $C5/$C6, $C7/$C8 by row; 26 swaps, [16] frames apart (design: 16); errors: none
+[PASS] drift-loop2: zp_loop = 2 for 220 frames: fx changes by [1] every frame, 0..96, enemies at their homes; zp_loop = 0 again: each fx held [2] frames
 [PASS] idle: 10 frames: X [171], no shot
 [PASS] up-down: X [171], no shot
 [PASS] right: +3 a frame from 171: reaches 318 after 49 frames, then [318] for 20 more
@@ -14,6 +18,7 @@
 [PASS] fire-move: fire + right 40 frames: 4 shots, each spawned at the player's X that frame (X 42 -> 159) and kept it; errors: none
 [PASS] cooldown: a slot always free, fire held 100 frames: 10 shots, gaps [10]
 [PASS] fire-tap: 1-frame press: 1 shot; again 5 frames later: 1 in flight (cooldown); at 10 frames: 2
-[PASS] sprites: hardware sprites enabled: 1: X, Y, colour [(159, 221, 3)]; player X 159; pointer $c0; $D01C (multicolour) = 0
+[PASS] no-drop: 600 frames, player sweeping 24-318 with fire held, up to 21 sprites shown: enemies at their homes in every frame (errors: none); frames with mux_drop_count != 0: 0; game_flicker_frames 0, mux_max_age 0, mux_late_count 0, game_overrun_count 0
+[PASS] sprites: at line 251: 8 hardware sprites on; the player: X, Y, colour, pointer [(198, 221, 3, '0xc0')] (player X 198); the other 7: 7 are enemies in their row's Y, colour and shape (Y [96, 136]); $D017/$D01D/$D01C = 0/0/0
 
 ALL PASS

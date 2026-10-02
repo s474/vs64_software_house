@@ -1,6 +1,6 @@
-// Swarm (M4 training game), stage 1: the skeleton. The player's ship moves and fires, the star
-// field twinkles and the status panel is drawn. No enemies, collisions, lives logic, title
-// screen or sound yet.
+// Swarm (M4 training game), stage 2 part A: the player's ship moves and fires, the star field
+// twinkles, the status panel is drawn, and the formation of 18 enemies drifts and animates. No
+// collisions, dives, lives logic, title screen or sound yet.
 //
 // Design (the source of truth for behaviour): docs/games/swarm/design.md
 // Memory, zero page, raster timeline, budgets: docs/games/swarm/memory-map.md
@@ -11,10 +11,12 @@
 //   screen.asm    charset and screen set-up (init only)
 //   stars.asm     star field and twinkle        panel.asm   status panel, score variables
 //   player.asm    the ship                      pshot.asm   the player's shots
+//   formation.asm the 18 enemies: per-enemy state, the drift, the animation
 //   autoplay.asm  the scripted stick of the AUTOPLAY budget build (tests/games/swarm/main.asm)
 //
 // Chain: entry 0 mux_irq_top at line 16, entry 1 game_irq_bottom at line 251 (nothing to do
-// until the sound stage). Main loop: irq_wait_frame, input_read, the update routines, mux_update.
+// until the sound stage). Main loop: irq_wait_frame, input_read, panel_update (first, so it is
+// always in the top border: memory-map.md "The panel's budget"), the update routines, mux_update.
 //
 // Rules this code keeps (engine v1, memory-map.md "(c) The four conditions"): after irq_init
 // there is no sei, no write to $01, $DC00 or $DC02; $D011 is written once (screen_init); $D017
@@ -24,24 +26,20 @@
 // Budget: make test ARGS=swarm       (tests/games/swarm/budget.json, the AUTOPLAY build)
 // Stick:  uv run --package budget-runner python tests/games/swarm/check.py
 //
-// Measured costs (VICE 3.10 x64sc PAL, DEBUG, 2026-10-02): in each routine's header. The whole
-// of game_update runs on lines 17-26, in the top border, so the figures have no DMA in them yet.
+// Measured costs (VICE 3.10 x64sc PAL, DEBUG, 2026-10-02): in each routine's header. Where
+// game_update runs in the frame (measured) is in its own header below.
 
 BasicUpstart2(start)
 
 #import "zp.asm"
 #import "consts.asm"
 
-// The sprite sheet is converted by make into the build directory of the program being built:
-// build/swarm for the game, build/swarm_budget for the AUTOPLAY budget build (whose source
-// directory, tests/games/swarm, has a link to the same PNG).
-#if AUTOPLAY
-#import "build/swarm_budget/sprites.hires.inc"  // SPRITES_HIRES_COUNT
-.const SPRITE_BIN = "build/swarm_budget/sprites.hires.bin"
-#else
-#import "build/swarm/sprites.hires.inc"
-.const SPRITE_BIN = "build/swarm/sprites.hires.bin"
-#endif
+// The sprite sheet (sprites.hires.png, beside this file) is converted by make into the build
+// directory of the program being built, which is on the include path: build/swarm for the game,
+// build/swarm_budget for the AUTOPLAY budget build (whose budget.json names this directory as
+// its "asset_dir", so make converts the same PNG for it). No build-specific path here.
+#import "sprites.hires.inc"             // SPRITES_HIRES_COUNT
+.const SPRITE_BIN = "sprites.hires.bin"
 
 // ------------------------------------------------------------------------------------------
 * = ENGINE_START "Engine"
@@ -85,6 +83,13 @@ start:
         jsr panel_init
         jsr player_init
         jsr pshot_init
+#if AUTOPLAY
+        lda #GAME_LOOP_MAX              // the budget build plays the hardest loop: the formation
+#else                                   // drifts every frame (memory-map.md, AUTOPLAY)
+        lda #0                          // loop 0 until the wave stage counts it
+#endif
+        sta zp_loop
+        jsr formation_init              // after zp_loop: the drift's period depends on it
         jsr input_init                  // $DC02: before irq_init, and never written again
         lda #<GAME_RNG_SEED             // stage 1 draws no random numbers; a game start will seed
         ldx #>GAME_RNG_SEED             // from zp_irq_frame and $D012 (engine/rng.md), AUTOPLAY
@@ -111,18 +116,23 @@ main:   jsr irq_wait_frame              // A = frame number
 main_frame:
         sta zp_game_frame
 // game_update .. game_update_end: everything the main loop does in a frame except mux_update.
-// Cost: 262-317 raster cycles in the game (measured, vice_profile, 100 passes, moving and firing);
-//       max 580 in the AUTOPLAY build, which redraws three panel fields every frame (make test
-//       ARGS=swarm, 600 passes). Budget 5,800
+// Cost: 576-764 raster cycles in the game (measured, vice_profile, 400 passes, moving and firing);
+//       841-1,007 in the AUTOPLAY build, which redraws three panel fields and steps the drift
+//       every frame (tests/games/swarm/stage2a_costs.py, 600 passes; max 1,020 in make test
+//       ARGS=swarm, another 600). Budget 5,765.
+//       It runs from line 23 to lines 36-39 (measured, the same script): still in the top
+//       border, above the first badline (51) and the first enemy row (57), so no DMA yet
 game_update:
         jsr input_read                  // exactly once a frame, straight after the tick
 #if AUTOPLAY
         jsr autoplay_update
 #endif
+        jsr panel_update                // straight after the input: always in the top border. It
+                                        // draws what the previous frame's updates made dirty
         jsr pshot_update                // before player_update: see pshot_update's header
-        jsr player_update
+        jsr formation_update            // every mover has moved before the collisions (part B) ...
+        jsr player_update               // ... and the player moves and fires after them
         jsr stars_update
-        jsr panel_update
 game_update_end:
         jsr mux_update
 
@@ -220,6 +230,7 @@ game_idle_warm:         .byte 0         // frames left before game_idle_min star
 #import "panel.asm"
 #import "pshot.asm"
 #import "player.asm"
+#import "formation.asm"
 #if AUTOPLAY
 #import "autoplay.asm"
 #endif

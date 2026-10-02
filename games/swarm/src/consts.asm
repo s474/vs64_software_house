@@ -115,6 +115,21 @@
 .const PSHOT_COOLDOWN  = 10
 .errorif PLAYER_Y != MUX_Y_MAX, "the player sits at MUX_Y_MAX"
 
+// --- Formation and enemies (design.md "The formation", "Entities", "Sprite shapes") ---------
+.const FORM_ROWS       = 3
+.const FORM_COLS       = 6
+.const ENEMY_COUNT     = FORM_ROWS * FORM_COLS  // 18: enemy e = row * 6 + column, sprite SPR_ENEMY + e
+.const FORM_X0         = 34     // home X = FORM_X0 + fx + FORM_COL_DX * column
+.const FORM_COL_DX     = 36
+.const FORM_ROW_Y0     = 56     // home Y = FORM_ROW_Y0 + FORM_ROW_DY * row: 56, 96, 136
+.const FORM_ROW_DY     = 40
+.const FORM_FX_MAX     = 96     // fx runs 0 -> 96 -> 0
+.const FORM_FX_START   = 48     // moving right
+.const ENEMY_ANIM_FRAMES = 16   // the two shapes of a type swap every 16 frames, all together
+.const GAME_LOOP_MAX   = 3      // loops past 3 play as loop 3
+.errorif SPR_ENEMY + ENEMY_COUNT != 24, "the enemies are virtual sprites 6-23"
+.errorif FORM_X0 + FORM_FX_MAX + FORM_COL_DX * (FORM_COLS - 1) != 310, "design: the formation's sprite X is 34-310"
+
 // --- Game core ----------------------------------------------------------------------------
 .const GAME_STATE_PLAY  = 0     // stage 1 has no other state
 .const GAME_IDLE_WARMUP = 200   // frames before game_idle_min starts counting
