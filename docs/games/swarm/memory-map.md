@@ -1,6 +1,7 @@
 # Swarm: memory map, raster timeline and frame budget
 
-M4 stage 0 technical design (Technical Director, 2026-10-01) for the approved
+M4 stage 0 technical design (Technical Director, 2026-10-01; brought in line with the design doc
+and the engine README on 2026-10-02: panel decided, character set, colour and star tables) for the approved
 [game design](design.md) and the [M4 brief](../../milestones/M4-training-game.md). The
 gameplay-engineer builds to this page; changing the layout means changing this page in the same
 commit ([coding standards](../../standards/coding-standards.md#memory)).
@@ -15,8 +16,8 @@ replaces it with a measurement at the stage named.
 
 ## Verdict
 
-**The approved design fits the machine and engine v1, with one correction** (the panel's colours,
-below). Budgeted game logic and sound: **6,300** raster cycles a frame against the engine's promise
+**The approved design fits the machine and engine v1.** The one correction this page asked for
+(the panel's colours) is decided and in the design: [The panel](#the-panel). Budgeted game logic and sound: **6,300** raster cycles a frame against the engine's promise
 of **7,200** ([engine/README.md](../../../engine/README.md#the-v1-promise-and-its-one-exception),
 **measured**): **900 of headroom (12.5%)**, all of it on *estimated* game costs. In a normal frame
 the game has about 11,600 available, so the headroom there is about 5,300.
@@ -42,31 +43,61 @@ the game has about 11,600 available, so the headroom there is about 5,300.
 
 ### The panel
 
-**Confirmed: no raster split and no chain entry are needed for the panel. Corrected: its colours.**
-The design asks for "a solid blue bar, white text" from reverse-video characters. A reverse-video
-character is drawn in the colour RAM colour with its glyph in the background colour, so a blue bar
-has **black** text (**measured**: `tests/timing/ecm_panel`,
-[picture](../../../screenshots/swarm-panel-reverse-video-black-on-blue.png)). There are two ways
-to get a panel with no split:
+**Decided: extended colour mode (ECM) for the whole screen, set once at init. No raster split and
+no chain entry for the panel** (Simon, 2026-10-01; [design decision 8](design.md#decisions),
+[Screen layout](design.md#screen-layout)).
 
-| Option | What it looks like | Cost |
+| | Play area, rows 0–23 | Panel, row 24 |
 |---|---|---|
-| **A. Extended colour mode for the whole screen** (this page assumes it) | White text on a blue bar, as designed (**measured**: the same probe, [picture](../../../screenshots/swarm-panel-ecm-white-on-blue.png)). Panel cells hold screen code + `$40` (background `$D022`); the play area uses codes 0–63 (background `$D021`) | Only **64 glyphs** on the whole screen: codes 0–63 (`@`, A–Z, punctuation, digits). Every text in the design fits. The two star glyphs and the ship glyph replace unused codes |
-| B. Reverse video, as the design says | Black text on a bar of any one colour (cyan or light blue reads best) | None. `$D011` = `$1B`, and the charset copy is 2 KB instead of 512 bytes |
+| Screen code | Glyph code **0–63** | The same glyph's code **+ 64** (`$40`–`$7F`) |
+| Background | `$D021`, black | `$D022`, blue (ECM background 1) |
+| Colour RAM | Per cell: white for text, the twinkle's colour for a star | White, all 40 cells |
 
-A real split (white on blue without ECM) is the wrong tool here: line 243 is a badline, and a
-stable entry needs the same sprite DMA every frame on the two lines before it, which the player and
-enemy shots at Y 200–221 don't give.
+- In ECM the top two bits of a screen code choose the background and the low six the glyph, so the
+  whole screen has **64 glyphs** ([Character set](#character-set)). Codes `$80` and up
+  (`$D023`, `$D024`) are never written; those two registers are left alone.
+- **All 40 panel cells are written at init, blanks included**: a blank is space + 64 = `$60`, not
+  `$20`, which would be a black hole in the bar. The same goes for every later panel write: a spare
+  ship is erased with `$60`. Panel code adds `PANEL_BG` (= `$40`) to every code it stores; nothing
+  else in the game does.
+- White on blue with these values is **measured**: `tests/timing/ecm_panel`,
+  [picture](../../../screenshots/swarm-panel-ecm-white-on-blue.png).
+- History, one line: the design first asked for reverse video, which gives **black** text on the
+  bar (a reverse-video glyph is drawn in the background colour; **measured**, the same probe), and
+  this page offered ECM or a lighter bar with black text.
+- A real split (white on blue without ECM) stays the wrong tool: line 243 is a badline, and a
+  stable entry needs the same sprite DMA every frame on the two lines before it, which the player
+  and enemy shots at Y 200–221 don't give.
 
-**Request to the designer and Simon: choose A or B.** Nothing else in this page depends on it.
 ECM changes what the pixels show, not when the VIC-II fetches, so the multiplexer's timing is
 expected to be the same; that is *unverified* until QA's write-timing run on the game (F3 in the
 [README](../../../engine/README.md#verdict-safe-for-m4-with-the-zone-code-frozen)), which is run
 on the build as shipped.
 
+### Character set
+
+64 glyphs at `$2800–$29FF`: the character ROM's codes 0–63 (upper case and graphics set, ROM
+`$D000–$D1FF`), with three replaced. The design uses **35 of 64**: 21 letters, 10 digits, space and
+the three custom glyphs; **29 spare** ([design](design.md#character-set-64-glyphs)).
+
+| Constant | Code | Replaces (unused by any text) | Charset bytes | On screen as |
+|---|---|---|---|---|
+| `GLYPH_STAR_HI` | **27** (`$1B`) | `[` | `$28D8–$28DF` | 27, play area only |
+| `GLYPH_STAR_LO` | **28** (`$1C`) | `£` | `$28E0–$28E7` | 28, play area only |
+| `GLYPH_SHIP` | **29** (`$1D`) | `]` | `$28E8–$28EF` | 29 + 64 = 93 (`$5D`), panel only |
+
+- **Codes 27–29 are confirmed** (the designer's suggestion). No text uses them (letters are within
+  1–25, space 32, digits 48–57), and being adjacent they are one 24-byte patch at `$28D8`, copied
+  from a `glyph_data` block in the game tables after the ROM copy.
+- Text is stored in the tables as codes 0–63 and written to the play area as it is; the panel
+  routine adds `PANEL_BG`. An `.errorif` (or `.assert`) on the string data checks no code is above 63.
+- The other 26 codes keep the ROM's glyphs (J K Q X Z, `@`, punctuation), free for later text under
+  the design's rule: capitals, digits and ROM punctuation in codes 0–63 only.
+
 A note on the design's wrap: a diver re-entering at Y 30 is displayed on lines 31–51, and line 51 is
-the first line of the display window, so its last sprite row (row 20) shows. The enemy art must keep
-row 20 empty (the hit-box rule already keeps it to rows 1–19).
+the first line of the display window, so its last sprite row (row 20) shows. The enemy art keeps
+row 20 empty: the design's enemy art area is rows 1–19 ([art rule 3](design.md#art-rules),
+[hit-box table](design.md#hit-boxes); the hit box itself is rows 3–17).
 
 ## Memory layout
 
@@ -81,10 +112,10 @@ against the next block's start.
 | `$07F8–$07FF` | Sprite pointers | 8 B | Multiplexer only |
 | `$0801–$080F` | BASIC upstart | | |
 | `$0810–$27FF` | **Engine block**: `irq.asm`, `multiplexer.asm` (+ `multiplexer_flicker.asm`), `input.asm`, `rng.asm`, `collision.asm`, `sfx.asm`, then the chain tables | 8,176 B reserved. IRQ + multiplexer: **6,045 measured** (DEBUG, [README](../../../engine/README.md#zero-page)); the four new modules: about 1,000 *estimate* (sfx 500, collision 300, input 60, rng 40, slack) | raster-engineer |
-| `$2800–$29FF` | Charset: 64 glyphs. Copied from the character ROM at init (`$01=$33`, interrupts off, **before** `irq_init`), then three glyphs patched: star high, star low, ship | 512 B (zeros in the PRG) | Game init |
-| `$2A00–$2FFF` | Reserved: the rest of the charset slot (needed only for panel option B) | 1,536 B | |
+| `$2800–$29FF` | Charset: 64 glyphs ([above](#character-set)). Copied from the character ROM at init (`$01=$33`, interrupts off, **before** `irq_init`), then codes 27–29 patched: star high, star low, ship | 512 B (zeros in the PRG) | Game init |
+| `$2A00–$2FFF` | Unused: the rest of the charset slot. In ECM the VIC-II never fetches a glyph above code 63, so nothing is shown from here. Kept empty | 1,536 B | |
 | `$3000–$37FF` | Sprite shapes, pointers `$C0–$DF`. 13 used (`$C0–$CC`, `$3000–$333F`) from `png2sprites`; 19 spare for art changes | 2 KB | tools-engineer (art), game |
-| `$3800–$3FFF` | Game tables: dive paths and fire steps (about 75 B), wave tables (40), star table (48 × 3 = 144), column X table, collision pair table, strings (about 150), sound effect data (about 350) | 2 KB reserved, about 850 *estimate* | gameplay-engineer |
+| `$3800–$3FFF` | Game tables ([below](#game-tables)): colour table at `$3800`, then stars, glyphs, collision pairs, column X, dive paths, waves, strings, sound effect data | 2 KB reserved, about 840 *estimate* | gameplay-engineer |
 | `$4000–$5FFF` | Game code and variables (per-enemy arrays: 18 × about 10 B) | 8 KB reserved, 4–5 KB *estimate* | gameplay-engineer |
 | `$6000–$CFFF` | Free | 28 KB | |
 | `$D000–$DFFF` | I/O. Colour RAM `$D800–$DBE7`: star colours, panel text colour | | Game |
@@ -96,6 +127,65 @@ against the next block's start.
 - The M3 spikes put sprite data at `$2800`. Swarm puts the charset there and sprites at `$3000`, so
   the engine block can grow to 8 KB before anything moves.
 - Nothing in the game needs `$01=$34`, RAM under I/O or a second screen.
+
+### Game tables
+
+`$3800–$3FFF`, one block, `.errorif` against `$4000`. Only the colour table's address is fixed (so
+a colour can be changed from the monitor during art review); the rest follow in this order and the
+labels find them.
+
+| Table | Label(s) | Size | Notes |
+|---|---|---|---|
+| Colours | `colour_table`, at **`$3800`** | 19 B used, 32 reserved (`$3800–$381F`) | Below |
+| Stars | `star_lo`, `star_hi`, `star_glyph` | 3 × 48 = 144 B | Below |
+| Custom glyphs | `glyph_data` | 3 × 8 = 24 B | Star high, star low, ship: copied to `$28D8` at init |
+| Collision pairs | `col_pairs` | 3 × 4 = 12 B | `ColPair` rows ([engine/collision.md](../../../engine/collision.md)) |
+| Column X | | 6 B | 34 + 36 × column |
+| Dive paths and fire steps | | about 75 B | [Below](#dive-paths-as-data) |
+| Wave tables | | about 40 B | |
+| Strings | | about 150 B | 81 characters in 11 texts, with row, column and length; codes 0–63 |
+| Sound effect data | | about 350 B | [engine/sfx.md](../../../engine/sfx.md) |
+| **Total** | | **about 840 of 2,048** (*estimate*) | |
+
+**Colour table.** Every colour the game writes comes from `colour_table`, indexed by a `COL_*`
+constant: no colour number appears anywhere else in the code. It is the code's copy of the design's
+[colour table](design.md#colours), which is the designer's proposal until Simon's art review, so a
+colour change is one byte here and one row there.
+
+| Index | Constant | Value (design) | | Index | Constant | Value (design) |
+|---|---|---|---|---|---|---|
+| 0 | `COL_BORDER` (`$D020`) | 0 black | | 10 | `COL_ENEMY_EXPLODE` | 8 orange |
+| 1 | `COL_BACKGROUND` (`$D021`) | 0 black | | 11 | `COL_PLAYER_EXPLODE` | 1 white |
+| 2 | `COL_PANEL_BG` (`$D022`) | 6 blue | | 12 | `COL_RESPAWN_ALT` | 11 dark grey |
+| 3 | `COL_PLAYER` | 3 cyan | | 13 | `COL_PANEL_TEXT` (ships too) | 1 white |
+| 4 | `COL_PLAYER_SHOT` | 3 cyan | | 14 | `COL_MESSAGE_TEXT` | 1 white |
+| 5 | `COL_ENEMY_A` (row 0) | 4 purple | | 15 | `COL_STAR_0` | 1 white |
+| 6 | `COL_ENEMY_B` (row 1) | 7 yellow | | 16 | `COL_STAR_1` | 15 light grey |
+| 7 | `COL_ENEMY_C` (row 2) | 13 light green | | 17 | `COL_STAR_2` | 12 grey |
+| 8 | `COL_WINDUP_FLASH` | 1 white | | 18 | `COL_STAR_3` | 11 dark grey |
+| 9 | `COL_ENEMY_SHOT` | 10 light red | | 19–31 | spare | |
+
+Indices 5–7 are in row order, so an enemy's colour is `colour_table + COL_ENEMY_A + row`; 15–18 are
+the twinkle's four steps in order. Sprite colours go to `mux_col` (never to `$D027–$D02E`), text
+and star colours to colour RAM.
+
+**Star table.** 48 stars, three parallel arrays indexed by star number: `star_lo` / `star_hi` are
+the cell's offset from the start of the screen (row × 40 + column, 0–959; add `$0400` for the
+screen, `$D800` for colour RAM), `star_glyph` is `GLYPH_STAR_HI` or `GLYPH_STAR_LO`.
+
+- It is **assembled data, not built at run time**: generated by a KickAssembler script loop from a
+  fixed seed, so every build and screenshot has the same sky and init has nothing to compute.
+- It is built under the design's **band rule**
+  ([Text cells and the star rule](design.md#text-cells-and-the-star-rule)): rows 0–23 only, **no
+  star in columns 10–29 of rows 5, 9, 11, 12, 13, 16 and 19**, and no two stars in one cell. The
+  generator rejects such cells and draws again, and an `.errorif` over the finished table checks
+  all three conditions, so a hand-edited table can't break the rule silently.
+- What the rule buys, and the code relies on: text is written and erased with spaces without
+  consulting the star table, and the twinkle's one colour RAM write a frame
+  (`stars_update`, budget row 10) never lands on a letter. If the band list changes in the design,
+  the generator's list changes with it.
+- Stars are drawn once at init (48 screen writes) and never redrawn; nothing but text writes to the
+  play area's screen cells afterwards, and text stays inside the bands.
 
 ### Dive paths as data
 
@@ -118,7 +208,10 @@ All 24 virtual sprites and all 4 pins are used (the design's split, confirmed).
 - `mux_flags` is written **once at init, all 24 entries**, and never again. Bit 0 (multicolour) is 0
   everywhere, hidden sprites included: the engine takes its cheaper uniform path only when all 24
   agree ([README](../../../engine/README.md#as-built-stage-3)), and the uniform zone blocks have
-  the larger timing margin (12 cycles DEBUG, 21 release, *counted*, against 4 for mixed).
+  the larger timing margin: **17 cycles** in DEBUG and **39** in release, against **3** for DEBUG
+  mixed (all **measured**, worst case found, not a proven bound:
+  [engine/README.md](../../../engine/README.md#verdict-safe-for-m4-with-the-zone-code-frozen),
+  the four-mode table and "Where Swarm (M4) sits").
 - Parked enemies' `mux_y` is written when the enemy changes state, not every frame.
 - Hide a sprite with `mux_y` = `MUX_OFF`. Don't park hidden sprites at a real Y.
 
@@ -179,7 +272,7 @@ flowchart TB
 
 Why these lines:
 
-- **No entry for the panel**: ECM (or reverse video) needs no register change at line 243.
+- **No entry for the panel**: ECM needs no register change at line 243.
 - **Entry 1 at 251, the sound tick.** Three reasons. (1) Every multiplexer measurement was taken
   with entry 0 plus one fixed entry at `$FB`; a one-entry chain with the multiplexer has never been
   run, and M4 is told to develop in the configurations that were measured. (2) Sound keeps its
@@ -241,6 +334,16 @@ Y first (8 bits), then X (9 bits) only if Y overlaps.
 | Set-up per call (`collision_begin`) | about 90 |
 | The design's 42 tests, worst mix: two player shots each inside a row's Y band, one with 3 divers there (15 full tests, 21 rejects); the player against 3 enemy shots and 3 divers (6 full) | 21 × 42 + 21 × 19 + 4 × 90 = **1,641**, about 39 a test; × 1.27 = 2,084 raster, budget 2,100 |
 | Typical frame: both shots between rows | 36 × 19 + 6 × 42 + 360 = about 1,300 |
+
+**Boxes.** `col_pairs` is typed from the design's [hit-box table](design.md#hit-boxes), which is
+the only place the numbers live: player 6–17 × 6–20, enemy 4–19 × 3–17, player shot 11–12 × 0–7,
+enemy shot 11–12 × 14–20 (columns × rows, inclusive); explosions have no box, and the game skips an
+exploding target. Checked against the budget's assumptions (2026-10-02): every `range_y` is 21–29,
+inside the module's limit of 64; the rows are 40 lines apart and a shot's Y band against an enemy
+is 22 lines, so a shot is in at most one row's band, and the two shots (80 lines apart at the
+10-frame cooldown) can each be in one, which is the 6 + 6 + 3 divers = 15 full tests budgeted;
+the player's 6 tests are all full only for enemies at Y ≥ 210 and shots at Y ≥ 207, as the design
+says. The art areas don't enter the collision code.
 
 If `collide_update` measures over 2,475, the fallback that needs no design change: parked enemies
 are a grid, so a player shot finds its one candidate by row and column (about 80 cycles a shot)
