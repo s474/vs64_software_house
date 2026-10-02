@@ -104,7 +104,8 @@ game_wave_intro:
         lda panel_dirty
         ora #PANEL_DIRTY_WAVE
         sta panel_dirty
-        // SFX (part B): the wave start sound, voice 3, priority 2
+        lda #SFX_WAVE_START             // the wave start sound (voice 3, priority 2), in the
+        jsr sfx_play                    // border: 36 cycles
         ldx #0                          // enemy k appears in frame 2k: enemy 0 now
         jmp enemy_park
 
@@ -112,11 +113,12 @@ game_wave_intro:
 // explosion ends, whatever the game state. + 1,000 (the score stops at 999,990), the panel's score
 // marked for redraw, and the Clear phase starts: this is its frame 0.
 // In:  nothing       Out: X preserved
-// Uses: A
-// Cost: 62 cycles + rts, 78 when the score stops (counted); inside formation_update's row.
-//       Measured: formation_update 650-670 in Clear's first frame with 3 explosions ending on a
-//       turn-and-swap frame, ending on lines 37-38 (limit 750; stage4_costs.txt, item 1). Part
-//       B's sound request goes on top of that
+// Uses: A, Y, zp_tmp0 (X kept in it across sfx_play)
+// Cost: 104 cycles + rts, 120 when the score stops (counted: 62 / 78 + the sound request's 42
+//       with X kept); inside formation_update's row. Measured: formation_update 692-712 in Clear's
+//       first frame with 3 explosions ending on a turn-and-swap frame, ending on lines 38-39 (limit
+//       750, above line 49; it was 650-670 without the sound; tests/games/swarm/stage4_costs.txt,
+//       item 1)
 game_wave_clear:
         lda #WAVE_PHASE_CLEAR           // 2
         sta zp_wave_phase               // 3
@@ -140,7 +142,10 @@ game_wave_clear:
 !:      lda panel_dirty                 // 4
         ora #PANEL_DIRTY_SCORE          // 2
         sta panel_dirty                 // 4
-        // SFX (part B): the wave clear sound, voice 3, priority 2 (X must be preserved)
+        stx zp_tmp0                     // 3   sfx_play uses A, X, Y and no zero page
+        lda #SFX_WAVE_CLEAR             // 2   the wave clear sound (voice 3, priority 2)
+        jsr sfx_play                    // 34  nothing pending on voice 3: no dive starts with
+        ldx zp_tmp0                     // 3   the last enemy exploding
         rts
 
 // The wave phase's frame, for Intro and Clear (Fight has nothing to count).
@@ -283,7 +288,8 @@ game_state_update:
         sta panel_dirty
 !text:  ldx #TEXT_GAME_OVER             // over whatever is there: its cells cover the other two
         jsr game_text_draw
-        // SFX (part B): the game over sound, voice 1, priority 3: this is GameOver's frame 0
+        lda #SFX_GAME_OVER              // the game over sound (voice 1, priority 3): this is
+        jsr sfx_play                    // GameOver's frame 0. In the border: 36 cycles
         lda #GAME_STATE_GAMEOVER
 !enter: sta zp_game_state
         lda #0

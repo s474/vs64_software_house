@@ -1,9 +1,9 @@
-// Swarm (M4 training game), stage 4 part A: the title screen, a game of waves (Intro, Fight,
+// Swarm (M4 training game), stage 4: the title screen, a game of waves (Intro, Fight,
 // Clear, the + 1,000 bonus, three patterns over four loops of difficulty), GAME OVER and back to
 // the title, on top of stage 3's game: the ship, its shots, the star field, the panel, the
 // formation of 18, hits and explosions, the divers and their shots, lives and READY.
-// No sound yet (part B: engine/sfx.asm); the places that will ask for each effect are marked
-// "SFX (part B)".
+// Sound (part B): engine/sfx.asm with the ten effects of sfx_data.asm. The main loop's routines
+// ask (sfx_play), the tick in game_irq_bottom plays; who asks for what is listed below.
 //
 // Design (the source of truth for behaviour): docs/games/swarm/design.md
 // Memory, zero page, raster timeline, budgets: docs/games/swarm/memory-map.md
@@ -21,9 +21,24 @@
 //   collide.asm   player shots against the enemies (grid lookup + box test), the player against
 //                 enemy shots and divers, the score (engine/collision.asm)
 //   autoplay.asm  the scripted stick of the AUTOPLAY budget build (tests/games/swarm/main.asm)
+//   sfx_data.asm  the ten sound effects (engine/sfx.asm's data; values tuned by ear)
 //
-// Chain: entry 0 mux_irq_top at line 16, entry 1 game_irq_bottom at line 251 (nothing to do
-// until the sound stage). Main loop: irq_wait_frame, input_read, panel_update and stars_update
+// Sound requests (memory-map.md "Stage 4 part B: sound requests"; design.md "Sound effects").
+// sfx_play is called from the main loop only, by these and no others; the game has no priority
+// code (the module decides):
+//   title.asm    title_update, the press: SFX_START
+//   game.asm     game_wave_intro: SFX_WAVE_START; game_wave_clear: SFX_WAVE_CLEAR;
+//                game_state_update, GameOver's frame 0: SFX_GAME_OVER
+//   diver.asm    diver_launch: SFX_DIVE; diver_update's end: SFX_ENEMY_SHOT, once a frame, if
+//                eshot_spawn fired a shot (eshot_fired)
+//   collide.asm  collide_update's end: SFX_ENEMY_EXPLOSION, once a frame, if an enemy was hit
+//                (collide_hit) and the player wasn't
+//   player.asm   player_hit: SFX_PLAYER_HIT_A then SFX_PLAYER_HIT_B; player_update, a shot
+//                spawned: SFX_PLAYER_SHOT
+//   autoplay.asm (budget build) every 64 frames: SFX_GAME_OVER, SFX_PLAYER_HIT_A, SFX_PLAYER_HIT_B
+//
+// Chain: entry 0 mux_irq_top at line 16, entry 1 game_irq_bottom at line 251 (the sound tick).
+// Main loop: irq_wait_frame, input_read, panel_update and stars_update
 // (first, so they are always in the top border: memory-map.md "The panel's budget", "Order of the
 // frame"); then, at the title, title_update alone; in a game pshot_update, eshot_update,
 // game_state_update, formation_update, diver_update, collide_update, player_update; then
@@ -32,7 +47,8 @@
 //
 // Rules this code keeps (engine v1, memory-map.md "(c) The four conditions"): after irq_init
 // there is no sei, no write to $01, $DC00 or $DC02; $D011 is written once (screen_init); $D017
-// and $D01D stay 0; sprites are written through the mux_* arrays only.
+// and $D01D stay 0; sprites are written through the mux_* arrays only; $D400-$D418 are written
+// by engine/sfx.asm only.
 //
 // Build:  make GAME=swarm            Run: make run GAME=swarm
 // Budget: make test ARGS=swarm       (tests/games/swarm/budget.json, the AUTOPLAY build)
@@ -60,6 +76,7 @@ BasicUpstart2(start)
 #import "engine/input.asm"
 #import "engine/rng.asm"
 #import "engine/collision.asm"          // after the multiplexer: it reads its arrays. Needs col_pairs
+#import "engine/sfx.asm"                // page-aligned: up to 255 bytes of padding before it
 
 * = * "Chain"
         IrqChainBegin()
@@ -81,6 +98,9 @@ BasicUpstart2(start)
 
 * = GAME_TABLES "Game tables"
 #import "tables.asm"
+        SfxBegin()                      // the sound effects, last in the game tables: SfxEnd()
+#import "sfx_data.asm"                  // emits engine/sfx.asm's tables here
+        SfxEnd()
 .errorif * > GAME_CODE, "the game tables run into the game code ($4000)"
 
 // ------------------------------------------------------------------------------------------
@@ -98,6 +118,7 @@ start:
         lda #<GAME_RNG_SEED             // a constant: the title steps the generator every frame
         ldx #>GAME_RNG_SEED             // and seeds it at the press of fire (title.asm); the budget
         jsr rng_seed                    // build has no title and keeps this seed
+        jsr sfx_init                    // silences the SID, volume 15. Before irq_init: the tick is an IRQ
 #if AUTOPLAY
         jsr game_new                    // the budget build starts through wave 12's Intro
 #else
@@ -211,10 +232,15 @@ game_idle_done:
         jmp main
 #endif
 
-// Chain entry 1, line 251 (lower border, no DMA). Nothing to do until the sound stage, when it
-// calls sfx_update. IRQ context: no zp_tmp*, no zp_joy_pressed.
-// Cost: 93 cycles of framework, no work (engine/README.md#irq-framework-costs)
+// Chain entry 1, line 251 (lower border, no DMA): the sound tick, and NOTHING else, ever
+// (engine/GAME-GUIDE.md section 6). IRQ context: no zp_tmp*, no zp_joy_pressed.
+// TIMING: to irq_exit_rti 498 cycles at worst (three effects starting in one tick), rti by line 260
+// Cost: measured (2026-10-02, the AUTOPLAY build, which starts three effects in one tick every 64
+//       frames; 600 ticks; tests/games/swarm/stage4_costs.txt, item 9): 117-498 cycles to
+//       irq_exit_rti, average 277; sfx_update 44-417; the rti is reached on lines 253-259 (line
+//       259, cycle 24 at the latest). budget.json requires the maxima to be exactly 498 and 417
 game_irq_bottom:
+        jsr sfx_update
         IrqDone()
 
 // Set the multiplexer's per-sprite flags, once, all 24: virtual sprites 0-3 (player, enemy

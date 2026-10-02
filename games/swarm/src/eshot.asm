@@ -76,9 +76,9 @@ eshot_update_end:
 // diver's X is 24-320, and a shot slot is free (lowest first). The shot starts at the diver's
 // position; its dx is fixed here from d = player X - shot X: 0 if |d| <= 15, else + 1 if d > 0,
 // - 1 if d < 0. If it can't fire, nothing happens: the caller's fire step is lost.
-// In:  X = enemy index 0-17 (a diver)     Out: X preserved
+// In:  X = enemy index 0-17 (a diver)     Out: X preserved; eshot_fired = 1 if it fired
 // Uses: A, Y, zp_tmp0
-// Cost: about 110 cycles when it fires (counted); only at a fire step
+// Cost: about 116 cycles when it fires (counted); only at a fire step
 eshot_spawn:
         lda zp_game_state
         bne !none+                      // not in Play: no diver fires (Stage 3 rule 8)
@@ -103,7 +103,8 @@ eshot_spawn:
         lda mux_y + SPR_ESHOT + 2
         cmp #MUX_OFF
         bne !none+                      // all three in flight
-!got:   // SFX (part B): the enemy shot sound, voice 1, priority 1 (X and Y are in use here)
+!got:   lda #1                          // the enemy shot sound is asked for ONCE a frame, by
+        sta eshot_fired                 // diver_update at its end (memory-map.md part B, request 6)
         lda mux_y + SPR_ENEMY,x
         sta mux_y + SPR_ESHOT,y
         lda mux_x_hi + SPR_ENEMY,x
@@ -138,3 +139,6 @@ eshot_spawn:
 
 // Each shot's sideways step a frame: 0, 1 or $FF (- 1). Fixed when the shot is fired.
 eshot_dx:       .fill SPR_ESHOT_COUNT, 0
+// 1 when a shot was fired this frame: set by eshot_spawn, tested and cleared by diver_update,
+// which then asks for the enemy shot sound once however many fired.
+eshot_fired:    .byte 0

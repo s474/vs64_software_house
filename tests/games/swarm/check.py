@@ -185,6 +185,17 @@ Cases (PASS/FAIL each, exit code 1 on any failure):
                interval, 2-step frames, shots a dive, shot speed, wind-up frames, drift speed
   seed         two games started in different title frames: different seeds and launches
   row9-uncovered   no Parked enemy's lines touch row 9 while WAVE nn, READY or GAME OVER shows
+  (stage 4 part B: sound. Asked for = sfx_request at game_update_end and every call of sfx_play
+  in the frame, in order; playing = sfx_cur one frame later)
+  sfx-idle     nothing happens for 120 frames: no call, no request, nothing playing
+  sfx-player-shot, sfx-enemy-shot, sfx-enemy-shot-x3 (three spawned in a frame: one call),
+  sfx-shots-same-frame (the later call, the player's, survives; the two cut each other off),
+  sfx-dive (and a second launch restarts it), sfx-explosion, sfx-explosion-x2 (one call),
+  sfx-player-hit (A then B; an explosion asked for in the 60 frames after it is dropped),
+  sfx-hit-and-explosion, sfx-ram (the hit's two calls and no explosion call),
+  sfx-wave-start, sfx-wave-clear (voice 3: the player's shot plays on voice 1 beside them),
+  sfx-start (no call at the title; the press; over before the ship can fire), sfx-game-over,
+  sfx-volume   $D418 is never written after sfx_init (a store checkpoint through all of these)
   (and in the cases above: game-over ends in the title, the press that skipped it starts nothing
   while held, a tap in the title's frame 7 isn't read and one in frame 8 is, the high score is
   compared once, in GameOver's frame 0)
@@ -193,7 +204,7 @@ Run from the repo root (build first: make GAME=swarm):
 
     uv run --package budget-runner python tests/games/swarm/check.py [--prg build/swarm/swarm.prg]
 
-Takes about 1 minute. Works on a release build too (make BUILD=release GAME=swarm): the DEBUG
+Takes about 1.5 minutes. Works on a release build too (make BUILD=release GAME=swarm): the DEBUG
 counters are read only if the build has them. Results of the last run: tests/games/swarm/check_results.txt.
 """
 
@@ -202,7 +213,7 @@ import sys
 from pathlib import Path
 
 from budget_runner.session import STOP_TIMEOUT, MeasureError, Vice, build_program
-from vice_monitor import CPU_OP_EXEC  # on sys.path once budget_runner.session is imported
+from vice_monitor import CPU_OP_EXEC, CPU_OP_STORE  # on sys.path once budget_runner.session is imported
 
 REPO = Path(__file__).resolve().parents[3]
 BITS = {"up": 0x01, "down": 0x02, "left": 0x04, "right": 0x08, "fire": 0x10}
@@ -2719,6 +2730,390 @@ def main() -> int:
         rep("row9-uncovered", row9 == {"READY": True, "GAME OVER": True, "WAVE nn": True},
             f"with all 18 enemies Parked, no Parked enemy's lines (Y + 1 to Y + 21) touch row 9's (123-130), while each "
             f"message showed: {row9}")
+
+        # ================================================================ stage 4 part B: sound
+        # What is ASKED FOR is read from sfx_request at game_update_end (before the tick takes it), what
+        # PLAYS from sfx_cur at the next stop (after the tick), both effect + 1, one byte a voice (the
+        # module's voices 0-2 = the design's 1-3). The SID can't be read back. From here every
+        # execution of sfx_play also stops the machine, so the script sees each CALL in a frame, in
+        # order, with the effect in A; and a store to $D418 (the volume) would stop it too.
+        SFX = {n: sym["SFX_" + n] + 1 for n in ("PLAYER_SHOT", "ENEMY_SHOT", "DIVE", "ENEMY_EXPLOSION", "PLAYER_HIT_A",
+                                                "PLAYER_HIT_B", "WAVE_START", "WAVE_CLEAR", "START", "GAME_OVER")}
+        SFX_NAME = {v: k.lower() for k, v in SFX.items()}
+        SFX_NAME[0] = "-"
+        PS, ES, DV, EX = SFX["PLAYER_SHOT"], SFX["ENEMY_SHOT"], SFX["DIVE"], SFX["ENEMY_EXPLOSION"]
+        HA, HB, WS, WC = SFX["PLAYER_HIT_A"], SFX["PLAYER_HIT_B"], SFX["WAVE_START"], SFX["WAVE_CLEAR"]
+        ST, GO = SFX["START"], SFX["GAME_OVER"]
+        calls, vol_writes = [], [0]
+        cp_play = mon.checkpoint_set(sym["sfx_play"], sym["sfx_play"], CPU_OP_EXEC)
+        cp_vol = mon.checkpoint_set(0xD418, 0xD418, CPU_OP_STORE)
+
+        def frame(pressed=None):      # replaces frame() for every helper from here on
+            """As frame() above, and: `calls` = the effects (+ 1) sfx_play was called with in this frame, in order."""
+            calls.clear()
+            if hold["set"]:
+                hold["n"] -= 1
+                if hold["n"] <= 0:
+                    for label, value in hold["set"].items():
+                        mon.mem_set(sym[label], bytes([value]))
+                    hold["n"] = 32
+            if pressed is not None:
+                mon.joyport_set(PORT2, ~pressed & 0x1F)
+            while True:
+                mon.exit()
+                if not mon.wait_stopped(STOP_TIMEOUT):
+                    mon.ping()
+                    raise MeasureError("game_update_end not reached: jam?")
+                regs = mon.registers()
+                if regs["PC"] == sym["game_update_end"]:
+                    return state()
+                if regs["PC"] == sym["sfx_play"]:
+                    calls.append((regs["A"] & 255) + 1)
+                else:
+                    vol_writes[0] += 1
+
+        def req():
+            return tuple(mem(sym["sfx_request"], 3))
+
+        def cur():
+            return tuple(mem(sym["sfx_cur"], 3))
+
+        def nm(t):
+            return "(" + ", ".join(SFX_NAME.get(x, hex(x)) for x in t) + ")"
+
+        def quiet():
+            """Nothing pressed until no voice is playing, nothing is asked for and no player shot is in flight."""
+            for _ in range(300):
+                _, shots = frame(0)
+                if cur() == (0, 0, 0) and req() == (0, 0, 0) and shots == [None, None] and peek("zp_player_cooldown") == 0:
+                    return
+            raise MeasureError(f"quiet: still playing {cur()}")
+
+        def held(v):
+            """Frames voice v goes on playing what it plays now, this stop included (nothing pressed)."""
+            what, n = cur()[v], 0
+            while cur()[v] == what and n < 200:
+                frame(0)
+                n += 1
+            return n
+
+        def put_diver(slot, e, x, y, fire):
+            """Through the monitor: enemy e in Dive in diver slot `slot`, on its path's first segment;
+            with fire, its next step is its first fire step (eshot_spawn runs in the next frame)."""
+            row = e // COLS
+            poke("enemy_state", [ST_D], e)
+            poke("enemy_seg", [peek("path_first", row * 2)], e)
+            poke("enemy_left", [PATHS[row][0][2]], e)
+            poke("enemy_step", [FIRE[row][0] - 1 if fire else 60], e)
+            poke("enemy_fire", [peek("path_fire_first", row) if fire else 3], e)      # 3: PATH_FIRE_NONE
+            poke("enemy_shots", [2], e)
+            poke("mux_x_lo", [x & 255], ENEMY0 + e)
+            poke("mux_x_hi", [x >> 8], ENEMY0 + e)
+            poke("mux_y", [y], ENEMY0 + e)
+            poke("diver_enemy", [e], slot)
+
+        def pshot_under(i, e):
+            """Player shot i placed so that it is inside enemy e's box in the next frame."""
+            x, y = epos(e)
+            put_pshot(i, x, y + 18)
+
+        # sfx-idle: nothing happens (the formation parked and drifting, the ship still, then moving): nothing is
+        # asked for and nothing plays
+        safe(False)
+        launcher(False)
+        respawn()
+        quiet()
+        bad = []
+        for f in range(120):
+            frame(BITS["left"] if 40 <= f < 60 else BITS["right"] if 60 <= f < 80 else 0)
+            if req() != (0, 0, 0) or cur() != (0, 0, 0) or calls:
+                bad.append((f, req(), cur(), list(calls)))
+        rep("sfx-idle", not bad and gstate()[0] == GS_PLAY and phase()[0] == PHASE_FIGHT,
+            f"120 frames of Play and Fight with a full formation drifting and animating, the ship still, then moving "
+            f"left and right, no fire: sfx_play never called, sfx_request (0, 0, 0) and sfx_cur (0, 0, 0) in every "
+            f"frame; exceptions: {bad[:2] or 'none'}")
+
+        # sfx-player-shot
+        frame(BITS["fire"])
+        r0, c0, shot0 = req(), list(calls), state()[1]
+        frame(0)
+        r1, k1 = req(), cur()
+        n = held(0)
+        rep("sfx-player-shot", r0 == (PS, 0, 0) and c0 == [PS] and r1 == (0, 0, 0) and k1 == (PS, 0, 0) and shot0[0] is not None,
+            f"a shot spawns: in that frame sfx_play is called once, with {nm(c0)}, sfx_request {nm(r0)}; one frame later "
+            f"the request is taken {nm(r1)} and sfx_cur is {nm(k1)}: the player shot on voice 1; it holds the voice "
+            f"for {n} frames after the tick that started it (design: 8)")
+
+        # sfx-enemy-shot, sfx-enemy-shot-x3, sfx-shots-same-frame: divers placed at a fire step (monitor); the shots
+        # are spawned by the game's eshot_spawn
+        safe(True)
+        respawn()
+        quiet()
+        clear_eshots()
+        put_diver(0, 12, 100, 150, True)
+        poke("zp_divers_active", [1])
+        frame(0)
+        r0, c0, e0 = req(), list(calls), eshots()
+        frame(0)
+        k1 = cur()
+        n = held(0)
+        rep("sfx-enemy-shot", r0 == (ES, 0, 0) and c0 == [ES] and sum(x is not None for x in e0) == 1 and k1 == (ES, 0, 0),
+            f"a diver's fire step spawns a shot ({e0}): sfx_play called once, with {nm(c0)}, sfx_request {nm(r0)}; one "
+            f"frame later sfx_cur {nm(k1)}: the enemy shot on voice 1, for {n} frames (design: 6)")
+        clear_eshots()
+        for slot, (e, x) in enumerate([(0, 60), (6, 150), (12, 240)]):
+            put_diver(slot, e, x, 150, True)
+        poke("zp_divers_active", [3])
+        frame(0)
+        r0, c0, e0 = req(), list(calls), eshots()
+        frame(0)
+        k1 = cur()
+        rep("sfx-enemy-shot-x3", r0 == (ES, 0, 0) and c0 == [ES] and sum(x is not None for x in e0) == 3 and k1 == (ES, 0, 0)
+            and peek("eshot_fired") == 0,
+            f"three divers fire in one frame (three shots spawned: {e0}): sfx_play is called ONCE, with {nm(c0)} "
+            f"(the flag eshot_spawn sets, tested at diver_update's end, and cleared: {peek('eshot_fired')}); "
+            f"sfx_request {nm(r0)}, then sfx_cur {nm(k1)}")
+        respawn()
+        quiet()
+        clear_eshots()
+        put_diver(0, 12, 100, 150, True)
+        poke("zp_divers_active", [1])
+        frame(BITS["fire"])
+        r0, c0, e0, p0 = req(), list(calls), eshots(), state()[1]
+        frame(0)
+        k1 = cur()
+        frame(0)
+        frame(0)
+        put_diver(0, 12, 100, 150, True)          # 3 frames into the player's shot sound: an enemy shot
+        frame(0)
+        r2, c2 = req(), list(calls)
+        frame(0)
+        k2 = cur()
+        rep("sfx-shots-same-frame", r0 == (PS, 0, 0) and c0 == [ES, PS] and k1 == (PS, 0, 0) and sum(x is not None for x in e0) == 1
+            and p0[0] is not None and r2 == (ES, 0, 0) and c2 == [ES] and k2 == (ES, 0, 0),
+            f"an enemy shot and a player shot spawn in the same frame: sfx_play calls in order {nm(c0)} (diver_update, "
+            f"then player_update), sfx_request {nm(r0)}: equal priority on voice 1, the later call survives, and "
+            f"sfx_cur is {nm(k1)}: the player's shot is heard (the design's same-frame rule). 4 frames later, the "
+            f"player's shot sound still running, an enemy shot spawns: asked {nm(r2)}, then sfx_cur {nm(k2)}: the "
+            f"two shots cut each other off")
+
+        # sfx-dive: the game's own launcher (the launch timer put at 1)
+        respawn()
+        quiet()
+        launcher(True)
+        poke("zp_launch_timer", [1])
+        frame(0)
+        r0, c0, w0 = req(), list(calls), estates().count(ST_W)
+        frame(0)
+        k1 = cur()
+        for _ in range(4):
+            frame(0)
+        poke("zp_launch_timer", [1])
+        frame(0)
+        r2, c2, w2 = req(), list(calls), peek("zp_divers_active")
+        frame(0)
+        k2 = cur()
+        launcher(False)
+        n = held(2)
+        rep("sfx-dive", r0 == (0, 0, DV) and c0 == [DV] and w0 == 1 and k1 == (0, 0, DV) and r2 == (0, 0, DV) and c2 == [DV]
+            and w2 == 2 and k2 == (0, 0, DV),
+            f"a launch (WindUp's frame 0, {w0} enemy in WindUp): sfx_play called once, with {nm(c0)}, sfx_request "
+            f"{nm(r0)}, then sfx_cur {nm(k1)}: the dive on voice 3; a second launch 6 frames later ({w2} divers out) "
+            f"asks again {nm(r2)} and the dive sound restarts: sfx_cur {nm(k2)}, held {n} frames from that start "
+            f"(design: 30, running on into the dive: wind-up 24 frames at loop 0)")
+
+        # sfx-explosion, sfx-explosion-x2: player shots placed (monitor) one frame below an enemy's box
+        respawn()
+        quiet()
+        pshot_under(0, 15)
+        frame(0)
+        r0, c0, s0 = req(), list(calls), estates()[15]
+        frame(0)
+        k1 = cur()
+        n = held(1)
+        rep("sfx-explosion", r0 == (0, EX, 0) and c0 == [EX] and s0 == ENEMY_EXPLODING and k1 == (0, EX, 0),
+            f"a player shot hits enemy 15 (Exploding: {s0 == ENEMY_EXPLODING}): sfx_play called once, with {nm(c0)}, "
+            f"sfx_request {nm(r0)}, then sfx_cur {nm(k1)}: the enemy explosion on voice 2, for {n} frames (design: 16)")
+        quiet()
+        pshot_under(0, 16)
+        pshot_under(1, 14)
+        frame(0)
+        r0, c0, s0 = req(), list(calls), [estates()[e] for e in (16, 14)]
+        frame(0)
+        k1 = cur()
+        rep("sfx-explosion-x2", r0 == (0, EX, 0) and c0 == [EX] and s0 == [ENEMY_EXPLODING] * 2 and k1 == (0, EX, 0),
+            f"two shots hit enemies 16 and 14 in the same frame (both Exploding: {s0 == [ENEMY_EXPLODING] * 2}): "
+            f"sfx_play is called ONCE, with {nm(c0)} (collide_hit, tested at collide_update's end); sfx_request "
+            f"{nm(r0)}, sfx_cur {nm(k1)}: one explosion sound")
+
+        # sfx-player-hit: an enemy shot on the ship; then, in PlayerDying, an enemy is shot: asked for, not heard
+        safe(False)
+        respawn()
+        poke("zp_lives", [3])
+        quiet()
+        hit_player()
+        r0, c0 = req(), list(calls)
+        frame(0)
+        k1 = cur()
+        for _ in range(8):
+            frame(0)
+        pshot_under(0, 15)
+        frame(0)
+        r2, c2, s2 = req(), list(calls), estates()[15]
+        frame(0)
+        k2 = cur()
+        n = 10 + held(1)
+        rep("sfx-player-hit", r0 == (0, HA, HB) and c0 == [HA, HB] and k1 == (0, HA, HB) and r2 == (0, EX, 0) and c2 == [EX]
+            and s2 == ENEMY_EXPLODING and k2 == (0, HA, HB),
+            f"the player is hit by a shot (frame 0 of PlayerDying): sfx_play called twice, {nm(c0)}, A then B; "
+            f"sfx_request {nm(r0)}, then sfx_cur {nm(k1)}: the hit on voices 2 and 3 together. 10 frames later a "
+            f"shot still in flight kills enemy 15: the explosion is asked for {nm(r2)} and dropped at the tick "
+            f"(priority 2 under 3): sfx_cur stays {nm(k2)}; the hit holds voice 2 for {n} frames (design: 60, in "
+            f"which no explosion or dive is heard)")
+        revive()
+
+        # sfx-hit-and-explosion: a shot kills an enemy in the frame an enemy shot kills the player
+        quiet()
+        pshot_under(0, 14)
+        poke("zp_player_invuln", [0])
+        put_eshot(0, state()[0], 205, 0)
+        frame(0)
+        r0, c0, g0, s0 = req(), list(calls), gstate(), estates()[14]
+        frame(0)
+        k1 = cur()
+        rep("sfx-hit-and-explosion", r0 == (0, HA, HB) and c0 == [HA, HB] and g0 == (GS_DYING, 0) and s0 == ENEMY_EXPLODING
+            and k1 == (0, HA, HB),
+            f"a player shot kills enemy 14 and an enemy shot kills the player in the same frame (PlayerDying frame 0: "
+            f"{g0 == (GS_DYING, 0)}, the enemy Exploding: {s0 == ENEMY_EXPLODING}): sfx_play calls {nm(c0)}: the hit's "
+            f"two and NO explosion request; sfx_request {nm(r0)}, sfx_cur {nm(k1)}")
+        revive()
+
+        # sfx-ram: a diver on the ship: the player hit, not the enemy explosion
+        respawn()
+        quiet()
+        px = state()[0]
+        put_diver(0, 14, px + 2, 216, False)
+        poke("enemy_seg", [peek("path_first", 4) + 4], 14)        # the Hook's skim: (-2, 0)
+        poke("enemy_left", [6], 14)
+        poke("zp_divers_active", [1])
+        poke("zp_player_invuln", [0])
+        sc0 = score()
+        frame(0)
+        r0, c0, g0, s0, sc1 = req(), list(calls), gstate(), estates()[14], score()
+        frame(0)
+        k1 = cur()
+        rep("sfx-ram", r0 == (0, HA, HB) and c0 == [HA, HB] and g0 == (GS_DYING, 0) and s0 == ENEMY_EXPLODING and k1 == (0, HA, HB)
+            and sc1 == sc0 + DIVE_SCORE[2],
+            f"a diver rams the ship (PlayerDying frame 0: {g0 == (GS_DYING, 0)}; the diver Exploding and scored, "
+            f"+ {sc1 - sc0}): sfx_play calls {nm(c0)}: the hit's two and NO explosion request (the design: a ram plays "
+            f"the player hit, not the enemy explosion); sfx_request {nm(r0)}, sfx_cur {nm(k1)}")
+        revive()
+
+        # sfx-wave-start: Intro's frame 0 of a later wave; the player's shot is heard over it
+        safe(True)
+        quiet()
+        start_wave(5, run=False)
+        r0, c0, ph0 = req(), list(calls), phase()
+        frame(0)
+        k1 = cur()
+        frame(BITS["fire"])
+        r2 = req()
+        frame(0)
+        k2 = cur()
+        n = 2 + held(2)
+        rep("sfx-wave-start", r0 == (0, 0, WS) and c0 == [WS] and ph0 == (PHASE_INTRO, 0) and k1 == (0, 0, WS) and r2 == (PS, 0, 0)
+            and k2 == (PS, 0, WS),
+            f"Intro's frame 0 (wave 5): sfx_play called once, with {nm(c0)}, sfx_request {nm(r0)}, then sfx_cur "
+            f"{nm(k1)}: wave start on voice 3; a shot fired while it plays: sfx_cur {nm(k2)} (voice 1 is free for "
+            f"the player's shots); the notes hold voice 3 for {n} frames (design: 30)")
+
+        # sfx-wave-clear: the last explosion ends (monitor: enemy 17 one frame from the end of its explosion) in
+        # a frame the player fires
+        to_fight()
+        quiet()
+        last_explosion()
+        sc0 = score()
+        frame(BITS["fire"])
+        r0, c0, ph0, sc1 = req(), list(calls), phase(), score()
+        frame(0)
+        k1 = cur()
+        for _ in range(12):
+            frame(0)
+        frame(BITS["fire"])
+        r2 = req()
+        frame(0)
+        k2 = cur()
+        n = 14 + held(2)
+        rep("sfx-wave-clear", r0 == (PS, 0, WC) and c0 == [WC, PS] and ph0 == (PHASE_CLEAR, 0) and sc1 == sc0 + 1000
+            and k1 == (PS, 0, WC) and r2 == (PS, 0, 0) and k2 == (PS, 0, WC),
+            f"Clear's frame 0 (the last explosion ends, + {sc1 - sc0}), fire pressed in the same frame: sfx_play "
+            f"calls {nm(c0)} (formation_update, then player_update), sfx_request {nm(r0)}, then sfx_cur {nm(k1)}: "
+            f"wave clear on voice 3 and the player's shot on voice 1, not silenced; a second shot 14 frames into "
+            f"the notes: sfx_cur {nm(k2)}; the notes hold voice 3 for {n} frames (design: 40)")
+
+        # sfx-title, sfx-start: no sound is asked for at the title; the press asks for the start note; the new game
+        # 6 frames later asks for wave start
+        safe(False)
+        quiet()
+        to_title()
+        bad = [(f, req(), list(calls)) for f in range(70) if (frame(0), req() != (0, 0, 0) or calls)[1]]
+        k0 = cur()
+        frame(BITS["fire"])
+        r0, c0, g0 = req(), list(calls), gstate()[0]
+        frame(0)
+        k1 = cur()
+        seq = []
+        for f in range(2, 7):
+            frame(0)
+            seq.append((req(), list(calls)))
+        g6, ph6 = gstate()[0], phase()
+        n = 0
+        while cur()[0] == ST and n < 100:
+            frame(0)
+            n += 1
+        rep("sfx-start", not bad and k0 == (0, 0, 0) and r0 == (ST, 0, 0) and c0 == [ST] and g0 == GS_TITLE and k1 == (ST, 0, 0)
+            and all(x == ((0, 0, 0), []) for x in seq[:4]) and seq[4] == ((0, 0, WS), [WS]) and g6 == GS_PLAY
+            and ph6 == (PHASE_INTRO, 0) and 6 + n <= NEW_GAME_COOLDOWN + 6,
+            f"70 title frames (the blink, the shapes swapping): sfx_play never called ({len(bad)} frames otherwise), "
+            f"nothing playing {nm(k0)}; the press: sfx_play called once, with {nm(c0)}, sfx_request {nm(r0)}, then "
+            f"sfx_cur {nm(k1)}: the start note on voice 1; no request in the 4 erase frames after it; the new game's "
+            f"frame (press + 6) asks for {nm(seq[4][0])}; the start note is over {6 + n} frames after the press, "
+            f"before the ship can fire (press + 6 + 25)")
+
+        # sfx-game-over: the last life. Nothing is asked for in PlayerDying's frames 1-99; GameOver's frame 0
+        launcher(False)
+        to_fight()
+        poke("zp_lives", [1])
+        quiet()
+        hit_player()
+        r0, bad = req(), []
+        for f in range(1, 100):
+            frame(0)
+            if req() != (0, 0, 0) or calls:
+                bad.append((f, req(), list(calls)))
+        kb = cur()
+        frame(0)
+        r1, c1, g1 = req(), list(calls), gstate()
+        frame(0)
+        k1 = cur()
+        n = held(0)
+        rep("sfx-game-over", r0 == (0, HA, HB) and not bad and kb == (0, 0, 0) and r1 == (GO, 0, 0) and c1 == [GO]
+            and g1 == (GS_OVER, 0) and k1 == (GO, 0, 0),
+            f"the last life: the hit {nm(r0)}; no request in PlayerDying's frames 1-99 ({len(bad)} otherwise) and "
+            f"the rumble over before GameOver (sfx_cur {nm(kb)} at frame 99); GameOver's frame 0: sfx_play called "
+            f"once, with {nm(c1)}, sfx_request {nm(r1)}, then sfx_cur {nm(k1)}: game over on voice 1, for {n} frames "
+            f"(design: 50)")
+
+        # sfx-volume: the SID's volume register is written by sfx_init and never again
+        d418 = mem(0xD418)[0]
+        shadow = peek("sfx_shadow", 24) if "sfx_shadow" in sym else None
+        rep("sfx-volume", vol_writes[0] == 0 and d418 == 0x0F and shadow in (None, 0x0F),
+            f"through every sound case above (a store checkpoint on $D418 from sfx-idle to here: play, deaths, the "
+            f"title, a new game, game over): {vol_writes[0]} writes to $D418; it reads ${d418:02X} through the monitor "
+            f"(volume 15, no filter)" + (f"; sfx_shadow + 24 = ${shadow:02X}" if shadow is not None else
+                                         "; no sfx_shadow in this build (release)"))
+        mon.checkpoint_delete(cp_play.number)
+        mon.checkpoint_delete(cp_vol.number)
 
         mon.checkpoint_delete(cp.number)
     finally:

@@ -8,9 +8,10 @@
 
 // Work out this frame's scripted stick: fire held, and right until the right clamp, then left
 // until the left clamp, and so on.
-// In:  zp_player_x_lo/hi   Out: autoplay_joy (JOY_* bits), panel_dirty
-// Uses: A
-// Cost: 40-50 cycles (counted), inside game_update
+// In:  zp_player_x_lo/hi, zp_game_frame   Out: autoplay_joy (JOY_* bits), panel_dirty
+// Uses: A; X and Y too in the frames it asks for the three effects
+// Cost: 50-60 cycles (counted), + 125 every 64th frame; inside game_update
+.const AUTOPLAY_SFX_PERIOD = 64         // frames between the three-effect requests (a power of 2)
 autoplay_update:
         lda autoplay_joy
         and #JOY_RIGHT
@@ -34,7 +35,26 @@ autoplay_update:
         sta panel_dirty
         lda #2                          // the respawn flash runs in every frame: player_update
         sta zp_player_invuln            // counts this to 1 (memory-map.md "What AUTOPLAY cannot
-        rts                             // measure", change 2). collide_update ignores it here
+                                        // measure", change 2). collide_update ignores it here
+        // Every 64 frames: three priority-3 effects, one a voice, so that the sound tick's worst
+        // case (three effects starting in one tick) is in every run (memory-map.md "Stage 4" (e)).
+        // In the border, nothing pending: 3 x 36 cycles.
+        lda zp_game_frame
+        and #AUTOPLAY_SFX_PERIOD - 1
+        bne !out+
+        lda #SFX_GAME_OVER              // voice 1
+        jsr sfx_play
+        lda #SFX_PLAYER_HIT_A           // voice 2
+        jsr sfx_play
+        lda #SFX_PLAYER_HIT_B           // voice 3
+        jsr sfx_play
+        inc autoplay_sfx_triples
+        bne !out+
+        inc autoplay_sfx_triples + 1
+        bne !out+
+        dec autoplay_sfx_triples        // saturate at $FFFF
+        dec autoplay_sfx_triples + 1
+!out:   rts
 
 // A hit on the player that collide_update's scans reported: counted, not answered (the player
 // can't be hit in the budget build; budget.json requires the count to be 1 or more, which shows
@@ -53,3 +73,5 @@ autoplay_count_hit:
 
 autoplay_joy:   .byte JOY_RIGHT | JOY_FIRE
 autoplay_player_hits:   .word 0         // little-endian, saturating at $FFFF
+autoplay_sfx_triples:   .word 0         // frames in which the three effects were asked for; the same
+                                        // (budget.json requires 1 or more)

@@ -1,0 +1,8 @@
+# uv run --package budget-runner python tests/games/swarm/stage3_collide_worst.py   (build/swarm/swarm.prg, VICE 3.10 x64sc PAL, DEBUG)
+A  stage3_costs.py's placed worst frame (shots on enemies 0 and 6, 3 divers at Y 216, the last rams): 8 frames, min 1995, max 2013 raster cycles; started on lines 41-41, ended on 72-73; score 000000 -> 000330; divers active after: 2
+   [PASS] with the sound requests: max 2013 (limit 2825); sfx_request at game_update_end in every run: [(0, 5, 6)] (required (0, 5, 6): hit A + 1 on voice 1, hit B + 1 on voice 2, no explosion request)
+B  a diver in each shot's band, missed; 2 parked hits; the third diver rams: 8 frames, min 2553, max 2553 raster cycles; started on lines 41-41, ended on 95-95; score 000000 -> 000300; divers active after: 2
+   [PASS] with the sound requests: max 2553 (limit 2825); sfx_request at game_update_end in every run: [(0, 5, 6)] (required (0, 5, 6): hit A + 1 on voice 1, hit B + 1 on voice 2, no explosion request)
+C  a diver under each shot, over a parked enemy: 2 diver hits; the third diver rams: 8 frames, min 2571, max 2571 raster cycles; started on lines 41-41, ended on 95-95; score 000000 -> 000300; divers active after: 0
+   [PASS] with the sound requests: max 2571 (limit 2825); sfx_request at game_update_end in every run: [(0, 5, 6)] (required (0, 5, 6): hit A + 1 on voice 1, hit B + 1 on voice 2, no explosion request)
+after all of the above: game_overrun_count 0, mux_late_count 0, irq_late_count 0, mux_pin_drop_count 0 (all required 0)

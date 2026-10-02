@@ -29,6 +29,11 @@ Run from the repo root (about 1 minute):
 
 Results of the last run: tests/games/swarm/stage3_collide_worst.txt.
 
+Stage 4 part B (the sound in): on a build that has engine/sfx.asm the script also reads sfx_request
+(3 bytes) at game_update_end of each placed frame and holds each case to 2,825 (memory-map.md
+"Stage 4" (f), item 7). Those results: tests/games/swarm/stage4b_collide_worst.txt (the same
+command, tee'd there; stage3_collide_worst.txt is kept as stage 3's).
+
 The same three frames on the box scan this code replaced (commit 039ad26), for what the switch
 bought: build that commit's game in a worktree and pass its PRG (its main.vs is read from beside it):
 
@@ -46,6 +51,7 @@ from budget_runner.session import STOP_TIMEOUT, MeasureError, Vice, build_progra
 from vice_monitor import CPU_OP_EXEC
 
 RUNS = 8
+LIMIT = 2825                        # row 8, with the sound requests (stage 4 part B)
 ENEMY0, ESHOT0, PSHOT0, MUX_OFF = 6, 1, 4, 0xFF
 PARKED, DIVE, EXPLODING = 1, 0x81, 0x83
 GS_PLAY, GS_DYING, GS_OVER = 0, 2, 3
@@ -149,8 +155,10 @@ def main() -> int:
             frame()
             return cost, [e.line for e in events if e.pc == a][0], [e.line for e in events if e.pc == b][0]
 
+        failed = []
+
         def case(name, shots, divers, places, want):
-            runs = []
+            runs, reqs = [], set()
             for _ in range(RUNS):
                 new_game()
                 px = player_x()
@@ -166,11 +174,22 @@ def main() -> int:
                 if got != want or peek("zp_game_state")[0] != GS_DYING or peek("zp_lives")[0] != 2:
                     raise MeasureError(f"{name}: states {st.hex()}, game state {peek('zp_game_state')[0]}")
                 runs.append(r)
+                reqs.add(tuple(peek("sfx_request", 3)) if "sfx_request" in sym else None)
                 score1 = peek("game_score", 3).hex()
             costs = [r[0] for r in runs]
             print(f"{name}: {len(costs)} frames, min {min(costs)}, max {max(costs)} raster cycles; started on lines "
                   f"{min(r[1] for r in runs)}-{max(r[1] for r in runs)}, ended on {min(r[2] for r in runs)}-"
                   f"{max(r[2] for r in runs)}; score {score0} -> {score1}; divers active after: {peek('zp_divers_active')[0]}")
+            if None not in reqs:
+                # Stage 4 part B (memory-map.md "Stage 4" (f), item 7): the frame with its sound requests. The
+                # player is hit in every case, so voices 1 and 2 hold the hit's two effects and the enemy
+                # explosion isn't asked for; no shot is fired (the ship is dying), so voice 0 holds nothing.
+                want_req = (0, sym["SFX_PLAYER_HIT_A"] + 1, sym["SFX_PLAYER_HIT_B"] + 1)
+                ok = max(costs) <= LIMIT and reqs == {want_req}
+                failed.append(not ok)
+                print(f"   [{'PASS' if ok else 'FAIL'}] with the sound requests: max {max(costs)} (limit {LIMIT}); sfx_request at "
+                      f"game_update_end in every run: {sorted(reqs)} (required {want_req}: hit A + 1 on voice 1, hit B + 1 "
+                      f"on voice 2, no explosion request)")
 
         case("A  stage3_costs.py's placed worst frame (shots on enemies 0 and 6, 3 divers at Y 216, the last rams)",
              (0, 6), (12, 13, 14),
@@ -186,7 +205,7 @@ def main() -> int:
              {0: PARKED, 12: PARKED, 13: EXPLODING, 14: EXPLODING, 15: EXPLODING})
         counts = {k: peek(k)[0] for k in ("game_overrun_count", "mux_late_count", "irq_late_count", "mux_pin_drop_count")}
         print("after all of the above: " + ", ".join(f"{k} {c}" for k, c in counts.items()) + " (all required 0)")
-        return 1 if any(counts.values()) else 0
+        return 1 if any(counts.values()) or any(failed) else 0
     finally:
         v.close()
 

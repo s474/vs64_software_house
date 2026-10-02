@@ -66,7 +66,8 @@ title_enter:
         ldx #TEXT_PRESS_FIRE
         jmp game_text_draw
 
-// A frame of the title (every frame after the one it was entered in).
+// A frame of the title (every frame after the one it was entered in). No sound is asked for
+// at the title except the start sound, in the frame of the press.
 // In:  zp_joy_pressed, title_step, zp_state_timer
 // Out: texts drawn or erased, the three sprites' shapes, the generator stepped or seeded, a new game
 // Uses: A, X, Y, zp_tmp4-5
@@ -130,7 +131,8 @@ title_update:
         lda zp_irq_frame                // has run since power-on; never zeroed
         eor zp_rng_lo
         jsr rng_seed                    // A = low, X = high; it replaces 0/0 itself
-        // SFX (part B): the start sound, voice 1, priority 3
+        lda #SFX_START                  // the start sound (voice 1, priority 3). In the border;
+        jsr sfx_play                    // nothing is pending: 36 cycles. A, X, Y are free here
         lda #MUX_OFF
         sta mux_y + SPR_ENEMY
         sta mux_y + SPR_ENEMY + FORM_COLS

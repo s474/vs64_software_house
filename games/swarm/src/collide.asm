@@ -33,11 +33,15 @@
 // enemy stays (a diver carries on); a hit on the player is counted in autoplay_player_hits and
 // not answered, (b) and (c) run in every frame whatever the invulnerability timer, and (c) runs
 // after a hit in (b) too. So nothing dies there: the answers are measured on the game build.
-// Sound is stage 4 part B's: the places are marked "SFX (part B)".
+// SOUND (memory-map.md "Stage 4 part B", requests 7 and 8): the enemy explosion is asked for ONCE
+// a frame, at the routine's end, if an enemy was hit (collide_hit, set by collide_enemy_hit) AND the
+// player wasn't: the two paths that call player_hit (which asks for the hit's two effects) go
+// straight to collide_update_end, every other path goes through !sfx. In the hit's frame the
+// explosion would lose voice 2 to the hit anyway (priority 3 against 2).
 
 // The frame's collisions: (a), (b), (c) above.
 // In:  zp_fx (this frame's), zp_game_state, zp_player_invuln
-// Out: shots removed, enemies exploding, game_score, panel_dirty, the player hit
+// Out: shots removed, enemies exploding, game_score, panel_dirty, the player hit, the sounds asked for
 // Uses: A, X, Y
 // Cost: to collide_update_end, raster cycles, IRQs excluded, measured (2026-10-02, VICE 3.10 x64sc
 //       PAL, DEBUG; tests/games/swarm/stage3_costs.py, results beside it):
@@ -48,6 +52,9 @@
 //                         started, 3 scores, the player's hit. Lines 40-69
 //         1,033           the game, both shots hit with 3 divers in a shot's band
 //         311 / 690       the player's hit alone: by a shot / by a ram
+//       Stage 4 part B, with the sound requests (tests/games/swarm/stage4b_collide_worst.txt): the
+//       placed worst frames A / B / C 2,013 / 2,553 / 2,571, lines 41 to 73 / 95 / 95 (they were
+//       1,863 / 2,446 / 2,471 without sound); 112-1,239 in the AUTOPLAY build (1,385 in make test).
 //       Budget 2,825 (row 8). The box scan it replaced: 2,004-2,209 in AUTOPLAY, 2,833-2,836 in
 //       the same placed worst frame (stage3_costs_boxscan.txt, commit 039ad26)
 collide_update:
@@ -55,6 +62,8 @@ collide_update:
         clc                                     // 2
         adc #GRID_X0                            // 2
         sta collide_fx                          // 4
+        lda #0                                  // 2
+        sta collide_hit                         // 4   no enemy hit yet this frame
         // (a) Each player shot in flight against the enemies.
         .for (var i = 0; i < SPR_PSHOT_COUNT; i++) {
                 lda mux_y + SPR_PSHOT + i               // 4
@@ -143,7 +152,7 @@ collide_update:
         lda zp_game_state               // 3
         ora zp_player_invuln            // 3
         beq !+                          // 3 / 2
-        jmp collide_update_end          // dying, respawning, game over or invulnerable
+        jmp !sfx+                       // dying, respawning, game over or invulnerable
 !:
 #endif
         // (b) The Y guard (memory-map.md "The collision budget", rule 3): a shot can touch the
@@ -183,7 +192,7 @@ collide_update:
                 bne !ram+                       // 2 / 3
 !no:
         }
-        jmp collide_update_end          // 3   no diver low enough: the usual frame
+        jmp !sfx+                       // 3   no diver low enough: the usual frame
 !ram:   ldx #SPR_PLAYER
         ldy #COL_PAIR_PLAYER_ENEMY
         jsr collision_begin
@@ -208,9 +217,12 @@ collide_update:
 #endif
 !no:
         }
-        // SFX (part B): the enemy explosion sound, voice 2, priority 2, asked for ONCE here if a
-        // player shot hit an enemy this frame (a flag set in collide_enemy_hit's shot path; not for
-        // a ram: memory-map.md "Stage 4" (a)). Every jmp to collide_update_end must pass through it
+        // The enemy explosion sound (voice 2, priority 2), once a frame. Every path on which the
+        // player wasn't hit passes through here.
+!sfx:   lda collide_hit                 // 4
+        beq collide_update_end          // 3 / 2
+        lda #SFX_ENEMY_EXPLOSION        // 2
+        jsr sfx_play                    // 34  nothing else asks for voice 2 but the hit
 collide_update_end:
         rts
 
@@ -220,9 +232,12 @@ collide_update_end:
 // The high score is not touched: it is updated when the game ends (design "Title and game-over
 // screens"; PANEL_DIRTY_HI is never set by a play-state routine).
 // In:  X = the enemy's virtual sprite (SPR_ENEMY + e), its state not Dead or Exploding
-// Out: nothing       Uses: A, X, Y
-// Cost: 85 cycles + jsr/rts in AUTOPLAY, + enemy_explode's 73-100 in the game (counted)
+// Out: collide_hit = 1 (collide_update asks for the explosion sound at its end)
+// Uses: A, X, Y
+// Cost: 91 cycles + jsr/rts in AUTOPLAY, + enemy_explode's 73-100 in the game (counted)
 collide_enemy_hit:
+        lda #1                          // 2
+        sta collide_hit                 // 4
         ldy enemy_row - SPR_ENEMY,x     // 4  the type: 0-2
         lda enemy_state - SPR_ENEMY,x   // 4
         bpl !parked+                    // 3 / 2
@@ -268,3 +283,4 @@ collide_enemy_hit:
 collide_fx:     .byte 0         // fx + GRID_X0, this frame
 collide_y:      .byte 0         // the shot's Y + GRID_Y_OFF
 collide_best:   .byte 0         // the virtual sprite of the enemy the shot hits; 0 = none
+collide_hit:    .byte 0         // 1 when an enemy was hit this frame (by a shot or a ram)

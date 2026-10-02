@@ -1,9 +1,12 @@
-"""Measured costs of Swarm stage 4 PART A (M4): waves, the wave-clear bonus, the title, a new game.
+"""Measured costs of Swarm stage 4 (M4): waves, the wave-clear bonus, the title, a new game, and
+(part B) the sound: the tick and every routine that makes a sound request, with the request in.
 
 What is measured, and against what, is the checklist in docs/games/swarm/memory-map.md "Stage 4:
-what must be done to stay in budget", (f). Part A has no sound, so the items that need the sound
-module (7 and 9, and the sound requests inside 1, 2, 6 and 8) are part B's; this script measures
-the rest and says so on each line. Raster cycles, IRQ time excluded (the budget runner's
+what must be done to stay in budget", (f), and "Stage 4 part B: sound requests", step 6. Item 7
+(collide_update's placed frames A, B, C with their sound requests) is measured by
+stage3_collide_worst.py, which runs those frames: its part B results are stage4b_collide_worst.txt.
+Where a frame makes a sound request, the line gives sfx_request (effect + 1 for each of the
+module's voices 0-2) as read at that frame's game_update_end. Raster cycles, IRQ time excluded (the budget runner's
 profile_excl_irq, engine/README.md#budget-units), with the raster lines each span started and
 ended on. Idle figures are the DEBUG idle loop's count for that frame x 16 (zp_idle_lo/hi, read at
 the next frame's game_update_end, before the loop runs again).
@@ -11,7 +14,11 @@ the next frame's game_update_end, before the loop runs again).
 Part 1, the AUTOPLAY budget build (tests/games/swarm/main.asm, built as `make test` builds it):
 no title, the constant seed, wave 12 (pattern 3, loop 3) entered through its Intro, nothing dies.
 SAMPLES passes of each of stage 3's spans against the budgets in budget.json, to show that nothing
-regressed, then FRAMES more frames and the counters (items 8 and 11, without sound).
+regressed (item 8: player_update and diver_update with their requests, and the lines they ran on),
+sfx_play's own span in the display, item 9 (the sound tick: game_irq_bottom -> irq_exit_rti and
+sfx_update -> sfx_update_end, IRQ time NOT excluded, both expected to read exactly their measured
+worst case, 498 and 417, because AUTOPLAY starts three effects in one tick every 64 frames; the
+line the tick's rti is on; all IRQ time a frame), then FRAMES more frames and the counters (item 11).
 
 Part 2, the game's DEBUG build (build/swarm). States are set through the monitor at
 game_update_end and the game then runs by itself; the stick is the monitor's joyport.
@@ -38,7 +45,7 @@ game_update_end and the game then runs by itself; the stick is the monitor's joy
   item 12  the sizes of the engine block, the game tables and the game code, from the build's
            memory map
 
-Run from the repo root (about 3 minutes):
+Run from the repo root (about 4 minutes):
 
     uv run --package budget-runner python tests/games/swarm/stage4_costs.py | tee tests/games/swarm/stage4_costs.txt
 
@@ -50,7 +57,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from budget_runner.evaluate import SampleCounter, profile_costs
+from budget_runner.evaluate import FRAME, SampleCounter, irq_time_by_frame, profile_costs
 from budget_runner.session import STOP_TIMEOUT, MeasureError, Vice, build_program
 from vice_monitor import CPU_OP_EXEC, run_frames
 
@@ -67,7 +74,8 @@ SPANS = [("eshot_update", "eshot_update_end", 200, "budget, row 7"),
          ("panel_update", "panel_update_end", 250, "budget, row 9"),
          ("game_update", "game_update_end", 6050, "budget"),
          ("mux_update", "mux_update_fast", 7400, "engine limit, frames with no overflow; average <= 5,000"),
-         ("mux_update", "mux_update_end", 13000, "engine limit, all frames")]
+         ("mux_update", "mux_update_end", 13000, "engine limit, all frames"),
+         ("sfx_play", "sfx_play_end", 120, "budget.json: a request in the display")]
 FRAME_SPANS = (("game_update", "game_update_end"), ("panel_update", "panel_update_end"),
                ("formation_update", "formation_update_end"), ("mux_update", "mux_update_end"))
 ENEMY0, ESHOT0, PSHOT0, MUX_OFF, ENEMIES = 6, 1, 4, 0xFF, 18
@@ -76,7 +84,8 @@ GS_PLAY, GS_RESPAWN, GS_DYING, GS_OVER, GS_TITLE = 0, 1, 2, 3, 4
 PHASE_FIGHT, PHASE_INTRO, PHASE_CLEAR, CLEAR_PAUSE = 0, 1, 2, 75
 JOYPORT_IO_SIMULATION, PORT2 = 37, 1
 RIGHT, LEFT, FIRE = 0x08, 0x04, 0x10
-IDLE_MIN, ONEOFF_GAME, ONEOFF_IDLE, FORMATION, BORDER_LINE, PANEL4 = 650, 4000, 5000, 750, 49, 350
+IDLE_MIN, ONEOFF_GAME, ONEOFF_IDLE, FORMATION, BORDER_LINE, PANEL4 = 670, 4000, 5000, 750, 49, 350
+TICK, SFX_UPDATE, TICK_RTI_LINE, IRQ_FRAME, IRQ_FRAMES = 498, 417, 260, 4500, 300
 
 
 def span(v, start, end, samples):
@@ -102,7 +111,7 @@ def main() -> int:
         print(f"[{'PASS' if ok else 'FAIL'}] {text}")
 
     print("# uv run --package budget-runner python tests/games/swarm/stage4_costs.py   (the AUTOPLAY budget build and "
-          "the game's DEBUG build, VICE 3.10 x64sc PAL; stage 4 part A: no sound)")
+          "the game's DEBUG build, VICE 3.10 x64sc PAL; stage 4 part B: with sound)")
 
     # ------------------------------------------------------------------ item 12: sizes
     out = subprocess.run(["make", "-B", "GAME=swarm"], cwd=REPO, capture_output=True, text=True).stdout
@@ -130,6 +139,33 @@ def main() -> int:
                  f"ends on {lb[0]}-{lb[-1]}")
             if start == "formation_update":
                 line(lb[-1] < BORDER_LINE, f"AUTOPLAY formation_update ended on line {lb[-1]} at the latest (required: above {BORDER_LINE})")
+        # ---- item 9: the sound tick, IRQ time included (it IS IRQ time)
+        gib, rti, su, sue = (v.addr(x) for x in ("game_irq_bottom", "irq_exit_rti", "sfx_update", "sfx_update_end"))
+        counter = SampleCounter(gib, rti)
+        events = v.trace([gib, rti], lambda ev: counter.update(ev) >= SAMPLES, "the sound tick")
+        costs = profile_costs(events, gib, rti)[:SAMPLES]
+        ends = [events[i + 1] for i, e in enumerate(events[:-1]) if e.pc == gib and events[i + 1].pc == rti]
+        last = max(ends, key=lambda e: (e.line, e.cycle))
+        line(max(costs) == TICK and last.line <= TICK_RTI_LINE,
+             f"item 9, the sound tick, game_irq_bottom -> irq_exit_rti (IRQ time): {len(costs)} ticks, min {min(costs)}, "
+             f"avg {sum(costs) / len(costs):.1f}, max {max(costs)} cycles (required: exactly {TICK}, the measured worst "
+             f"case, three effects starting in one tick: {costs.count(TICK)} of the ticks were {TICK}); the rti is reached "
+             f"on raster line {min(e.line for e in ends)}-{last.line} (latest: line {last.line}, cycle {last.cycle}; "
+             f"required: by line {TICK_RTI_LINE})")
+        counter = SampleCounter(su, sue)
+        events = v.trace([su, sue], lambda ev: counter.update(ev) >= SAMPLES, "sfx_update")
+        costs = profile_costs(events, su, sue)[:SAMPLES]
+        line(max(costs) == SFX_UPDATE,
+             f"item 9, sfx_update -> sfx_update_end in the game: {len(costs)} ticks, min {min(costs)}, avg "
+             f"{sum(costs) / len(costs):.1f}, max {max(costs)} cycles (required: exactly {SFX_UPDATE}); starts on raster "
+             f"line {min(e.line for e in events if e.pc == su)}-{max(e.line for e in events if e.pc == su)}")
+        d, r = v.addr("irq_dispatch"), v.addr("irq_exit_rti")
+        events = v.trace([d, r], lambda ev: bool(ev) and ev[-1].t // FRAME >= IRQ_FRAMES + 1, "irq time")
+        totals = irq_time_by_frame(events, d, r, IRQ_FRAMES)
+        line(max(totals) <= IRQ_FRAME,
+             f"item 9, all IRQ time a frame (the multiplexer and the sound tick): {IRQ_FRAMES} frames, min {min(totals)}, "
+             f"avg {sum(totals) / len(totals):.1f}, max {max(totals)} cycles (limit {IRQ_FRAME}; part A, the tick doing "
+             f"nothing: 2,707)")
         run_frames(v.mon, FRAMES)
 
         def rd(label, n=1):
@@ -140,13 +176,15 @@ def main() -> int:
         zero = {k: rd(k, n) for k, n in (("game_overrun_count", 1), ("mux_late_count", 1), ("irq_late_count", 1),
                                          ("mux_pin_drop_count", 1), ("mux_pin_excess_count", 1))}
         flicker, age, hits = rd("game_flicker_frames", 2), rd("mux_max_age"), rd("autoplay_player_hits", 2)
-        total = WARMUP + len(SPANS) * SAMPLES + FRAMES
-        line(idle >= IDLE_MIN and not any(zero.values()) and age <= 1 and flicker >= 1 and hits >= 1
+        triples = rd("autoplay_sfx_triples", 2)
+        total = rd("autoplay_sfx_triples", 2) * 64
+        line(idle >= IDLE_MIN and not any(zero.values()) and age <= 1 and flicker >= 1 and hits >= 1 and triples >= 1
              and (rd("zp_wave"), rd("zp_pattern"), rd("zp_loop"), rd("zp_wave_phase"), rd("zp_enemies_alive")) == (0x12, 2, 3, PHASE_FIGHT, ENEMIES),
-             f"AUTOPLAY after {FRAMES} more frames (about {total} in all; items 8 and 11, no sound yet): idle in the "
+             f"AUTOPLAY after {FRAMES} more frames (about {total} in all; item 11, with sound): idle in the "
              f"worst frame {idle} cycles (required >= {IDLE_MIN}); " + ", ".join(f"{k} {x}" for k, x in zero.items())
              + f" (all required 0); mux_max_age {age} (required <= 1); game_flicker_frames {flicker} "
-             f"({100 * flicker / total:.1f}% of frames); autoplay_player_hits {hits}; shown wave {rd('zp_wave'):02x}, "
+             f"({100 * flicker / total:.1f}% of frames); autoplay_player_hits {hits}; autoplay_sfx_triples {triples} (three "
+             f"priority-3 effects asked for in one frame, every 64th; required >= 1); shown wave {rd('zp_wave'):02x}, "
              f"pattern {rd('zp_pattern')}, loop {rd('zp_loop')}, phase {rd('zp_wave_phase')} (Fight), enemies alive "
              f"{rd('zp_enemies_alive')}: it started through wave 12's Intro and the formation is full")
     finally:
@@ -187,16 +225,18 @@ def main() -> int:
 
         def frames(n, spans=FRAME_SPANS):
             """The next n whole frames, measured one after another: a list of {span start: (cost, first
-            line, last line)} for every span that ran in the frame, with "idle": that frame's idle cycles.
+            line, last line)} for every span that ran in the frame, with "idle": that frame's idle cycles and
+            "req": sfx_request (3 bytes) at that frame's game_update_end.
             The machine is left stopped at game_update_end of the frame after the last one measured."""
             d, r = v.addr("irq_dispatch"), v.addr("irq_exit_rti")
             pairs = [(v.addr(a), v.addr(b)) for a, b in spans]
             gu, gu_end = pairs[0]
-            idles = []
+            idles, reqs = [], []
 
             def done(events):
                 if events and events[-1].pc == gu_end:
                     idles.append(idle_now())      # the idle count of the frame before this one
+                    reqs.append(tuple(peek("sfx_request", 3)))       # this frame's requests, before the tick
                 return len(idles) > n
 
             events = v.trace(sorted({x for p in pairs for x in p} | {d, r}), done, f"{n} frames")
@@ -204,7 +244,7 @@ def main() -> int:
             out = []
             for j in range(n):
                 seg = events[starts[j]:starts[j + 1]]
-                row = {"idle": idles[j + 1]}
+                row = {"idle": idles[j + 1], "req": reqs[j]}
                 for (na, _), (a, b) in zip(spans, pairs):
                     if any(e.pc == a for e in seg) and any(e.pc == b for e in seg):
                         row[na] = (profile_costs(seg, a, b, d, r)[-1], [e.line for e in seg if e.pc == a][-1],
@@ -221,6 +261,12 @@ def main() -> int:
 
         def worst(rows, name):
             return max(r[name][0] for r in rows)
+
+        def sfx(name):
+            return sym["SFX_" + name] + 1
+
+        def reqs_of(rows):
+            return sorted({r["req"] for r in rows})
 
         def overruns():
             return p1("game_overrun_count")
@@ -313,16 +359,20 @@ def main() -> int:
             erase_rows += got[1:6]
             new_rows.append(got[6])
             after_rows.append(got[7])
-        line(worst(press_rows, "game_update") <= ONEOFF_GAME and min(r["idle"] for r in press_rows) >= ONEOFF_IDLE,
-             f"item 5, the title, the press's frame (rng_next, rng_seed, 3 sprites hidden, PRESS FIRE erased): {RUNS} "
-             f"frames, {summary(press_rows, 'game_update')}; idle {min(r['idle'] for r in press_rows)}-"
-             f"{max(r['idle'] for r in press_rows)}")
+        line(worst(press_rows, "game_update") <= ONEOFF_GAME and min(r["idle"] for r in press_rows) >= ONEOFF_IDLE
+             and reqs_of(press_rows) == [(sfx("START"), 0, 0)],
+             f"item 5, the title, the press's frame (rng_next, rng_seed, the start sound's request, 3 sprites hidden, "
+             f"PRESS FIRE erased): {RUNS} frames, {summary(press_rows, 'game_update')}; idle "
+             f"{min(r['idle'] for r in press_rows)}-{max(r['idle'] for r in press_rows)}; sfx_request {reqs_of(press_rows)} "
+             f"(START + 1 on voice 0; part A without the request: 446)")
         line(worst(erase_rows, "game_update") <= ONEOFF_GAME,
              f"item 5, the title, the five erase frames after it: {len(erase_rows)} frames, "
              f"{summary(erase_rows, 'game_update')}; idle {min(r['idle'] for r in erase_rows)}-{max(r['idle'] for r in erase_rows)}")
         ok = (worst(new_rows, "game_update") <= ONEOFF_GAME and worst(new_rows, "formation_update") <= FORMATION
-              and min(r["idle"] for r in new_rows) >= ONEOFF_IDLE and overruns() == 0)
-        line(ok, f"item 4, the new game's frame (game_new from the title: every init, WAVE 01, enemy 0; a one-off frame): "
+              and min(r["idle"] for r in new_rows) >= ONEOFF_IDLE and overruns() == 0
+              and reqs_of(new_rows) == [(0, 0, sfx("WAVE_START"))])
+        line(ok, f"item 4, the new game's frame (game_new from the title: every init, WAVE 01, the wave start sound's "
+             f"request {reqs_of(new_rows)}, enemy 0; a one-off frame; part A: 2,190): "
              f"{RUNS} frames, {summary(new_rows, 'game_update')}; {summary(new_rows, 'formation_update')}; "
              f"{summary(new_rows, 'mux_update')}; idle {min(r['idle'] for r in new_rows)}-{max(r['idle'] for r in new_rows)} "
              f"(one-off rule: game_update <= {ONEOFF_GAME}, formation_update <= {FORMATION}, idle >= {ONEOFF_IDLE}, no "
@@ -420,11 +470,13 @@ def main() -> int:
             if (p1("zp_wave_phase"), p1("zp_wave_timer"), p1("zp_enemies_alive")) != (PHASE_CLEAR, 1, 0) \
                     or p1("zp_anim_frame") == anim0 or peek("game_score", 3).hex() != ("999990" if i >= RUNS - 2 else "001000"):
                 raise MeasureError(f"clear: phase {p1('zp_wave_phase')}, score {peek('game_score', 3).hex()}")
-        ok = worst(rows, "formation_update") <= FORMATION and max(r["formation_update"][2] for r in rows) < BORDER_LINE
+        ok = (worst(rows, "formation_update") <= FORMATION and max(r["formation_update"][2] for r in rows) < BORDER_LINE
+              and reqs_of(rows) == [(0, 0, sfx("WAVE_CLEAR"))])
         line(ok, f"item 1, Clear's first frame: formation_update with a drift turn, an animation swap and the last 3 "
              f"explosions ending together, the third paying the bonus (game_wave_clear; in 2 of the {RUNS} the score "
              f"stops at 999,990, its longer path): {summary(rows, 'formation_update')} (limit {FORMATION}; it must end "
-             f"above line {BORDER_LINE}; no sound request yet: part B adds about 57-75); {summary(rows, 'game_update')}")
+             f"above line {BORDER_LINE}; with the wave clear sound's request, X kept: sfx_request {reqs_of(rows)}, WAVE_CLEAR + 1 "
+             f"on voice 2; part A without it: 650-670, lines 37-38; expected 692-718); {summary(rows, 'game_update')}")
 
         # ---- item 2: a later wave's Intro frame 0
         rows = []
@@ -437,9 +489,10 @@ def main() -> int:
             if (p1("zp_wave_phase"), p1("zp_wave_timer")) != (PHASE_INTRO, 1) or p1("zp_wave") != 0x04 or p1("zp_loop") != 1:
                 raise MeasureError("intro frame 0: not there")
         ok = (worst(rows, "game_update") <= ONEOFF_GAME and worst(rows, "formation_update") <= FORMATION
-              and min(r["idle"] for r in rows) >= ONEOFF_IDLE and overruns() == 0)
-        line(ok, f"item 2, a later wave's Intro frame 0 (the stores advance, formation_reset, diver_init, WAVE nn, enemy 0; "
-             f"a one-off frame): {RUNS} frames, {summary(rows, 'game_update')}; {summary(rows, 'formation_update')}; "
+              and min(r["idle"] for r in rows) >= ONEOFF_IDLE and overruns() == 0
+              and reqs_of(rows) == [(0, 0, sfx("WAVE_START"))])
+        line(ok, f"item 2, a later wave's Intro frame 0 (the stores advance, formation_reset, diver_init, WAVE nn, the wave "
+             f"start sound's request {reqs_of(rows)}, enemy 0; a one-off frame; part A: 1,892): {RUNS} frames, {summary(rows, 'game_update')}; {summary(rows, 'formation_update')}; "
              f"{summary(rows, 'mux_update')}; idle {min(r['idle'] for r in rows)}-{max(r['idle'] for r in rows)} (one-off "
              f"rule: <= {ONEOFF_GAME}, <= {FORMATION}, idle >= {ONEOFF_IDLE}, no overrun: game_overrun_count {overruns()})")
 
@@ -500,9 +553,11 @@ def main() -> int:
             rows1.append(dict(frames(1)[0], four=True))
         hi_only, four = [r for r in rows1 if not r["four"]], [r for r in rows1 if r["four"]]
         ok = (max(r["formation_update"][2] for r in rows0 + rows1) < BORDER_LINE
-              and worst(rows1, "panel_update") <= PANEL4 and worst(rows0 + rows1, "formation_update") <= FORMATION)
+              and worst(rows1, "panel_update") <= PANEL4 and worst(rows0 + rows1, "formation_update") <= FORMATION
+              and reqs_of(rows0) == [(sfx("GAME_OVER"), 0, 0)])
         line(ok, f"item 6, GameOver with 3 divers still out (returning; wave 6: loop 1), the score above the high score. "
-             f"Frame 0 (the compare and copy, GAME OVER written, the dirty flag; no sound request yet): "
+             f"Frame 0 (the compare and copy, GAME OVER written, the dirty flag, the game over sound's request: sfx_request "
+             f"{reqs_of(rows0)}; part A: game_update 1,524, formation_update ending on line 37): "
              f"{summary(rows0, 'game_update')}; {summary(rows0, 'formation_update')}. Frame 1: panel_update "
              f"{min(r['panel_update'][0] for r in hi_only)}-{max(r['panel_update'][0] for r in hi_only)} with the high "
              f"score alone dirty (what the game asks for) and {min(r['panel_update'][0] for r in four)}-"
@@ -590,8 +645,8 @@ def main() -> int:
              f"session {gmin} (required >= {IDLE_MIN})")
     finally:
         v.close()
-    print("items 7 and 9 (the sound tick, collide_update's placed frames with their sound requests) and the sound "
-          "requests inside items 1, 2, 6 and 8 are part B's: there is no sound module in this build")
+    print("item 7 (collide_update's placed frames A, B, C with their sound requests): stage3_collide_worst.py, results "
+          "in stage4b_collide_worst.txt")
     return 1 if bad else 0
 
 

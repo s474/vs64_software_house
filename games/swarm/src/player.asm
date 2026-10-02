@@ -56,11 +56,18 @@ player_respawn:
 // redrawn (by panel_update, next frame), all enemy shots removed, the ship becomes the white
 // explosion, the game state PlayerDying. player_update, later in this frame, shows the first
 // explosion shape and doesn't move or fire. Player shots in flight are left alone.
+// The player hit sound is two effects started together (voices 2 and 3, priority 3): A then B.
+// Both callers (collide_update) jump to their end after this, so no register is kept.
 // In:  nothing       Out: nothing
-// Uses: A
-// Cost: 60 cycles + jsr/rts (counted); at most once a frame, from collide_update
+// Uses: A, X, Y
+// Cost: 132-147 cycles + jsr/rts (counted: 60 + the two requests, 36 + 36, or 36 + 51 when a
+//       dive or the wave clear was asked for on voice 3 earlier in the frame); at most once a
+//       frame, from collide_update
 player_hit:
-        // SFX (part B): the player hit, two effects started together, voices 2 and 3, priority 3
+        lda #SFX_PLAYER_HIT_A                   // 2
+        jsr sfx_play                            // 34   voice 2: nothing pending (the explosion is
+        lda #SFX_PLAYER_HIT_B                   //      asked for after this, and not in this frame)
+        jsr sfx_play                            // 34 / 49   voice 3
         dec zp_lives                            // 5
         lda panel_dirty                         // 4
         ora #PANEL_DIRTY_LIVES                  // 2
@@ -85,9 +92,12 @@ player_hit:
 // Runs LAST in the frame, after the collisions: a player hit this frame doesn't move or fire, and
 // a slot freed by a hit can be fired from in the same frame.
 // In:  player_joy (JOY_* bits), zp_game_state
-// Out: mux_x_lo/hi, mux_col, mux_ptr, mux_y + SPR_PLAYER; a shot spawned in a free slot
+// Out: mux_x_lo/hi, mux_col, mux_ptr, mux_y + SPR_PLAYER; a shot spawned in a free slot, with
+//      its sound asked for
 // Uses: A, X, Y
-// Cost: to player_update_end, raster cycles, IRQs excluded, measured
+// Cost: stage 4 part B, with the shot's sound request, measured: 92-318 raster cycles, average 128,
+//       in the AUTOPLAY build (600 passes, lines 43-88; 303 in make test; budget 365:
+//       tests/games/swarm/stage4_costs.txt). Before the sound: to player_update_end, raster cycles, IRQs excluded, measured
 //       (tests/games/swarm/stage3_costs.txt): 92-260, average 125, in the AUTOPLAY build, which
 //       holds the invulnerability timer at 2 so that the flash runs in every frame (600 passes,
 //       lines 43-86: the 260 met a badline and a row's sprites; 248 in make test). On the game
@@ -182,8 +192,7 @@ player_update:
         bne player_update_end           // always
 
         // The longest path ends here with no jump: the shot and the ship take the same X.
-!spawn: // SFX (part B): the player shot sound, voice 1, priority 1 (X is the shot's slot)
-        lda #PSHOT_SPAWN_Y
+!spawn: lda #PSHOT_SPAWN_Y
         sta mux_y + SPR_PSHOT,x
         lda #PSHOT_COOLDOWN
         sta zp_player_cooldown
@@ -193,6 +202,9 @@ player_update:
         lda zp_player_x_hi
         sta mux_x_hi + SPR_PSHOT,x
         sta mux_x_hi + SPR_PLAYER
+        lda #SFX_PLAYER_SHOT            // the player shot sound (voice 1, priority 1): the routine's
+        jsr sfx_play                    // last work, so X (the slot) isn't kept. 36, or 51 when an
+                                        // enemy shot's request is pending on voice 1 (it is replaced)
 player_update_end:
         rts
 .errorif PLAYER_X_MIN < PLAYER_SPEED || PLAYER_X_MIN > 255 || PLAYER_X_MAX < 256 || PLAYER_X_MAX > 511 - PLAYER_SPEED, "player_update's clamps assume X_MIN in the low page and X_MAX in the high one"

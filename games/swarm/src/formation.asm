@@ -171,8 +171,8 @@ enemy_explode:
 // Enemy X is dead: hide its sprite, count it, and when it was the last one the wave is cleared:
 // game_wave_clear (game.asm) pays the bonus and starts the Clear phase in this same frame.
 // In:  X = enemy index 0-17      Out: X preserved
-// Uses: A
-// Cost: 28 cycles + jsr/rts (counted); + game_wave_clear's 62-78 for the last enemy of a wave.
+// Uses: A; for the last enemy of a wave also Y and zp_tmp0 (game_wave_clear's sound request)
+// Cost: 28 cycles + jsr/rts (counted); + game_wave_clear's 104-120 for the last enemy of a wave.
 //       Only when an explosion ends
 enemy_kill:
         lda #ENEMY_DEAD

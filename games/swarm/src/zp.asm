@@ -23,8 +23,8 @@
 .label zp_joy_pressed = $11     // main loop (input.asm): newly pressed this frame. Never read in an IRQ
 .label zp_rng_lo      = $12     // main loop (rng.asm): generator state
 .label zp_rng_hi      = $13
-.label zp_sfx_ptr     = $14     // 2 bytes, IRQ only (sfx.asm, stage 4). Unused until then
-                                // $16-$17 reserved for the engine
+                                // $14-$17 reserved for the engine ($14-$15 were zp_sfx_ptr:
+                                // released, engine/sfx.asm uses no zero page)
 
 // $18-$1F: game core (main.asm)
 .label zp_game_frame  = $18     // the value irq_wait_frame returned for the frame being worked on

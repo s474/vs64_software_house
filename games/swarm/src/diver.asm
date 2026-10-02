@@ -73,9 +73,12 @@ diver_free:
 
 // The divers' frame: the launcher (in Play and Fight only), then each diver by its state.
 // In:  zp_game_state, zp_game_frame, zp_pattern, zp_loop, formation_home_x_lo/hi (this frame's)
-// Out: the divers' multiplexer entries, enemy shots spawned, zp_launch_timer, zp_divers_active
+// Out: the divers' multiplexer entries, enemy shots spawned, zp_launch_timer, zp_divers_active;
+//      the dive sound asked for at a launch, the enemy shot sound once if any shot was fired
 // Uses: A, X, Y, zp_tmp0-2
-// Cost: to diver_update_end, CPU cycles counted: 31 with no diver and no launch due; a diver
+// Cost: stage 4 part B, with the sound requests, measured: 192-1,047 raster cycles, average 478,
+//       in the AUTOPLAY build (600 passes, lines 37-56; 987 in make test; budget 1,350:
+//       tests/games/swarm/stage4_costs.txt). Before the sound: to diver_update_end, CPU cycles counted: 31 with no diver and no launch due; a diver
 //       winding up about 95, one path step about 105 (+ about 150 on a fire step that fires),
 //       returning about 120; a launch about 190 + 16 an enemy scanned (up to 18).
 //       Measured (raster cycles, IRQs excluded; tests/games/swarm/stage3_costs.txt): 180-972,
@@ -115,6 +118,12 @@ diver_update:
                 dec zp_divers_active
 !next:
         }
+        lda eshot_fired                 // 4   the enemy shot sound (voice 1, priority 1), ONCE a
+        beq diver_update_end            // 3 / 2   frame however many fired (eshot_spawn's flag)
+        lda #0                          // 2
+        sta eshot_fired                 // 4
+        lda #SFX_ENEMY_SHOT             // 2
+        jsr sfx_play                    // 34  nothing pending on voice 1 at this point of the frame
 diver_update_end:
         rts
 
@@ -123,7 +132,8 @@ diver_update_end:
 // The pick: r in 0-17, then the first Parked enemy of the wave's rows at index r, r + 1, ...
 // wrapping at 18; if those rows have none Parked, the first Parked enemy of any row on the way.
 // In:  zp_pattern, zp_loop, zp_divers_active, zp_enemies_alive
-// Out: the enemy in WindUp with t = 0 and in a diver slot, zp_divers_active + 1, zp_launch_timer
+// Out: the enemy in WindUp with t = 0 and in a diver slot, zp_divers_active + 1, zp_launch_timer,
+//      the dive sound asked for
 // Uses: A, X, Y, zp_tmp0-2. At most 2 rng_next calls
 // Cost: 31 cycles when the maximum are out; a launch about 190 + 15-16 an enemy scanned before
 //       the one taken (counted). The longest scan, one survivor 17 places on, is measured on the
@@ -174,8 +184,7 @@ diver_launch:
         dey
         bpl !slot-
         bmi !none+                      // no free slot (can't happen: fewer than the maximum are out)
-!take:  // SFX (part B): the dive sound, voice 3, priority 1: this is WindUp's frame t = 0
-        txa
+!take:  txa
         sta diver_enemy,y
         inc zp_divers_active
         lda #ENEMY_WINDUP               // frame t = 0 of its WindUp is this frame: the slot code
@@ -193,6 +202,9 @@ diver_launch:
         bcs !+
         lsr
 !:      sta zp_launch_timer
+        lda #SFX_DIVE                   // the dive sound (voice 3, priority 1): this is WindUp's
+        jmp sfx_play                    // frame t = 0. The routine's last work, so neither X nor Y
+                                        // is kept (diver_update reloads both): 30 cycles as a jmp
 !none:  rts
 
 // One diver's frame, by its state.
