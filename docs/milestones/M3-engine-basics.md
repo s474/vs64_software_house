@@ -31,7 +31,7 @@ one sprite for one frame).
 
 | # | Task | Owner | Status |
 |---|---|---|---|
-| 1 | Two probes for the write-timing margin, as specified in `engine/README.md`: `tests/timing/sprite_latch` and `tests/engine/multiplexer_edge` | raster-engineer | ✅ Done (7a2a089, cfd3d50). Each register's write deadline is measured. No write past a deadline could be provoked: 0 of about 375,000 writes checked one by one in each build, 1,868 of 1,868 pictures right. The margin with Y on a badline is **4 cycles** in a DEBUG mixed-multicolour block (12 uniform; 13 and 21 in release, counted only), so **the zone blocks and their next-slot test can't grow** |
+| 1 | Two probes for the write-timing margin, as specified in `engine/README.md`: `tests/timing/sprite_latch` and `tests/engine/multiplexer_edge` | raster-engineer | ✅ Done (7a2a089, cfd3d50). Each register's write deadline is measured. No write past a deadline could be provoked: 0 of about 375,000 writes checked one by one in each build, 1,868 of 1,868 pictures right. The margin with Y on a badline is **3 cycles** in a DEBUG mixed-multicolour block, measured (a wider hunt found a last store one cycle later than first counted); 17 DEBUG uniform, 19 release mixed, 39 release uniform, all measured. So **the zone blocks and their next-slot test can't grow**, and a build-time guard now stops the build if their size changes |
 | 2 | Correct the page-crossing comments and counted costs in `mux_select`; add stage 4 measured costs to routine headers; add `// TIMING:` marks to `irq_stable_begin` and `mux_zone_park`; measure the release build's zone IRQ and per-frame IRQ time | raster-engineer | ✅ Done (5d772e9, 0649463). Comment-only: the built program is byte-identical. Release build: 53 cycles per zone slot |
 | 3 | Fold `tests/engine/multiplexer/scratch-2026-10-01/slack.py` into `positions.py` as a supported mode, then delete the scratch folder | qa-tester | ✅ Done (f05d4ea): `positions.py --slack` reproduces the Technical Director's figures exactly. The folder's other files stay as evidence for the long-run figures |
 | 4 | Make the soak's excess-pin phase long enough by default to exercise flicker on sprite 4 (it needed 1,000 frames, the default is 100) | qa-tester | ✅ Done (f05d4ea): default 1,000 frames, and the check fails as "not exercised" if sprite 4 never flickers |
@@ -42,10 +42,10 @@ one sprite for one frame).
 
 | # | What | Who | When |
 |---|---|---|---|
-| F1 | Add a uniform mode to `edge.py --hunt` and run it in DEBUG and release (three of the four margins are counted only) | raster-engineer | Before M4's sprite code is accepted |
-| F2 | Hunt the flickering dense layouts, both builds | raster-engineer | Before M4's sprite code is accepted |
+| F1 | Add a uniform mode to `edge.py --hunt` and run it in DEBUG and release (three of the four margins are counted only) | raster-engineer | ✅ Done (b6e89fb): DEBUG uniform latest cycle 37, release uniform 15 |
+| F2 | Hunt the flickering dense layouts, both builds | raster-engineer | ✅ Done (b6e89fb): flicker frames are no later than the static layouts in either build |
 | F3 | Run the M4 game itself through `positions.py` and `--slack`, at least 10,000 frames, both builds | qa-tester | When QA tests the M4 build |
-| F4 | A build-time guard: `.errorif` on the `MuxZoneBlock` sizes, so growing a zone block stops the build | raster-engineer | With F1 |
+| F4 | A build-time guard: `.errorif` on the `MuxZoneBlock` sizes, so growing a zone block stops the build | raster-engineer | ✅ Done (86bfdf2): adds no bytes; a tripwire on size, not a timing check |
 
 `make test` after the follow-ups: 39/39 across 5 spikes (the `multiplexer_edge` spike added 5 checks), in 1 min 23 s.
 

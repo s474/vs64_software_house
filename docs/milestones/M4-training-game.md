@@ -62,13 +62,38 @@ checks are in `tests/games/swarm/budget.json`.
 |---|---|
 | Panel colours: the design's "white text on a blue bar" can't be done with reverse video (the text comes out black) | **Extended colour mode for the whole screen** (Simon, 2026-10-01): white on blue as designed, at the cost of 64 glyphs for the whole screen. Probe: `tests/timing/ecm_panel` |
 
-**Open before stage 1 starts:**
+**Closed before stage 1** (2026-10-02):
 
-| Task | Owner |
+| Task | Result |
 |---|---|
-| Update `docs/games/swarm/design.md` for the panel decision (extended colour mode, 64 glyphs) and the note that enemy art must keep sprite row 20 empty | game-designer |
-| `engine/README.md`: the DEBUG mixed-multicolour margin is **3 cycles, not 4** (a wider hunt found a last store on cycle 51), the build-time size guard now exists, and four rows for the new modules in the module table | technical-director |
-| Extended colour mode with the multiplexer is unmeasured: covered by QA's write-timing run on the game (F3) | qa-tester, at stage 5 or earlier |
+| Design doc updated for the panel decision | Done (54cd7bb, cc3afa0). The game needs 35 of the 64 glyphs. Also settled: stars kept out of every text cell, a proposed colour table for the placeholder art (Simon reviews it in the first playable build), exact hit boxes and art areas, and the rule that enemy sprites keep row 20 empty |
+| `engine/README.md` corrected | Done (c6b1a25). The tightest margin is 3 cycles (DEBUG, mixed multicolour), measured. Swarm uses the uniform blocks: 17 cycles in DEBUG, 39 in release. The build-time size guard is described, with what it does and doesn't catch |
+
+**Still open:** extended colour mode with the multiplexer is unmeasured. QA's write-timing run on the game
+(F3) covers it, at stage 5 or earlier.
+
+### Stage 1 result: first playable build (2026-10-02)
+
+Play it with `make run GAME=swarm` (joystick port 2). The ship, two player shots, the star field and
+the panel are in. `make test` passes 65/65 with 15 Swarm checks pending for later stages.
+
+| Part | Result |
+|---|---|
+| `engine/input.asm`, `engine/rng.asm` | Built to their contracts and locked: 28 and 30 cycles (profile span). The rng distribution limit was re-baselined from a model (`tests/engine/rng/limits_model.py`) |
+| Placeholder sprites | 13 shapes, script-generated, with a checker for the design's art rules (`games/swarm/art/`) |
+| Game skeleton (`games/swarm/src/`) | All game logic takes at most 580 raster cycles against 5,800. `tests/games/swarm/check.py` (16 joystick-driven cases) passes in DEBUG and release |
+
+**Found in stage 1, to settle before stage 2:**
+
+| Item | Owner |
+|---|---|
+| After editing `games/swarm/src/`, `make test` can measure a stale budget build: the Makefile only watches `SRC_DIR` and `engine/` (workaround: `touch tests/games/swarm/main.asm`). Also the budget build needed a symlink to the game's sprite sheet | tools-engineer |
+| Holding fire gives 4.77 shots a second, not the design's "steady 5": a missed shot lives 21 frames, so the two slots limit the rate, not the 10-frame cooldown. Plus cases the design left silent (left and right together, the start position, the order of updates, wave counters) | game-designer, with Simon's playtest view |
+| The memory map's main-loop pseudo-code, `panel_update` over budget when all four fields redraw (init and game over only), AUTOPLAY's panel load, the KickAssembler multi-label trap, the rng contract's stale lines and interim checks, and a one-page "what a game needs from the engine" | technical-director |
+
+**Process notes so far** (rule 4): the reading list for a new game engineer is about 4,000 lines; `make test`
+can't drive the joystick, so the key input checks live in scripts outside it; statistical limits
+should be tried on a model before going into a contract; a design model settles questions prose leaves open.
 
 ## The game (scope for M4)
 
