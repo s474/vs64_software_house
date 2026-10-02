@@ -1,7 +1,8 @@
 # Swarm: memory map, raster timeline and frame budget
 
 M4 stage 0 technical design (Technical Director, 2026-10-01; brought in line with the design doc
-and the engine README on 2026-10-02: panel decided, character set, colour and star tables) for the approved
+and the engine README on 2026-10-02: panel decided, character set, colour and star tables; stage 1's
+measured costs, the panel budget decision and the main loop as built added the same day) for the approved
 [game design](design.md) and the [M4 brief](../../milestones/M4-training-game.md). The
 gameplay-engineer builds to this page; changing the layout means changing this page in the same
 commit ([coding standards](../../standards/coding-standards.md#memory)).
@@ -20,7 +21,9 @@ replaces it with a measurement at the stage named.
 (the panel's colours) is decided and in the design: [The panel](#the-panel). Budgeted game logic and sound: **6,265** raster cycles a frame against the engine's promise
 of **7,200** ([engine/README.md](../../../engine/README.md#the-v1-promise-and-its-one-exception),
 **measured**): **935 of headroom (13.0%)**, nearly all of it on *estimated* game costs (input is **measured**). In a normal frame
-the game has about 11,600 available, so the headroom there is about 5,300.
+the game has about 11,600 available, so the headroom there is about 5,300. Stage 1's routines are
+**measured** and inside their rows ([Stage 1, measured](#stage-1-measured)), but with no DMA on
+them yet, so the display allowance in every row is still untested.
 
 ## Configuration
 
@@ -90,7 +93,10 @@ the three custom glyphs; **29 spare** ([design](design.md#character-set-64-glyph
   1–25, space 32, digits 48–57), and being adjacent they are one 24-byte patch at `$28D8`, copied
   from a `glyph_data` block in the game tables after the ROM copy.
 - Text is stored in the tables as codes 0–63 and written to the play area as it is; the panel
-  routine adds `PANEL_BG`. An `.errorif` (or `.assert`) on the string data checks no code is above 63.
+  routine adds `PANEL_BG`. **Every string goes through the `GameText()` macro** (`tables.asm`),
+  never `.text`: KickAssembler can't read back the bytes a `.text` emitted, so an `.errorif` over
+  the string data isn't possible (found in stage 1). `GameText()` maps each character to its code
+  itself and stops the build on anything outside the 64 glyphs, the three replaced codes included.
 - The other 26 codes keep the ROM's glyphs (J K Q X Z, `@`, punctuation), free for later text under
   the design's rule: capitals, digits and ROM punctuation in codes 0–63 only.
 
@@ -234,7 +240,7 @@ suggested ones; the game's are ranges by owner, and the gameplay-engineer names 
 | `$14–$15` | `zp_sfx_ptr` | `sfx.asm`, **IRQ only** (`sfx_update`) | Pointer into the effect data. The main loop never touches it |
 | `$16–$17` | reserved for the engine | | |
 | `$18–$1F` | Main loop and state machine: `zp_game_frame` (the value `irq_wait_frame` returned), `zp_game_state`, `zp_state_timer` (2), `zp_idle_lo`, `zp_idle_hi`, `game_idle_min` (2, DEBUG) | Game core | [Labels the game must provide](#labels-the-game-must-provide) |
-| `$20–$2F` | Player, shots, formation: player X (2), cooldown, invulnerability timer, lives, `fx`, drift direction, launch timer, divers active, enemies alive, wave, loop | Game | |
+| `$20–$2F` | Player, shots, formation: player X (2), cooldown, invulnerability timer, lives, `fx`, drift direction, launch timer, divers active, enemies alive, wave, loop | Game | **`zp_wave` is BCD** (`$01`–`$99`, the number as shown), like `game_score` and `game_hiscore` (3 bytes each, most significant first): the panel prints nibbles. Code that needs the wave as an index (pattern, loop) uses `zp_loop` and its own binary counter, not `zp_wave` |
 | `$30–$3F` | Pointers and per-call scratch for game routines (path pointer, screen pointer, star index) | Game | |
 | `$40–$FF` | Free | | Per-object arrays (18 enemies, 5 shots) are absolute, not zero page |
 
@@ -310,21 +316,21 @@ in flight, 2 enemy hits and a launch in the same frame.
 | 6 | Divers (3): 2 path steps each (about 90 a step), return, shot spawn; the launcher's pick and scan of 18 on a launch frame (about 300, of which at most 2 `rng_next` calls: 84, **measured**) | 1,350 | 1,050 | `diver_update`, 3 |
 | 7 | Enemy shots (3): move, remove | 200 | 150 | `eshot_update`, 3 |
 | 8 | Collisions: 42 box tests (2,100) and the responses to 2 enemy hits or a player hit: state, score add, explosion start (375) | 2,475 | 1,641 + 295 | `collide_update`, 2 |
-| 9 | Panel: redraw the score digits that changed, lives, wave | 250 | 200 | `panel_update`, 1 |
+| 9 | Panel, **in a frame of play**: redraw score, lives and wave. The four-field redraw is exempt: [The panel's budget](#the-panels-budget) | 250 | 200 (**measured** 231, no DMA) | `panel_update`, 1 |
 | 10 | Star twinkle: one colour RAM write | 100 | 60 | `stars_update`, 1 |
 | 11 | Sound: `sfx_play` calls from the main loop (up to 3) | 100 | 75 | inside the routines that call it |
-| | **Main loop, `game_update` in all** | **5,765** | | `game_update`, 1 (the check's limit is still 5,800: below) |
+| | **Main loop, `game_update` in all** | **5,765** | | `game_update`, 1 |
 | 12 | Sound tick in `game_irq_bottom` (IRQ time, no DMA): three effects starting in one frame | 500 | 500 | `game_irq_bottom`, 4 |
 | | **Game logic and sound in all** | **6,265** | | |
 | | **Engine's promise** | 7,200 | | |
-| | **Headroom** | **935 (13.0%)** | | `game_idle_min` × 16 ≥ 900, 1 (the check's limit is still 900: below) |
+| | **Headroom** | **935 (13.0%)** | | `game_idle_min` × 16 ≥ 935, 1 |
 
 **Measured rows** (2026-10-02, M4 stage 1; the span convention is
 [engine/README.md](../../../engine/README.md#which-span-a-figure-is)):
 
 - **Input, 40.** The whole call, no DMA: `input_read` is called straight after `irq_wait_frame`,
-  which returns when `mux_irq_top` has finished, in the top border around line 23 (*derived*: line
-  16 + 32 + 393 + 6 cycles), and the first line with sprite DMA is 30 (`MUX_Y_MIN`). The earlier 75
+  which returns when `mux_irq_top` has finished, in the top border: `game_update` is reached on
+  **line 23, cycle 33** (**measured**, below), and the first line with sprite DMA is 30 (`MUX_Y_MIN`). The earlier 75
   was an estimate with a DMA allowance it doesn't need. Saves 35: the totals fell from 5,800 /
   6,300 and the headroom rose from 900.
 - **Random numbers, 42 a call** (`jsr rng_next`, constant time, no DMA;
@@ -335,9 +341,73 @@ in flight, 2 enemy hits and a launch in the same frame.
   index to the next parked enemy, or try again next frame): an unbounded retry loop has no worst
   case to budget. Row 6 is unchanged: its 300 for a launch frame covers the two calls (84 CPU) and
   the scan, and stays an *estimate* until stage 3.
-- **`tests/games/swarm/budget.json` still has 5,800 for `game_update` and 900 for the idle
-  check.** Both hold with the new totals (they are looser by 35); the Technical Director brings
-  them to 5,765 and 935 when that file is next re-baselined.
+- **`tests/games/swarm/budget.json` agrees with this table** (brought in line 2026-10-02):
+  `game_update` ≤ 5,765 and `game_idle_min` × 16 ≥ 935, in the stage 1 checks and the stage 5 soak.
+
+#### Stage 1, measured
+
+**Measured** 2026-10-02 on the stage 1 build (commit 68ff14c; VICE 3.10 x64sc PAL, DEBUG):
+`make test ARGS=swarm` (the `AUTOPLAY` build, 300 or 600 passes a check) and the gameplay-engineer's
+`vice_profile` runs recorded in each routine's header. Profile spans, raster cycles. The estimates
+stay as the budgets.
+
+| Row | Routine | Budget (*estimate*) | **Measured**, stage 1 | The same code in the display (× 1.27, *estimate*) |
+|---|---|---|---|---|
+| 3 | `player_update` | 200 | max **122** | 155 |
+| 4 | `pshot_update` (2 shots) | 150 | **43** | 55 |
+| 10 | `stars_update` | 100 | **57** | 72 |
+| 9 | `panel_update` | 250 | **9** with nothing dirty (the usual frame); **231** with score, lives and wave dirty; about 325 with the high score too (*counted*, not measured) | 293 for the 231: **over 250**, see [The panel's budget](#the-panels-budget) |
+| | `game_update` in all | 5,765 | 262–317 in the game; max **580** in `AUTOPLAY` (three panel fields redrawn every frame) | |
+| | All IRQ time a frame (check: ≤ 4,500) | | **620**, of which `game_irq_bottom` is 93 of framework and no work | |
+| | `mux_update`, 3 sprites shown | engine: 4,261 average with 24 | **1,073–1,120** | |
+| | Idle in the worst frame (`game_idle_min` × 16) | ≥ 935 | **15,888** | |
+
+**These figures carry no DMA, so they don't test the budget's display allowance.** With three
+sprites and so little work, `game_update` runs on **lines 23–31** (**measured**: `vice_start` on
+`build/swarm_budget/swarm_budget.prg`, then `vice_run_until` `game_update`, `panel_update`,
+`game_update_end`: line 23 cycle 33, line 27 cycle 38, line 31 cycle 23), all above the first
+badline (51), and nothing but a player shot at the top of its flight puts sprite DMA there. What
+stage 1 shows is that the CPU counts behind rows 3, 4 and 10 were generous and row 9's was 31 short
+(231 against 200). What it can't show is the × 1.27: from stage 2 `game_update` runs on into the
+display with 21 sprites on screen, and the per-routine checks then measure the allowance for the
+first time. So **no limit in `budget.json` is re-baselined to a stage 1 figure**: measured + 5% of a
+border-only run would be a limit the same code fails as soon as the formation exists.
+
+#### The panel's budget
+
+**Decided (Technical Director, 2026-10-02): the budget stays 250 and is "per frame of play". It
+does not rise. The four-field redraw is exempt, and `panel_update` moves to the top of the frame.**
+
+1. **Row 9 covers the most a frame of play can ask for**: score, lives and wave
+   (`PANEL_DIRTY_PLAY`), **measured 231**. Real play is lighter: the wave changes at a wave's start,
+   when nothing is being hit, so score + lives is the real worst frame.
+2. **The four-field redraw (about 325, *counted*) is exempt from the 250**, because it never
+   shares a frame with the costs the budget protects. It happens twice: in `panel_init`, before
+   `irq_init`, which isn't a frame at all; and when a game ends
+   ([design](design.md#title-and-game-over-screens): "the high score is updated when the game ends"). **Rule:
+   `PANEL_DIRTY_HI` is set only by `panel_init` and by the state machine on entering game over,
+   never by a play-state routine.** With item 3 it is drawn in the following frame, a game-over
+   frame, which runs no collisions (2,475), no launcher and no hits, so 75 over the row is covered
+   many times.
+   Raising the budget to 350 instead would take 100 from the 935 of headroom in every frame of
+   play to pay for a frame that has thousands spare.
+3. **`panel_update` is called straight after `input_read`** (after `autoplay_update` in the
+   budget build), not last. Stage 1 calls it last, which from stage 2 puts it in the display after
+   up to 5,500 cycles of game logic: 231 × 1.27 = about 293, over the 250. Called first it runs on
+   about lines 24–28, always in the border (the first badline is 51), so its cost stays the
+   measured 231 whatever the rest of the frame does. It draws the fields dirtied by the previous
+   frame's updates: one frame later than now, which is the frame in which the sprites that caused
+   the change appear (positions written in frame N are shown in frame N + 1,
+   [README](../../../engine/README.md#frame-flow-and-double-buffering)), so score and explosion
+   arrive together. This is a change to `games/swarm/src/main.asm` for the gameplay-engineer at
+   the start of stage 2; if something prevents it, the Technical Director raises row 9 to 300 and
+   the headroom falls to 885.
+4. **`AUTOPLAY`'s panel load is right, and stays**: it sets `PANEL_DIRTY_PLAY` every frame, so
+   the `panel_update` check measures item 1's worst case in every pass, and `game_update` carries
+   it in every frame (about 220 more than the game proper does in its usual frame). Lives are 3 in
+   that build (two markers drawn), the lives loop's longest path but one cycle. It is deliberately
+   harsher than play, and it does not include the high score, by item 2. Nothing in `make test`
+   measures the four-field redraw; it doesn't need a check.
 
 The rows are simultaneous worst cases that can't all happen in one frame (a launch scan, two hits
 and a player hit together), so the measured `game_update` should come in under the sum.
@@ -449,6 +519,8 @@ files: checked, [kickassembler.md](../../reference/kickassembler.md#syntax-we-re
 - the player can't be hit, and **enemies don't die**: a hit is detected, scored, sounded and the
   shot removed, but the enemy stays, so the formation stays full and the wave never ends (the same
   rules as `check_design.py`, so the engine's flicker can be compared with the model's);
+- it sets `PANEL_DIRTY_PLAY` (score, lives, wave) every frame, so the panel is at its busiest for
+  a frame of play in every pass ([The panel's budget](#the-panels-budget));
 - in stages before a feature exists, it simply runs what there is.
 
 | Label | Kind | Meaning | Checked from stage |
@@ -468,26 +540,60 @@ files: checked, [kickassembler.md](../../reference/kickassembler.md#syntax-we-re
 | `game_flicker_frames` | 2 bytes, little-endian, DEBUG, saturating | Frames in which `mux_drop_count` was not 0 after `mux_update` | 3 |
 | Engine's: `irq_dispatch`, `irq_exit_rti`, `irq_late_count`, `mux_update`, `mux_update_fast`, `mux_update_end`, `mux_late_count`, `mux_max_age`, `mux_pin_drop_count`, `mux_pin_excess_count` | | Come with the engine imports | 1–3 |
 
-**The main loop**, both builds:
+**The main loop**, as built in stage 1 (`games/swarm/src/main.asm`):
 
 ```
-main:   jsr irq_wait_frame          // A = frame number
-        sta zp_game_frame
+main:       jsr irq_wait_frame      // wait for the next tick. A = frame number
+main_frame: sta zp_game_frame       // entered here, with A = zp_irq_frame, when the tick has
+                                    // already happened (from the DEBUG idle loop)
 game_update:
-        jsr input_read
-        ...                         // state machine: the update routines for the current state
+            jsr input_read
+            jsr panel_update        // from stage 2 (The panel's budget, item 3)
+            ...                     // state machine: the update routines for the current state
 game_update_end:
-        jsr mux_update
-        // DEBUG: if zp_irq_frame != zp_game_frame, the frame overran: inc game_overrun_count,
-        //        then jmp main. Otherwise the counting idle loop, then the minimum, then jmp main.
-        // Release: jmp main.
+            jsr mux_update
+
+#if DEBUG
+            // flicker: if mux_drop_count != 0, inc game_flicker_frames (16 bits, saturating)
+            lda zp_irq_frame
+            cmp zp_game_frame
+            beq game_idle_start     // same frame: the work fitted
+            inc game_overrun_count  // a tick went by during the work: an overrun (saturating
+            jmp main                // at 255). Wait for the NEXT tick, as release does
+game_idle_start:
+            // count iterations in zp_idle_lo/hi until zp_irq_frame changes (the tick)
+            // after GAME_IDLE_WARMUP frames: game_idle_min = min(game_idle_min, count)
+            lda zp_irq_frame
+            jmp main_frame          // NOT main: the idle loop has already waited for this tick
+#else
+            jmp main
+#endif
 ```
 
-The DEBUG idle loop is the multiplexer spike's (`tests/engine/multiplexer/main.asm`,
-`spike_idle`): **16 cycles an iteration** (21 on the 1-in-256 carry), counting in
-`zp_idle_lo/hi` until `zp_irq_frame` changes; then one 16-bit compare against `game_idle_min`.
-`budget.json` multiplies the count by 16. After an overrun both builds wait for the next tick, so
-the two builds behave the same.
+- **The idle loop is the wait.** It ends when the tick arrives, so the next frame starts at
+  `main_frame`. Going back to `main` from there would call `irq_wait_frame` with the tick already
+  used and wait a whole frame more: the game would run at 25 frames a second with every check
+  passing. (An earlier version of this page said "then `jmp main`"; the multiplexer spike,
+  `tests/engine/multiplexer/main.asm`, has done it this way since M3: `spike_main` is the label
+  after its `irq_wait_frame`.)
+- **An overrun is detected by comparing frame numbers after `mux_update`**: `zp_irq_frame` no
+  longer equal to `zp_game_frame` means the work ran past a tick. It is counted, the idle count
+  for that frame is not taken, and the loop goes to `main` to wait for the next tick. Release does
+  exactly that with no test: `jmp main` after every frame, on time or late. So an overrun costs one
+  repeated frame in both builds, and the two behave the same.
+- The DEBUG idle loop is the multiplexer spike's (`spike_idle`): **16 cycles an iteration** (21
+  on the 1-in-256 carry), kept inside one page by an `.errorif`. `budget.json` multiplies the count
+  by 16. It counts only cycles the loop ran, so IRQs and DMA that land in it lower the figure: it
+  is a lower bound on what was free.
+
+**Things the stage 1 engineer had to work out**, recorded so the next one doesn't:
+
+- The budget build is selected by the spike's name or a part of it: **`make test ARGS=swarm`**
+  (the spike is `swarm_budget`, built into `build/swarm_budget/`).
+- Joystick behaviour is checked by a script, not by the profile and memory checks (they have no
+  stick): `uv run --package budget-runner python tests/games/swarm/check.py`, on DEBUG and release.
+- Strings use `GameText()` ([Character set](#character-set)); `zp_wave` and the scores are BCD
+  ([Zero page](#zero-page)).
 
 The gameplay-engineer bumps `"stage"` in `budget.json` at the start of each stage and changes
 nothing else in it. A check that fails is reported to the Technical Director with the measured
