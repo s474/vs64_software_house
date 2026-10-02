@@ -163,6 +163,23 @@
 .errorif SPR_ENEMY + ENEMY_COUNT != 24, "the enemies are virtual sprites 6-23"
 .errorif FORM_X0 + FORM_FX_MAX + FORM_COL_DX * (FORM_COLS - 1) != 310, "design: the formation's sprite X is 34-310"
 
+// The grid lookup of collide_update (memory-map.md "The collision budget", the fallback): its
+// constants, from the hit boxes above and the formation's geometry.
+// A shot at (sx, sy) is inside the box of an enemy at (ex, ey) when
+//   0 <= sy + GRID_Y_OFF - ey < GRID_BAND        (the module's Y test: ay1 - by0 and range_y)
+//   0 <= sx - ex + GRID_X_OFF < GRID_WIDTH       (the module's X test)
+// and a Parked enemy is at ex = FORM_X0 + fx + FORM_COL_DX * column, ey = its row's Y.
+.const GRID_Y_OFF = BOX_PSHOT_Y1 - BOX_ENEMY_Y0                                                 // 4
+.const GRID_BAND  = (BOX_PSHOT_Y1 - BOX_PSHOT_Y0) + (BOX_ENEMY_Y1 - BOX_ENEMY_Y0) + 1           // 22
+.const GRID_X_OFF = BOX_PSHOT_X1 - BOX_ENEMY_X0                                                 // 8
+.const GRID_WIDTH = (BOX_PSHOT_X1 - BOX_PSHOT_X0) + (BOX_ENEMY_X1 - BOX_ENEMY_X0) + 1           // 17
+.const GRID_X0    = FORM_X0 - GRID_X_OFF        // collide_fx = fx + this; sx - collide_fx indexes grid_col
+.errorif GRID_BAND > FORM_ROW_DY || GRID_WIDTH > FORM_COL_DX, "the grid lookup needs a shot to be in at most one row's band and one column's box"
+.errorif GRID_X0 < 0 || GRID_X0 + FORM_FX_MAX > 255, "collide_fx is one byte"
+.errorif FORM_ROWS != 3, "collide_update's row test is written for three rows"
+.errorif MUX_Y_MAX + GRID_Y_OFF > 255, "sy + GRID_Y_OFF is one byte"
+
+
 // --- Enemy shots, divers, the launcher (design.md "Enemy behaviour", "Firing", "Waves") -------
 .const DIVER_SLOTS     = 3      // enemies in WindUp, Dive or Return at once (the waves' maximum)
 .const DIVER_X_MIN     = 0      // a diver's and an enemy shot's X is clamped to 0-344: both ends

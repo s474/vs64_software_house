@@ -86,12 +86,13 @@ player_hit:
 // In:  player_joy (JOY_* bits), zp_game_state
 // Out: mux_x_lo/hi, mux_col, mux_ptr, mux_y + SPR_PLAYER; a shot spawned in a free slot
 // Uses: A, X, Y
-// Cost: to player_update_end. CPU cycles counted, the longest path (invulnerable, moving right
-//       past X 255, firing from slot 1): 147. Measured, raster cycles: in each state by
-//       tests/games/swarm/stage3_costs.py (results beside it) and in the AUTOPLAY build, which
-//       holds the invulnerability timer at 2 so that the flash runs in every frame. Budget 290
-//       (memory-map.md row 3): it runs in the display, after the collisions, so a pass can meet a
-//       badline (43) and the sprites of the lines it touches
+// Cost: to player_update_end, raster cycles, IRQs excluded, measured
+//       (tests/games/swarm/stage3_costs.txt): 92-260, average 125, in the AUTOPLAY build, which
+//       holds the invulnerability timer at 2 so that the flash runs in every frame (600 passes,
+//       lines 43-86: the 260 met a badline and a row's sprites; 248 in make test). On the game
+//       build: 72-129 in Play with no flash, 91-185 with the flash, 46 exploding, 16 hidden (33
+//       in the frame it is hidden). Budget 290 (memory-map.md row 3): it runs in the display,
+//       after the collisions
 player_update:
         lda zp_game_state               // 3
         cmp #GAME_STATE_DYING           // 2

@@ -1,8 +1,9 @@
 // Swarm: the AUTOPLAY script (budget build only: tests/games/swarm/main.asm defines AUTOPLAY).
 // docs/games/swarm/memory-map.md#labels-the-game-must-provide: the game plays its worst case by
-// itself, with no joystick. Stage 1: the "stick" sweeps right and left between the clamps with
-// fire held, and the panel's in-play fields are redrawn every frame (the most panel_update can
-// be asked to do in one frame of play), so make test measures the routines at their busiest.
+// itself, with no joystick: the "stick" sweeps right and left between the clamps with fire held,
+// the panel's in-play fields are redrawn every frame (the most panel_update can be asked to do in
+// one frame of play), and from stage 3 the respawn flash runs every frame and hits on the player
+// are counted, not answered (collide.asm), at wave 12 (pattern 3, loop 3: game.asm, game_new).
 // Nothing in this file is assembled into the game proper.
 
 // Work out this frame's scripted stick: fire held, and right until the right clamp, then left

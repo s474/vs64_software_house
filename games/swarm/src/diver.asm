@@ -77,9 +77,11 @@ diver_free:
 // Cost: to diver_update_end, CPU cycles counted: 31 with no diver and no launch due; a diver
 //       winding up about 95, one path step about 105 (+ about 150 on a fire step that fires),
 //       returning about 120; a launch about 190 + 16 an enemy scanned (up to 18).
-//       Measured (raster cycles, IRQs excluded): tests/games/swarm/stage3_costs.txt, the AUTOPLAY
-//       build (3 divers, 2 steps every other frame) and the launcher's longest scan on the game
-//       build. Budget 1,350 (row 6). It starts in the top border and runs into the first enemy row
+//       Measured (raster cycles, IRQs excluded; tests/games/swarm/stage3_costs.txt): 180-972,
+//       average 428, in the AUTOPLAY build (wave 12: up to 3 divers, 2 steps every other frame;
+//       600 passes), on lines 36-57: it starts in the top border and can meet badline 51 and
+//       row 0's sprites. 688 on the game build for the launcher's longest scan (below).
+//       Budget 1,350 (row 6)
 diver_update:
         ldx zp_loop                     // 3   one test a frame: do the divers take 2 path steps?
         ldy #0                          // 2

@@ -1,6 +1,17 @@
 """Joystick-driven checks of Swarm (M4): stage 1's player, player shots, panel and stars, stage 2
 part A's formation (18 enemies, the drift, the animation) and part B's collisions (player shots
-against the enemies, explosions, the score, the formation coming back after a clear).
+against the enemies, explosions, the score, the formation coming back after a clear), and stage
+3's enemy shots, the player's death, lives, READY and game over, the divers (launcher, wind-up,
+the three paths, firing, return), a diver shot mid-dive and the ram.
+
+EARLIER CASES AND STAGE 3. Every case from "setup" to "sprites" was written when nothing dived
+and nothing could hit the ship; they assume a formation that stays Parked. They are kept valid
+by holding the launcher off: launcher(False) re-writes zp_launch_timer to 255 every 32 frames
+(through the monitor), so no dive is ever launched, no enemy shot exists and the ship can't be
+hit. Nothing else about them changed, except that the pause after a clear is now zp_clear_timer
+(it was zp_state_timer). The stage 3 cases turn the launcher on where they want a dive
+(launcher(True), usually for one frame with zp_launch_timer = 1), and safe(True) holds
+zp_player_invuln up where a case is about a diver's flight and not about the ship.
 
 `make test` can't press buttons, so this drives joystick port 2 through the VICE monitor (the
 "I/O simulation" joyport device, as tests/engine/input/check.py does) on the GAME build (not the
@@ -101,11 +112,47 @@ Cases (PASS/FAIL each, exit code 1 on any failure):
                the display): all 8 on, one is the player at its X and Y in its colour and shape,
                the others are enemies in their row's Y, colour and shape; no expansion, all hires
 
+  (stage 3; an enemy shot is placed through the monitor where no diver is wanted)
+  eshot-move   three placed shots: Y + 2 and X + dx a frame, removed when Y > 221, clamped at X 0
+               and 344, Y + 3 at loop 2; shape, colour, pinned
+  eshot-edge-* / eshot-y-*   the ship's box against a shot's: |shot X - ship X| = 6 hits, 7 misses
+               (below and above X 255); shot Y 206 misses, 207 hits, 221 hits
+  death        the hit's frame and the 99 after: lives, enemy shots removed, markers, the white
+               explosion's 4 shapes of 8 frames, hidden from frame 32, no move or fire, the player
+               shot in flight carries on
+  respawn      frame 100: READY, the ship at 171, controllable at once, READY for 50 frames, the
+               flash colour every frame, a shot falling through the ship, hit in frame 150 exactly
+  game-over, game-over-timeout, game-over-50, game-over-diving   the last life: the high score
+               only then, GAME OVER, held fire doesn't skip, a new press before frame 50 doesn't,
+               one in frame 50 or later does, 200 frames otherwise; the new game's state; with a
+               diver out GameOver still starts at frame 100 and the diver flies on
+  dive-*       each path, as authored and mirrored, launched by the launcher (every other enemy
+               taken away) and compared in every frame with a model of the design's tables:
+               position, state, colour, fire steps and each shot's dx, lethal steps, wrap, Return
+               following the drifting home; again at loops 1 and 3 (2-step frames, wind-up, shots)
+  windup       the wobble and the white flash by frame
+  aim-*        dx 0 at |d| = 15, 1 pixel a frame toward the ship at 16, both signs
+  fire-lost    no free slot at a fire step: no shot then or later
+  dying-divers the player hit with a diver out: no shot fired, the launch timer stopped,
+               Respawn in the frame after the diver parked
+  diver-hit-*  a diver shot in WindUp, Dive (each path) and Return: double score, the explosion
+               where it is, divers active - 1 in that frame, its shots carry on
+  ram-*        the Hook on the ship: only from Y 210; |diver X - ship X| = 13 rams, 14 doesn't;
+               not while invulnerable; a diver shot in the same frame doesn't ram
+  fifth-explosion   4 explosions running: a fifth enemy dies at once
+  launcher, launcher-halved, launcher-rows   first launch at frame 50, 100 apart, never more than 2
+               out, the pick is the first Parked enemy at or after the drawn index, never more
+               than 2 rng_next calls a frame (the generator is modelled); 50 apart with 4 alive;
+               the wave's rows, and any row when those are empty
+  clear-while-dying   the formation's return runs in PlayerDying
+  stage3-play  1,500 frames of play: pinned sprites 0-3 never dropped, nothing missing 2 frames
+               running, no overrun (DEBUG counters)
+
 Run from the repo root (build first: make GAME=swarm):
 
     uv run --package budget-runner python tests/games/swarm/check.py [--prg build/swarm/swarm.prg]
 
-Takes about 40 s. Works on a release build too (make BUILD=release GAME=swarm): the DEBUG
+Takes about 2 minutes. Works on a release build too (make BUILD=release GAME=swarm): the DEBUG
 counters are read only if the build has them. Results of the last run: tests/games/swarm/check_results.txt.
 """
 

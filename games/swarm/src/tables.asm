@@ -151,6 +151,10 @@ score_hi:               .byte $01, $00, $00,  $03, $01, $01
 // shows the first shape with the timer at 16): 4 frames each, 16 frames in all.
 explosion_shape:        .fill EXPLOSION_FRAMES + 1, SHAPE_EXPLOSION + EXPLOSION_SHAPES - 1 - floor((max(i, 1) - 1) / EXPLOSION_SHAPE_FRAMES)
 
+// The column whose box a shot is in, by sx - collide_fx (0-255): 0-5, or $FF between two boxes
+// and to the right of the last one.
+grid_col:       .fill 256, (mod(i, FORM_COL_DX) < GRID_WIDTH && floor(i / FORM_COL_DX) < FORM_COLS) ? floor(i / FORM_COL_DX) : $ff
+
 // The respawned ship's colour by its invulnerability timer after the frame's countdown (149 down
 // to 0), as a colour_table index: dark grey while bit 2 of the timer is set, cyan otherwise, so 4
 // frames each and cyan when the timer runs out (design.md "Colours", Stage 3 rule 10). A table of

@@ -1,8 +1,9 @@
-// Swarm (M4 training game), stage 2: the player's ship moves and fires, the star field twinkles,
-// the status panel is drawn, the formation of 18 enemies drifts and animates, and the player's
-// shots hit the enemies: they explode and score. When all 18 are gone the formation comes back
-// after the design's 75-frame pause (no bonus and no wave count yet: stage 4's). No dives, enemy
-// shots, lives logic, title screen or sound yet.
+// Swarm (M4 training game), stage 3: the player's ship moves and fires, the star field twinkles,
+// the status panel is drawn, the formation of 18 enemies drifts and animates, the player's shots
+// hit the enemies, and now the enemies dive (wind-up, three paths, return), shoot aimed shots and
+// ram; the player has lives, dies, comes back behind READY, and the game ends with GAME OVER and
+// starts again. Every formation is pattern 3 at loop 0 (design "Stage 3 rules", rule 1). No waves,
+// wave-clear bonus, title screen or sound yet: stage 4.
 //
 // Design (the source of truth for behaviour): docs/games/swarm/design.md
 // Memory, zero page, raster timeline, budgets: docs/games/swarm/memory-map.md
@@ -13,14 +14,19 @@
 //   screen.asm    charset and screen set-up (init only)
 //   stars.asm     star field and twinkle        panel.asm   status panel, score variables
 //   player.asm    the ship                      pshot.asm   the player's shots
+//   eshot.asm     the enemies' shots            game.asm    the game states, a new game
 //   formation.asm the 18 enemies: per-enemy state, the drift, the animation, the explosions
-//   collide.asm   player shots against the enemies, the score (engine/collision.asm)
+//   diver.asm     the launcher and the divers: wind-up, dive paths, firing, return
+//   collide.asm   player shots against the enemies (grid lookup + box test), the player against
+//                 enemy shots and divers, the score (engine/collision.asm)
 //   autoplay.asm  the scripted stick of the AUTOPLAY budget build (tests/games/swarm/main.asm)
 //
 // Chain: entry 0 mux_irq_top at line 16, entry 1 game_irq_bottom at line 251 (nothing to do
 // until the sound stage). Main loop: irq_wait_frame, input_read, panel_update and stars_update
 // (first, so they are always in the top border: memory-map.md "The panel's budget", "Order of the
-// frame"), pshot_update, formation_update, collide_update, player_update, then mux_update.
+// frame"), pshot_update, eshot_update, game_state_update, formation_update, diver_update,
+// collide_update, player_update, then mux_update. That order is memory-map.md's and is behaviour:
+// shots move before the divers fire, every mover before the collisions, the player last.
 //
 // Rules this code keeps (engine v1, memory-map.md "(c) The four conditions"): after irq_init
 // there is no sei, no write to $01, $DC00 or $DC02; $D011 is written once (screen_init); $D017
@@ -109,12 +115,12 @@ main:   jsr irq_wait_frame              // A = frame number
 main_frame:
         sta zp_game_frame
 // game_update .. game_update_end: everything the main loop does in a frame except mux_update.
-// Cost: 576-764 raster cycles in the game (measured, vice_profile, 400 passes, moving and firing);
-//       841-1,007 in the AUTOPLAY build, which redraws three panel fields and steps the drift
-//       every frame (tests/games/swarm/stage2a_costs.py, 600 passes; max 1,020 in make test
-//       ARGS=swarm, another 600). Budget 5,765.
-//       It runs from line 23 to lines 36-39 (measured, the same script): still in the top
-//       border, above the first badline (51) and the first enemy row (57), so no DMA yet
+// Cost (stage 3, measured: tests/games/swarm/stage3_costs.py, results beside it; raster cycles,
+//       IRQs excluded): 1,421-3,448, average 2,066, in the AUTOPLAY build (wave 12, 3 divers,
+//       600 passes), from line 23 to lines 45-86. Budget 6,075. One-off frames: 2,875 when a
+//       cleared formation comes back, 3,713 when a new game starts (formation_init: those frames
+//       run formation_update below line 51, with nothing diving and nothing to hit).
+//       Idle in the worst AUTOPLAY frame: 6,288 cycles (required 625)
 game_update:
         jsr input_read                  // exactly once a frame, straight after the tick
 #if AUTOPLAY

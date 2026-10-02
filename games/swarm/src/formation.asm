@@ -4,8 +4,8 @@
 // The drift: fx runs 0 -> 96 -> 0, one pixel every 2 frames (every frame from loop 2), starting
 // at 48 moving right. Each row is one type (A, B, C): its colour and its two shapes, which swap
 // every 16 frames, all 18 together.
-// Stage 2 part B: an enemy is Parked, Exploding (16 frames, 4 shapes of 4 frames, orange,
-// stationary, in the enemy's own sprite) or Dead (hidden). No dives yet.
+// An enemy is Parked, Exploding (16 frames, 4 shapes of 4 frames, orange, stationary, in the
+// enemy's own sprite), Dead (hidden), or a diver (WindUp, Dive, Return: diver.asm, stage 3).
 //
 // PER-ENEMY DATA LAYOUT (for part B's hits and stage 3's divers). Parallel arrays indexed by the
 // enemy index e (0-17), all absolute:
@@ -196,8 +196,11 @@ enemy_kill:
 //       359, in the AUTOPLAY build, where nothing explodes (4 free slots: + 28); 431-538 in the
 //       game with all 4 slots animating for 15 frames and ending together in the 16th, drifting
 //       every frame. Counted worst: 437 + 2 ending (53 each) + 2 animating (31 each) = 605.
-//       NO DMA IN THESE FIGURES: it runs on lines 24-37, above the first badline and the first
-//       enemy row
+//       Stage 3 (stage3_costs.py): 339-495 in the AUTOPLAY build, on lines 31-41 (after
+//       eshot_update and the state step; wrapped divers' sprites at Y 30-50 can be on those
+//       lines); 616-620 in the game with 3 explosions ending and 1 animating on a turn-and-swap
+//       frame (counted 627). It must end above line 51 (the first badline): it does in every
+//       frame but the two one-off frames in which formation_init runs before it (main.asm)
 formation_update:
         dec zp_drift_timer              // 5
         bne !placed+                    // 3 / 2

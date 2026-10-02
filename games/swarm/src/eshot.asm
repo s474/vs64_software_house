@@ -30,7 +30,8 @@ eshot_init:
 // Cost: to eshot_update_end, CPU cycles counted: 10 + 9 a free slot, 34 a shot falling straight,
 //       47 one moving left, 52 one moving right: 166 at most. Budget 200 (row 7), in the top
 //       border: no badline; the only sprite DMA there is a wrapped diver's (Y 30-50).
-//       Measured: tests/games/swarm/stage3_costs.txt
+//       Measured: 38-169 raster cycles in the AUTOPLAY build, 600 passes, on lines 29-33
+//       (tests/games/swarm/stage3_costs.txt; 162 in make test ARGS=swarm)
 eshot_update:
         ldx zp_loop                             // 3
         lda eshot_dy,x                          // 4

@@ -1,66 +1,139 @@
 // Swarm: collisions (design.md "Hit boxes", "Scoring", "Enemy behaviour"; memory-map.md "The
 // collision budget" and its five rules). Bounding boxes through engine/collision.asm, which reads
 // the multiplexer's arrays; the boxes are col_pairs (tables.asm), from consts.asm's BOX_*.
-// Stage 2 part B: each player shot in flight against the 18 enemies. A hit removes the shot,
-// scores the enemy's value, and starts its explosion (formation.asm: enemy_explode).
-// STAGE 3 adds, in collide_update where marked: the player against the 3 enemy shots (pair
-// COL_PAIR_PLAYER_ESHOT, a collision_range over SPR_ESHOT..SPR_ESHOT + 2) and against the
-// diving enemies (pair COL_PAIR_PLAYER_ENEMY, collision_one each), both guarded by Y first
-// (PLAYER_HIT_ESHOT_Y, PLAYER_HIT_ENEMY_Y: consts.asm), and at most 1 player hit a frame.
+// Each frame, in the design's order (Stage 3 rules, step 6):
+//   (a) each player shot in flight against the enemies. A hit removes the shot, scores the
+//       enemy's value (its diving value in WindUp, Dive or Return), frees a diver's slot and
+//       starts the explosion (formation.asm: enemy_explode);
+//   (b) the player against the 3 enemy shots (pair COL_PAIR_PLAYER_ESHOT, one collision_range);
+//   (c) the player against the divers (pair COL_PAIR_PLAYER_ENEMY, collision_one each): a ram
+//       kills both. (b) and (c) run only in Play with the invulnerability timer at 0, each behind
+//       its Y guard (PLAYER_HIT_ESHOT_Y 207, PLAYER_HIT_ENEMY_Y 210); at most one player hit a
+//       frame: if (b) hits, (c) is skipped.
+// (a) IS THE GRID LOOKUP (memory-map.md "The collision budget", the fallback; switched to in stage
+// 3 when the box scan of all 18 measured 2,833-2,836 against 2,825 in the placed worst frame:
+// tests/games/swarm/stage3_costs_boxscan.txt). Parked enemies stand on a grid, so a shot has at
+// most one Parked candidate, found from its Y (the row) and its X less this frame's fx (the
+// column: grid_col, tables.asm), with the same pixel-exact box as the module's (GRID_* in
+// consts.asm are built from the same BOX_* numbers). Enemies that aren't at home (the divers in
+// the 3 diver slots: WindUp, Dive, Return) go through the module's box test, and only when
+// they are in the shot's Y band. The highest virtual sprite hit wins, as the scan from sprite 23
+// down chose it. Dead and Exploding enemies are neither Parked nor in a diver slot, so a shot
+// passes through them.
 //
 // The rules kept here (memory-map.md):
-//   1. Called once a frame, after every mover (pshot_update, formation_update) and before
-//      player_update: a test sees the positions the next frame shows, and a slot freed by a hit
-//      can be fired from in the same frame.
-//   2. A free shot slot is skipped by the test below (9 cycles), never by collision_begin (95).
-//   4. A shot is ONE collision_range over all 18 enemies. A Dead enemy is hidden and is never
-//      reported; an Exploding one is reported (the module knows positions, not states) and is
-//      passed over with collision_next; anything else is the hit and the scan stops.
-//   5. At most 2 enemy hits a frame (there are 2 shots, and a shot stops at its first hit). The
-//      panel is never drawn from here: PANEL_DIRTY_SCORE is set and panel_update draws it at the
-//      top of the next frame, the frame in which the explosion is first shown.
-// AUTOPLAY (the budget build): a hit is detected, scored and the shot removed, but the enemy
-// stays (memory-map.md "Labels the game must provide"), so the formation stays full and the two
-// scans keep their worst case. The explosion's start (enemy_explode, about 100 cycles a hit) is
-// therefore NOT in the budget build's figure: it is measured in the game build by
-// tests/games/swarm/stage2b_costs.py.
-// Sound (the design's enemy-explosion effect) is the sound stage's: engine/sfx.asm isn't built.
+//   1. Called once a frame, after every mover (the shots, formation_update, diver_update) and
+//      before player_update: a slot freed by a hit can be fired from in the same frame. The
+//      ship's own position is last frame's (it moves after this).
+//   2. A free shot slot is skipped by a test here, never by collision_begin (95).
+//   3. The player's scans are guarded by Y: no collision_begin unless a target is low enough.
+//   5. At most 2 shot hits and 1 player hit a frame (a ram adds a third enemy explosion). The
+//      panel is never drawn from here: the dirty bits are set and panel_update draws next frame.
+// AUTOPLAY (the budget build): an enemy hit is detected, scored and the shot removed, but the
+// enemy stays (a diver carries on); a hit on the player is counted in autoplay_player_hits and
+// not answered, (b) and (c) run in every frame whatever the invulnerability timer, and (c) runs
+// after a hit in (b) too. So nothing dies there: the answers are measured on the game build.
+// Sound (the design's effects) is stage 4's: engine/sfx.asm isn't built.
 
-// Test every player shot in flight against the enemies and answer the hits.
-// In:  nothing       Out: shots removed, enemies exploding, game_score, panel_dirty
+// The frame's collisions: (a), (b), (c) above.
+// In:  zp_fx (this frame's), zp_game_state, zp_player_invuln
+// Out: shots removed, enemies exploding, game_score, panel_dirty, the player hit
 // Uses: A, X, Y
 // Cost: to collide_update_end, raster cycles, IRQs excluded, measured (2026-10-02, VICE 3.10 x64sc
-//       PAL, DEBUG; tests/games/swarm/stage2b_costs.py, results beside it):
-//         18              no shot in flight
-//         18-1,192, average 685   the AUTOPLAY budget build, 600 passes, full formation, 2 shots
-//                         in flight (max 1,189 in make test ARGS=swarm, another 600)
-//         1,245           the game, two hits in one frame, each at the far end of its scan
-//                         (enemy 0 after 12 rejects and 6 full tests, enemy 12 after 6 full
-//                         tests), with both scores and both explosion starts
-//       Budget 2,825 (row 8); part B's trigger for the grid fallback is 2,050: not reached.
-//       ALMOST NO DMA IN THESE FIGURES: it starts on lines 30-37 and ends by line 55, so it runs
-//       in the top border and the first lines of the display (first badline 51, first enemy
-//       sprite line 57). Stage 3's movers push it down the frame: expect up to x 1.35
+//       PAL, DEBUG; tests/games/swarm/stage3_costs.py, results beside it):
+//         95-1,399, average 434   the AUTOPLAY build, 600 passes: 2 shots, 3 divers, both of the
+//                         player's scans when a target is low enough (max 1,489 in make test)
+//         1,846           the game, the placed worst frame: both shots hit, the shot scan with 3
+//                         full tests, the diver scan with 3 collision_one and a ram: 3 explosions
+//                         started, 3 scores, the player's hit. Lines 40-69
+//         1,033           the game, both shots hit with 3 divers in a shot's band
+//         311 / 690       the player's hit alone: by a shot / by a ram
+//       Budget 2,825 (row 8). The box scan it replaced: 2,004-2,209 in AUTOPLAY, 2,833-2,836 in
+//       the same placed worst frame (stage3_costs_boxscan.txt, commit 039ad26)
 collide_update:
+        lda zp_fx                               // 3   what the grid lookup subtracts from a shot's X
+        clc                                     // 2
+        adc #GRID_X0                            // 2
+        sta collide_fx                          // 4
+        // (a) Each player shot in flight against the enemies.
         .for (var i = 0; i < SPR_PSHOT_COUNT; i++) {
                 lda mux_y + SPR_PSHOT + i               // 4
                 cmp #MUX_OFF                            // 2
-                beq !next+                              // 3   a free slot: nothing to test (rule 2)
-                ldx #SPR_PSHOT + i                      // 2
+                bne !+                                  // 3
+                jmp !next+                              //     a free slot: nothing to test (rule 2)
+!:              clc                                     // 2
+                adc #GRID_Y_OFF                         // 2   the shot's Y as the band tests want it
+                sta collide_y                           // 4
+                // The Parked candidate, by the grid: the row whose band the shot is in ...
+                sec                                     // 2
+                sbc #FORM_ROW_Y0                        // 2
+                cmp #GRID_BAND                          // 2
+                bcc !row0+                              // 2 / 3
+                sbc #FORM_ROW_DY                        // 2   (C is set)
+                cmp #GRID_BAND                          // 2
+                bcc !row1+                              // 2 / 3
+                sbc #FORM_ROW_DY                        // 2
+                cmp #GRID_BAND                          // 2
+                bcs !nocand+                            // 2 / 3   between the rows, above or below them
+                lda #SPR_ENEMY + 2 * FORM_COLS          // 2
+                bne !row+                               // 3   always
+!row1:          lda #SPR_ENEMY + FORM_COLS
+                bne !row+                               //     always
+!row0:          lda #SPR_ENEMY
+!row:           sta collide_best                        // 4   the row's first sprite, for now
+                lda mux_x_lo + SPR_PSHOT + i            // 4   ... and the column under it
+                sec                                     // 2
+                sbc collide_fx                          // 4
+                tax                                     // 2
+                lda mux_x_hi + SPR_PSHOT + i            // 4
+                sbc #0                                  // 2
+                bne !nocand+                            // 2 / 3   left of column 0's box, or far right
+                lda grid_col,x                          // 4
+                bmi !nocand+                            // 2 / 3   between two columns' boxes
+                clc                                     // 2
+                adc collide_best                        // 4
+                tax                                     // 2   the candidate's virtual sprite
+                lda enemy_state - SPR_ENEMY,x           // 4
+                cmp #ENEMY_PARKED                       // 2
+                beq !cand+                              // 3 / 2   (Dead, Exploding, or a diver away from home)
+!nocand:        ldx #0                                  // 2   0 = no enemy (sprite 0 is the ship)
+!cand:          stx collide_best                        // 4
+                // The divers (WindUp, Dive, Return): the box test, for those in the shot's Y band.
+                lda zp_divers_active                    // 3
+                beq !answer+                            // 3 / 2
+                .for (var s = 0; s < DIVER_SLOTS; s++) {
+                        ldx diver_enemy + s             // 4
+                        bmi !no+                        // 2 / 3
+                        lda collide_y                   // 4
+                        sec                             // 2
+                        sbc mux_y + SPR_ENEMY,x         // 4
+                        cmp #GRID_BAND                  // 2
+                        bcc !box+                       // 2 / 3
+!no:
+                }
+                jmp !answer+                            // 3   no diver in the shot's band
+!box:           ldx #SPR_PSHOT + i                      // 2
                 ldy #COL_PAIR_PSHOT_ENEMY               // 2
                 jsr collision_begin                     // 95  the shot has moved this frame
-                ldx #SPR_ENEMY + ENEMY_COUNT - 1        // 2
-                lda #SPR_ENEMY                          // 2
-                jsr collision_range                     // 22 + 17 a reject + 39 a full test
-!test:          bcc !next+                              // nothing (more) under the shot
-                lda enemy_state - SPR_ENEMY,x           // X = the enemy's virtual sprite
-                cmp #ENEMY_EXPLODING
-                bne !hit+
-                jsr collision_next                      // an explosion can't be hit: carry on below it
-                jmp !test-
-!hit:           lda #MUX_OFF                            // the shot is gone: its slot is free for
+                .for (var s = 0; s < DIVER_SLOTS; s++) {
+                        ldx diver_enemy + s             // 4
+                        bmi !no+                        // 2 / 3
+                        txa                             // 2
+                        clc                             // 2
+                        adc #SPR_ENEMY                  // 2
+                        tax                             // 2
+                        jsr collision_one               // up to 52. X preserved
+                        bcc !no+                        // 3 / 2
+                        cpx collide_best                // 4   the highest sprite wins, as a scan from
+                        bcc !no+                        // 2 / 3   sprite 23 down would have found it
+                        stx collide_best                // 4
+!no:
+                }
+!answer:        ldx collide_best                        // 4
+                beq !next+                              // 3 / 2   nothing under the shot
+                lda #MUX_OFF                            // the shot is gone: its slot is free for
                 sta mux_y + SPR_PSHOT + i               // player_update, later in this frame
-                jsr collide_enemy_hit
+                jsr collide_enemy_hit                   // X = the enemy's virtual sprite
 !next:
         }
         // (b) and (c): the player against the enemy shots, then against the diving enemies
@@ -187,3 +260,8 @@ collide_enemy_hit:
 !:      jmp enemy_explode               // X = the virtual sprite. It explodes where it is
 #endif
 .errorif SCORE_DIVING != 3, "collide_enemy_hit steps to the diving values with three iny"
+
+// collide_update's variables (absolute: they are held across the collision module's calls).
+collide_fx:     .byte 0         // fx + GRID_X0, this frame
+collide_y:      .byte 0         // the shot's Y + GRID_Y_OFF
+collide_best:   .byte 0         // the virtual sprite of the enemy the shot hits; 0 = none
