@@ -264,9 +264,19 @@ M4 is deliberately modest. It shakes out the tools, process and agent prompts on
 Progress is tracked in the [milestone table](#10-suggested-first-milestones). Each milestone from
 M3 on has its own brief in [docs/milestones/](docs/milestones/).
 
-**Now: the M3 follow-up list**, in the [M3 brief](docs/milestones/M3-engine-basics.md#m3-follow-up-before-m4-relies-on-the-multiplexer)
-(M3 itself was signed off on 2026-10-01). **Next: M4, the training game**: see the [M4 brief](docs/milestones/M4-training-game.md). It starts
-with stage 0, the design, once Simon has settled the brief's open questions.
+**Now: M4 stage 5 (ship)**: QA run, the long soak and sign-off: see the [M4 brief](docs/milestones/M4-training-game.md).
+
+**Before M5:**
+
+1. **Multiplexer v2**, to the requirements in the [M3 brief](docs/milestones/M3-engine-basics.md) and the
+   Technical Director's lessons from Swarm ([memory map](docs/games/swarm/memory-map.md), "What Swarm
+   taught us about the engine"): a top panel so sprites can leave by the bottom, and the bullet question
+   (more sprites and pins, or character bullets).
+2. **Art trial on Swarm.** Swarm's sprites are script-drawn placeholders. Add an `artist` agent, have it
+   redraw the sheet (multicolour, with a preview for Simon), and Simon judges it against the
+   placeholders. If it is good enough, M5 has an artist; if not, M5's art comes from Simon or a human
+   artist, and the tools-engineer makes that hand-off smooth (template PNG, preview command, checker).
+   Either way the process gains an art direction step and an explicit "Simon approves the look" gate.
 
 Always: after each milestone, update agent prompts and docs with whatever went wrong. The studio's
 "culture" lives in those files.

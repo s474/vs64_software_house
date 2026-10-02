@@ -14,7 +14,8 @@ Target: **PAL C64** (6510 + VIC-II 6569 + SID), KickAssembler 5.25, VICE 3.10 (`
 | Build something outside `games/` | `make GAME=<name> SRC_DIR=<dir>` |
 | Run in VICE for a human | `make run GAME=<title>` |
 | Release build | `make BUILD=release GAME=<title>` (no `DEBUG` define) |
-| Crunched PRG / disk image | `make crunch` / `make d64` |
+| Ship a release | `make release GAME=<title>` → `dist/<title>/<title>.d64` (+ `-sfx.prg`, `.prg`, `main.vs`); release build in its own `build/<title>-release/`, Exomizer-crunched. `make crunch` / `make d64` are aliases |
+| Verify a release | `make test-release GAME=<title>` (builds it, checks the d64 directory, boots the d64 and the crunched PRG in headless VICE to the title) |
 | Test the tools | `make test-tools` (pytest for every Python project under `tools/`) |
 | Check engine budgets in VICE | `make test` (builds each `tests/**/budget.json` spike, runs it headless, fails on an overrun; `make test ARGS=irq_chain` for one) |
 | Long budget run (soak) | `make test-long` (every sample/frame count x 34, ~30 min for the multiplexer; `make test-long LONG_SCALE=10 ARGS=multiplexer` for another factor or one spike). For milestone sign-off, not every change |
@@ -36,8 +37,9 @@ Build outputs in `build/<title>/`: `.prg`, `main.vs` (labels), `main.dump` (addr
 | `docs/standards/` | Coding standards, memory-map template |
 | `docs/games/<title>/` | Per game: design doc, memory map, raster timeline |
 | `mcp/vice/` | VICE MCP server (Python, uv project) |
-| `tools/` | Python asset converters and utilities: `png2sprites/`, `budget-runner/` (uv workspace members, never system pip) |
+| `tools/` | Python asset converters and utilities: `png2sprites/`, `budget-runner/`, `release-check/` (uv workspace members, never system pip) |
 | `screenshots/` | Git-ignored. All screenshots and visual output go here |
+| `dist/<title>/` | Git-ignored. Release disk images and crunched PRGs; survives `make clean` |
 
 ## Reference docs
 
@@ -68,7 +70,7 @@ mark measured facts as measured (with the probe that shows it).
 - Timing figures come from measurement ([vic-ii-timing.md](docs/reference/vic-ii-timing.md)), not memory.
   If a number isn't in the docs, measure it and add it.
 - Zero page is allocated in each game's `zp.asm`. Only the IRQ framework touches the IRQ vectors and `$D012`.
-- Python: one **uv workspace** rooted at `pyproject.toml` (members `mcp/vice`, `tools/png2sprites`, `tools/budget-runner`), with a single `uv.lock` and `.venv/` at the repo root. Add a dependency with `uv add --package <member> <pkg>`, run with `uv run` (from the root, or from inside a member's directory: both use the root `.venv`). A new Python project is added to `[tool.uv.workspace] members`. Never `pip install` into the system Python.
+- Python: one **uv workspace** rooted at `pyproject.toml` (members `mcp/vice`, `tools/png2sprites`, `tools/budget-runner`, `tools/release-check`), with a single `uv.lock` and `.venv/` at the repo root. Add a dependency with `uv add --package <member> <pkg>`, run with `uv run` (from the root, or from inside a member's directory: both use the root `.venv`). A new Python project is added to `[tool.uv.workspace] members`. Never `pip install` into the system Python.
 - **Stay in your role.** Agents change only the files their role owns (see the team table below).
   For anything else, report what's needed and the producer assigns it to the owner.
 - Diagrams in docs are Mermaid.

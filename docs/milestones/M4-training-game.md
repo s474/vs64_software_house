@@ -183,6 +183,30 @@ exact (the `$D012` read at the title press is line 26 or 27; a later wave's Intr
 `formation_update` on line 49, under the one-off rule); the new game's frame grew by 103 cycles where
 about 40 was expected, untraced. These go to the Technical Director's stage 5 review.
 
+**Simon's playtest of stage 4 (2026-10-02), VICE and the C64 Ultimate:** sounds are at the right times
+and reasonable levels. The game was too easy: the player could fire for 3 seconds at each wave's start
+before any enemy could, and enemies fired too little. (Also noted, and not changing in M4: divers leave
+by the side, not the bottom, an engine v1 limit, so they rarely threaten the player on the way out.)
+
+**Tuning after that playtest (design `94241d6`, build `2d6cf3f`):** the first wind-up comes 60 frames
+into a wave (was 150); launch intervals are shorter; two divers from wave 1 and three from wave 3; one
+more shot a dive. Wave 1 now fires 0.98 shots a second with the formation full (was 0.33). Three
+constants and three tables; no rule changed. `diver_update` now peaks at 1,296 against 1,350.
+Simon: "difficulty is much better".
+
+### Stage 5: ship (2026-10-02, in progress)
+
+- Release disk image: `make release GAME=swarm` → `dist/swarm/swarm.d64`; `make test-release GAME=swarm`
+  boots it in headless VICE to the title (tools-engineer, `de3c671`).
+- **Gate: Simon played the release disk on the C64 Ultimate: it loads fine, and "I think it passes fun
+  for five minutes".**
+- Still to come: the Technical Director's review, the QA soak and positions run, the long run.
+- **Art (deliverable 5): placeholder, not approved (Simon, 2026-10-02).** The 13 sprites were drawn by
+  a script (`games/swarm/art/make_sprites.py`) and "are not great"; Swarm ships with them. The pipeline
+  works (replace `sprites.hires.png`, run `check_sprites.py`, rebuild), but the studio has no art role,
+  no art direction step and no preview put to Simon for approval. An art trial on Swarm is planned
+  before M5: see the plan's [next actions](../../C64_SOFTWARE_HOUSE.md#11-next-actions).
+
 ## The game (scope for M4)
 
 **In:**
