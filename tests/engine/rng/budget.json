@@ -2,7 +2,7 @@
   "spike": "rng",
   "src_dir": "tests/engine/rng",
   "warmup_frames": 600,
-  "stage": 1,
+  "stage": 2,
   "notes": "Checks from the contract (engine/rng.md#spike-testsenginerng, Technical Director; low-bit limits re-baselined 2026-10-02 from tests/engine/rng/limits_model.py, reasoning in engine/rng.md#low-bit-limits). 'stage': 1 = the spike as first built (it reports spike_low5_min/max); 2 = the spike also reports spike_bit_min and spike_bit_max (engine/rng.md#low-bit-limits says exactly what). The raster-engineer sets stage 2 when those labels exist and changes nothing else here; until then the four 'ones per block' checks print PENDING and the two low-5-bit locks stand in for them. warmup_frames 600: the whole-period statistics take about 300 frames at stage 1 (90 cycles a call, screen off) and an estimated 450-500 once five bit counters are added; every memory check reads the finished result. The profile check is a lock: rng_next has no branches and is called on a top-border line with no DMA and no IRQ inside it, so min_cycles = max_cycles = the measured figure (as tests/engine/irq_chain). Its span is rng_next to rng_next_end (the rts label): the rts and the caller's jsr are NOT in it (engine/README.md#which-span-a-figure-is). The model check against the 6502 routine is tests/engine/rng/check.py. Schema: engine/README.md#budget-files.",
   "checks": [
     {

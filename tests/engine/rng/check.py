@@ -12,8 +12,8 @@ checks its results. This script backs those figures from the other side:
   C. The 6502 routine in VICE against the model: for each of several seeds the state is written
      into zp_rng_lo/hi while the machine is stopped at rng_next, X and Y are set to marker
      values, and at rng_next_end A, the state, X and Y are read: --calls outputs per seed
-     (default 600). Also the spike's own results (period, histogram, low-5 figures, the zero-seed
-     state) against the model's for the spike's seed.
+     (default 600). Also the spike's own results (period, histogram, low-5 figures, ones per block
+     for bits 0-4, the zero-seed state) against the model's for the spike's seed.
   D. Distribution of the low bits (Swarm masks to 5 bits), from the model, seed = the spike's:
      each of bits 0-4 over the period (ones, longest run), and for the low 1-5 bits the fewest /
      most times any value comes out in a block of 256 consecutive calls (255 blocks). Reported
@@ -24,8 +24,13 @@ Run from the repo root (build first: make GAME=rng SRC_DIR=tests/engine/rng):
 
     uv run --package budget-runner python tests/engine/rng/check.py [--calls 600] [--prg build/rng/rng.prg]
 
-About 15 s (400 warm-up frames, then one frame per call checked). Works on a release build
+About 20 s (600 warm-up frames: the spike's statistics take 450, measured, then one frame per call checked). Works on a release build
 (make BUILD=release ...): it uses no DEBUG label. Exit code 1 on any failure.
+
+    uv run --package budget-runner python tests/engine/rng/check.py --finish-frame
+
+prints only the frame (counted from the program's entry, as the warm-up is) at which spike_done
+becomes 1, and fails if that is not within WARMUP frames. About 15 s.
 """
 
 import argparse
@@ -35,10 +40,11 @@ from collections import Counter
 from pathlib import Path
 
 from budget_runner.session import STOP_TIMEOUT, MeasureError, Vice
-from vice_monitor import CPU_OP_EXEC  # on sys.path once budget_runner.session is imported
+from vice_monitor import CPU_OP_EXEC, run_frames  # on sys.path once budget_runner.session is imported
 
 REPO = Path(__file__).resolve().parents[3]
 SPIKE_SEED = 0x1234
+WARMUP = 600         # frames, as budget.json's warmup_frames
 SEED_DEFAULT = 0x2A6D
 SEEDS = [SPIKE_SEED, SEED_DEFAULT, 0x0001, 0x8000, 0xFFFF, 0x00FF, 0xFF00, 0xBEEF]
 
@@ -81,8 +87,25 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--calls", type=int, default=600)
     ap.add_argument("--prg", default=str(REPO / "build/rng/rng.prg"))
+    ap.add_argument("--finish-frame", action="store_true",
+                    help="only report the frame at which the spike's statistics finish")
     a = ap.parse_args()
     fails = []
+
+    if a.finish_frame:
+        v = Vice(Path(a.prg), 0)
+        try:
+            done, frame = v.symbols["spike_done"], 0
+            while frame < WARMUP + 200 and v.mon.mem_get(done, done)[0] != 1:
+                run_frames(v.mon, 1)
+                frame += 1
+            finished = v.mon.mem_get(done, done)[0] == 1
+        finally:
+            v.close()
+        ok = finished and frame <= WARMUP
+        print(f"[{'PASS' if ok else 'FAIL'}] spike_done = 1 " + (f"at frame {frame}" if finished else f"not reached in {frame} frames")
+              + f" after the program's entry (warm-up {WARMUP})")
+        return 0 if ok else 1
 
     def rep(name, ok, text):
         print(f"[{'PASS' if ok else 'FAIL'}] {name}: {text}")
@@ -113,9 +136,12 @@ def main() -> int:
     hist = Counter(out)
     hmin, hmax = min(hist.get(i, 0) for i in range(256)), max(hist.values())
     l5 = block_minmax(out, 5)
+    # Ones per block of 256 calls for each of bits 0-4 (255 blocks x 5 bits): spike_bit_min/max
+    cells = [sum((x >> b) & 1 for x in out[k * 256:k * 256 + 256]) for k in range(255) for b in range(5)]
+    bit_min, bit_max = min(cells), max(cells)
 
     # C
-    v = Vice(Path(a.prg), 400)
+    v = Vice(Path(a.prg), WARMUP)
     try:
         mon, sym = v.mon, v.symbols
 
@@ -124,9 +150,11 @@ def main() -> int:
 
         spike = {k: u(k, z) for k, z in [("spike_done", 1), ("spike_period", 2), ("spike_hist_min", 2),
                                          ("spike_hist_max", 2), ("spike_low5_min", 1), ("spike_low5_max", 1),
+                                         ("spike_bit_min", 1), ("spike_bit_max", 1),
                                          ("spike_blocks", 1), ("spike_zero_ok", 1), ("spike_zero_state", 2)]}
         want = {"spike_done": 1, "spike_period": 65535, "spike_hist_min": hmin, "spike_hist_max": hmax,
-                "spike_low5_min": l5[0], "spike_low5_max": l5[1], "spike_blocks": 255, "spike_zero_ok": 1,
+                "spike_low5_min": l5[0], "spike_low5_max": l5[1], "spike_bit_min": bit_min, "spike_bit_max": bit_max,
+                "spike_blocks": 255, "spike_zero_ok": 1,
                 "spike_zero_state": SEED_DEFAULT}
         rep("C spike results = model", spike == want, f"C64 {spike}" + ("" if spike == want else f" model {want}"))
 

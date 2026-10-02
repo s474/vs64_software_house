@@ -8,9 +8,14 @@
 //      spike_low5_min/max    over every complete block of 256 consecutive calls (255 blocks: the
 //                            period is 255 x 256 + 255, and the last 255 calls are not a block),
 //                            the fewest / most times any value of (output & $1f) came out
+//      spike_bit_min/max     over the same 255 blocks and each of bits 0-4 of the output (1,275
+//                            cells): the fewest / most calls in a block in which a bit was 1.
+//                            Model: 103 / 157 (engine/rng.md#low-bit-limits)
 //      spike_blocks          complete blocks seen (255)
 //      spike_done            1 when all of the above are final (stays 0 if the period overflowed)
-//    About 90 cycles a call: 5.9 million cycles, 300 frames (budget.json warms up for 400).
+//    About 135 cycles a call with the block ends and the frame IRQ (90 before the five bit
+//    counters): spike_done = 1 at frame 450 after entry (measured: check.py --finish-frame;
+//    budget.json and check.py warm up for 600).
 // 3. Then the screen comes back on with the results in hex, and the main loop calls rng_next
 //    once a frame straight after irq_wait_frame for the profile check: lines $11-$12, top border,
 //    no DMA, the frame's only IRQ already over.
@@ -20,7 +25,7 @@
 // Build:  make GAME=rng SRC_DIR=tests/engine/rng
 // Budget: make test ARGS=rng            (tests/engine/rng/budget.json)
 // Model:  uv run --package budget-runner python tests/engine/rng/check.py
-// Screenshot: screenshots/rng-spike.png
+// Screenshot: screenshots/rng-spike-stage2.png
 
 BasicUpstart2(start)
 
@@ -39,8 +44,9 @@ BasicUpstart2(start)
 .const ROW_HIST   = SCREEN + 6 * 40 + 4
 .const ROW_LOW5   = SCREEN + 8 * 40 + 4
 .const ROW_BLOCKS = SCREEN + 9 * 40 + 4
-.const ROW_ZERO   = SCREEN + 11 * 40 + 4
-.const ROW_DONE   = SCREEN + 13 * 40 + 4
+.const ROW_BITS   = SCREEN + 10 * 40 + 4
+.const ROW_ZERO   = SCREEN + 12 * 40 + 4
+.const ROW_DONE   = SCREEN + 14 * 40 + 4
 .const COL_VALUE  = 24
 
 .encoding "screencode_upper"
@@ -145,6 +151,23 @@ spike_call:
 !:      and #$1f                        // 2
         tax                             // 2
         inc spike_low5,x                // 7
+        // Ones in each of bits 0-4 (A = output & $1f): 5 or 10 a bit, 37.5 on average.
+        lsr                             // 2   bit 0 to carry
+        bcc !+                          // 3 / 2
+        inc spike_bits                  // 6
+!:      lsr                             //     bit 1
+        bcc !+
+        inc spike_bits + 1
+!:      lsr                             //     bit 2
+        bcc !+
+        inc spike_bits + 2
+!:      lsr                             //     bit 3
+        bcc !+
+        inc spike_bits + 3
+!:      lsr                             //     bit 4
+        bcc !+
+        inc spike_bits + 4
+!:
         inc spike_period                // 6
         bne !+                          // 3
         inc spike_period + 1
@@ -154,7 +177,7 @@ spike_call:
         jsr spike_block_end
 !:      lda zp_rng_lo                   // 3
         cmp #<SPIKE_SEED                // 2
-        bne spike_call                  // 3   = 90 a call
+        bne spike_call                  // 3   = 90 + 37.5 a call
         lda zp_rng_hi
         cmp #>SPIKE_SEED
         bne spike_call
@@ -191,6 +214,7 @@ spike_idle:
         SpikeText(ROW_HIST,   "BYTE COUNT MIN/MAX     $")
         SpikeText(ROW_LOW5,   "LOW 5 BITS MIN/MAX     $")
         SpikeText(ROW_BLOCKS, "  IN BLOCKS OF 256     $")
+        SpikeText(ROW_BITS,   "BIT 0-4 ONES MIN/MAX   $")
         SpikeText(ROW_ZERO,   "ZERO SEED OK           $")
         SpikeText(ROW_DONE,   "DONE                   $")
         SpikeHex(spike_period + 1,   ROW_PERIOD + COL_VALUE)
@@ -202,6 +226,8 @@ spike_idle:
         SpikeHex(spike_low5_min,     ROW_LOW5 + COL_VALUE)
         SpikeHex(spike_low5_max,     ROW_LOW5 + COL_VALUE + 3)
         SpikeHex(spike_blocks,       ROW_BLOCKS + COL_VALUE)
+        SpikeHex(spike_bit_min,      ROW_BITS + COL_VALUE)
+        SpikeHex(spike_bit_max,      ROW_BITS + COL_VALUE + 3)
         SpikeHex(spike_zero_ok,      ROW_ZERO + COL_VALUE)
         SpikeHex(spike_done,         ROW_DONE + COL_VALUE)
         lda #$1b                        // screen on
@@ -212,7 +238,9 @@ spike_main:
         sta spike_last
         jmp spike_main
 
-// End of a block of 256 calls: fold the 32 counts into the min and max, and clear them.
+// End of a block of 256 calls: fold the 32 value counts and the 5 bit counts into their mins and
+// maxes, and clear them. A bit that was 1 in all 256 calls has wrapped its count to 0 (reads as
+// a min of 0, which fails the budget check: no 16-bit count needed).
 // In: nothing   Out: nothing   Uses: A, X
 spike_block_end:
         ldx #31
@@ -227,6 +255,18 @@ spike_block_end:
         sta spike_low5,x
         dex
         bpl !loop-
+        ldx #4
+!loop:  lda spike_bits,x
+        cmp spike_bit_min
+        bcs !+
+        sta spike_bit_min
+!:      cmp spike_bit_max
+        bcc !+
+        sta spike_bit_max
+!:      lda #0
+        sta spike_bits,x
+        dex
+        bpl !loop-
         inc spike_blocks
         rts
 
@@ -239,11 +279,14 @@ spike_hist_min: .word $ffff
 spike_hist_max: .word 0
 spike_low5_min: .byte $ff
 spike_low5_max: .byte 0
+spike_bit_min:  .byte $ff                // fewest ones in a block for any of bits 0-4
+spike_bit_max:  .byte 0                  // most
 spike_blocks:   .byte 0
 spike_zero_ok:  .byte 0
 spike_zero_state: .word 0               // the state rng_seed left for seed 0/0 (RNG_SEED_DEFAULT)
 spike_last:     .byte 0                 // the byte from this frame's call
 spike_low5:     .fill 32, 0
+spike_bits:     .fill 5, 0              // ones in this block for bits 0-4
 spike_hex_chars:
         .text "0123456789ABCDEF"
 
