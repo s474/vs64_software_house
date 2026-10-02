@@ -1,0 +1,24 @@
+# python3 tests/games/swarm/short_routine_dma.py   (a count from the measured steals of
+# docs/reference/vic-ii-timing.md; no emulator)
+Model against measurements:
+  stars_update, badline 51, no sprites: 57 CPU -> model 100, measured 100
+  stars_update, badline 59, 6 enemy sprites: 57 CPU -> model 145, measured 129 max over 600 passes (two lines' fetches: 57 + 43 + 30)
+  bls_blk, badline, sprites 0-7: 126 CPU -> model 245, measured 245
+  spr_blk, no badline, sprites 0-7: 126 CPU -> model 183, measured 183
+Worst raster cycles for a routine of N CPU cycles (rows) with S sprites on every line
+it touches (columns), meeting a badline; and x 1.27 for comparison:
+  CPU    S=0     S=3     S=6     S=8     x1.27
+  43     86      104     116     124     55
+  57     100     118     145     157     72
+  100    143     170     188     219     127
+  122    165     201     225     241     155
+  150    193     229     253     288     190
+  200    243     288     333     357     254
+  300    343     406     463     495     381
+The same in the border above line 51 (no badline), S sprites of wrapped or rising divers:
+  CPU    S=0     S=1     S=3     
+  43     43      48      52      
+  57     57      62      75      
+  150    150     165     177     
+  231    231     251     276     
+  627    627     682     735     
