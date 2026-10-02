@@ -1,13 +1,16 @@
 # Sprite collisions: `engine/collision.asm`
 
-Design contract for M4 (Technical Director, 2026-10-01). Status: **implemented and measured**
-(raster-engineer, M4 stage 2, 2026-10-02): `engine/collision.asm`, 148 bytes, no zero page; spike
-`tests/engine/collision/`, **13 checks in `make test`, all passing, and 1 pending**: the worst
-frame of 42 tests measures **2,227–2,335 raster cycles through the display against the 2,100
-budgeted here** (1,813 CPU cycles against the 1,641 counted), which is for the Technical Director
-to settle: see [Results](#results-raster-engineer-2026-10-02). The single paths are all at or under
-their estimates except `collision_begin` (83 against 78, limit 90). Conventions are
-[engine/README.md](README.md)'s.
+Design contract for M4 (Technical Director, 2026-10-01). Status: **implemented, measured and
+accepted** (raster-engineer, M4 stage 2, 2026-10-02; reviewed by the Technical Director the same
+day): `engine/collision.asm`, 148 bytes, no zero page; spike `tests/engine/collision/`, **13 checks
+in `make test`, all passing, none pending**. The single paths are at or under their estimates
+except `collision_begin` (83 against 78, limit 90). The contract's own count for Swarm's worst
+frame was wrong, not the module: 1,641 CPU cycles counted, **1,813 measured**, so 2,227–2,335
+through the display against the 2,100 first budgeted. **Decided:** the requirement is now the
+measured figure + 5% = **2,450**, and Swarm's budget rose to match
+([memory-map.md](../docs/games/swarm/memory-map.md#the-collision-budget)); the 2,100 is withdrawn.
+Cost a frame of calls with [the formula below](#what-a-frame-of-calls-costs), which counts whole
+calls. Conventions are [engine/README.md](README.md)'s.
 
 ## Purpose
 
@@ -79,6 +82,16 @@ Rules:
   loop compares against immediates.
 - **A hidden target never hits.** A sprite with `mux_y` = `MUX_OFF` must fail the Y check: either by
   the arithmetic (then an `.errorif` proves it for the ranges allowed), or by an explicit test.
+  **As built it is the arithmetic, and that is a constraint on the game: every pair needs
+  `MUX_Y_MAX + ay1 − by0 < 255`** (and `MUX_Y_MIN ≥ by1 − ay0`). `ColPair` stops the build
+  otherwise. Any boxes pass when `MUX_Y_MAX` ≤ 234 (Swarm: 221, largest `ay1 − by0` 17); a game
+  with `MUX_Y_MAX` 235–249 is limited to pairs with `ay1 − by0` < 255 − `MUX_Y_MAX`, or the module
+  needs the explicit test (about 4 cycles a target, not built). A hidden **A** hits nothing either:
+  `collision_begin` tests for it.
+- **`collision_begin` copies A's position when it is called.** Move A first; moving it afterwards
+  has no effect until the next `collision_begin`. Targets are read when tested.
+- **`collision_one` does not skip A.** Called with X = A it reports whether the pair's two boxes
+  overlap at one position, which means nothing. Don't.
 - **A itself is skipped** if it lies inside the range.
 - The module knows nothing about kinds or states beyond the pair index. A target that shouldn't
   collide though it's on screen (Swarm: an exploding enemy) is the game's to ignore: call
@@ -105,7 +118,8 @@ None of its own, and it doesn't use `zp_tmp0–7`.
 
 ## Cycle budget
 
-All *estimates*, counted from the intended inner loop:
+The design's estimates, counted from the intended inner loop, kept for the record; what was built
+and **measured** follows them, and [the formula](#what-a-frame-of-calls-costs) is the one to use:
 
 ```
 !loop:  lda #ay_plus_off        // 2   self-modified by collision_begin
@@ -143,8 +157,43 @@ not needed in either test, and the end test is `cpx # / dex / bcs`):
 | `collision_range`, 18 full misses, whole call | 780 | **723** | lock |
 | `collision_one`, a hit, whole call | 55 | **52** | lock |
 | Swarm's worst frame, no DMA | 1,641 CPU (counted) | **1,813** | lock (added) |
-| Swarm's worst frame through the display | 2,100 | **2,227–2,335: over by up to 235** | max 2,500 (2,335 + 5%), and the 2,100 kept as a PENDING check |
+| Swarm's worst frame through the display | 2,100, withdrawn | **2,227–2,335** | max **2,450** (2,335 + 5%): the requirement now |
 | Size | 300 bytes | **148** | `.errorif` in the module |
+
+### What a frame of calls costs
+
+The first count in this contract (1,641 for Swarm) added up tests and set-ups and left out the
+calls. Count **whole calls** (`jsr` and `rts` included; CPU cycles, **measured**, no DMA):
+
+```
+  95 x collision_begin calls
++ 22 x collision_range calls  + 17 x targets rejected on Y  + 39 x targets tested on X
++ 52 x collision_one calls    (a hit; a miss is less)
++ the caller: about 6 a call (loading X, Y, A; the branch on C)
++ about 22 a hit (the hit exit, recording it, collision_next), before the game's own response
+```
+
+then × 1.27 for code that runs through the display (**measured** here: × 1.23–1.29; up to about
+× 1.35 by count if the whole run sits in rows of 8 sprites). `collision_range` is exactly
+21 + 17 × rejects + 39 × full tests when it runs to the end with no hit (327 and 723 for 18); a
+target whose X high byte differs from A's costs 35, not 39.
+
+Swarm's worst frame: 4 × 95 + 3 × 22 + 21 × 17 + 18 × 39 + 3 × 52 = 1,661, + about 60 for the
+caller and about 90 for the 4 hits = **1,813 measured** (`spike_mix`).
+
+Which call site each lock in `budget.json` measures (all in the lower border, from the `jsr` to
+the instruction after it):
+
+| Check | Labels | The call | Lock |
+|---|---|---|---|
+| `collision_begin`, the whole call | `spike_begin` → `spike_begin_end` | `jsr collision_begin`, A shown (a hidden A takes 6 fewer, *counted*) | 95 |
+| 18 targets, all rejected on Y | `spike_reject` → `spike_reject_end` | `jsr collision_range`, 18 targets, none passes Y | 327 |
+| 18 targets, all tested on X | `spike_full` → `spike_full_end` | `jsr collision_range`, 18 targets pass Y and miss on X by the longest path | 723 |
+| `collision_one`, hit | `spike_one` → `spike_one_end` | `jsr collision_one`, a hit | 52 |
+| Swarm's worst frame, no DMA | `spike_mix` → `spike_mix_end` | The whole frame's calls as a game makes them: 4 `collision_begin`, 3 `collision_range`, 3 `collision_one`, the loads between them, 4 hits recorded | 1,813 |
+
+The sixth cost check, `spike_collide` → `spike_collide_end`, is the same macro as `spike_mix`
+called in the display (lines 39–113), IRQ time excluded: a maximum (2,450), not a lock.
 
 ## Spike: `tests/engine/collision/`
 
@@ -191,7 +240,7 @@ page. VICE 3.10 x64sc PAL. Everything below is reproduced by three commands (bui
 `make GAME=collision SRC_DIR=tests/engine/collision`):
 
 ```
-make test ARGS=collision                                                        # 13 checks + 1 pending, 20 s
+make test ARGS=collision                                                        # 13 checks, 20 s
 uv run --package budget-runner python tests/engine/collision/check.py           # model check, 8 s
 uv run --package budget-runner python tests/engine/collision/measure.py --frames 6144   # costs by phase, about a minute
 ```
@@ -271,8 +320,17 @@ the tests. For the worst mix (21 full tests, 21 rejects, 4 hits):
 The DMA factor measured 1.23–1.29, as the 1.27 assumed. In the game `collide_update` runs later in
 the frame than the spike's (which starts on line 39–51), inside the rows' sprites, so the game's
 own measurement decides; the memory map's row 8 (2,100 + 375) needs **about 2,350 + 375** on these
-figures, 250 of the 935 headroom. `budget.json` keeps the 2,100 as a PENDING check (it fails under
-`--strict`) beside the measured lock (2,500 = 2,335 + 5%, rounded up to 50).
+figures, 250 of the 935 headroom.
+
+**Technical Director's decision (2026-10-02):** accepted as measured. Row 8 is now **2,450 + 375 =
+2,825** and Swarm's headroom 585
+([memory-map.md](../docs/games/swarm/memory-map.md#the-collision-budget), with the trigger for
+the grid fallback). `budget.json`: the display check's limit is **2,450** (2,335 + 5% = 2,452; the
+raster-engineer had rounded up to 2,500), the same figure as the game's budget for the tests; the
+PENDING check against 2,100 is removed, because an estimate a measurement has replaced isn't a
+target; the five border locks stand. On "later in the frame": Swarm's frame order puts
+`collide_update` on about line 37 in stage 2 and no later than about line 62 in stage 3, so the
+spike's lines 39–89 are close to the game's, and the + 5% is the allowance for the difference.
 
 Cheaper for the game, without touching the module: the player's two scans cost 2 × 95 for 6
 tests; and the fallback in the memory map (a player shot finds its one parked candidate by row and
@@ -291,7 +349,8 @@ Two checks differ from the table above, and one is added:
 - **`collision_begin` is locked as the border call** (`spike_begin` → `spike_begin_end`, 95), not on
   `collision_begin` → `collision_begin_end`: the spike also calls it four times a frame in the
   display, and a profile check on the module's labels takes those passes too (83–183).
-- **The 2,100 row** is two checks, as above.
+- **The 2,100 row** is one check with the measured limit, 2,450 (it was two until the Technical
+  Director's decision above: the measured limit and the 2,100 held PENDING).
 - **`spike_mix`** (1,813, a lock) is the worst mix with no DMA: the CPU count behind the display figure.
 
 Screenshots: `screenshots/collision-spike.png` (phase W: four hits, red border) and

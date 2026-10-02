@@ -4,7 +4,7 @@
   "asset_dir": "games/swarm/src",
   "warmup_frames": 400,
   "stage": 1,
-  "notes": "Swarm's budget checks (M4). Written by the Technical Director at stage 0, before the game exists: until tests/games/swarm/main.asm does, the runner reports SKIP. That file is the gameplay-engineer's, two lines: '#define AUTOPLAY' then '#import \"games/swarm/src/main.asm\"'. AUTOPLAY makes the game play the designer's worst case by itself (wave 12, scripted stick, nothing dies): docs/games/swarm/memory-map.md#labels-the-game-must-provide lists what it does and every label these checks read. 'stage' is the M4 stage the game's code has reached (docs/milestones/M4-training-game.md, stages 1-5): the gameplay-engineer sets it at the start of each stage and changes nothing else here. Checks with a higher from_stage print PENDING. Units: raster cycles, DMA included, IRQs excluded for main-loop routines (engine/README.md#budget-units). Every game limit is an estimate until its stage measures it; a failing check is reported with the measured figure, and the Technical Director re-baselines. The per-routine limits add up to 5,765 for game_update (input measured at 40, not the 75 first estimated), + 500 for the sound tick = 6,265 against the engine's 7,200: 935 of headroom, which the idle check enforces. STAGE 1 FIGURES CARRY NO DMA: with 3 sprites, game_update runs on raster lines 23-31, above the first badline (measured, docs/games/swarm/memory-map.md#stage-1-measured), so the display allowance (x 1.27) in every limit is untested until stage 2 puts the formation on screen. For that reason no limit here is re-baselined to a stage 1 measurement; each source line records the stage 1 figure beside the estimate. warmup_frames 400: boot, the wave intro (100 frames) and the first launches; the game's own GAME_IDLE_WARMUP is 200 frames. The first memory check runs 3,000 more frames and the others read at that same moment (after_frames 0), except the stage 5 soak.",
+  "notes": "Swarm's budget checks (M4). Written by the Technical Director at stage 0, before the game exists: until tests/games/swarm/main.asm does, the runner reports SKIP. That file is the gameplay-engineer's, two lines: '#define AUTOPLAY' then '#import \"games/swarm/src/main.asm\"'. AUTOPLAY makes the game play the designer's worst case by itself (wave 12, scripted stick, nothing dies): docs/games/swarm/memory-map.md#labels-the-game-must-provide lists what it does and every label these checks read. 'stage' is the M4 stage the game's code has reached (docs/milestones/M4-training-game.md, stages 1-5): the gameplay-engineer sets it at the start of each stage and changes nothing else here. Checks with a higher from_stage print PENDING. Units: raster cycles, DMA included, IRQs excluded for main-loop routines (engine/README.md#budget-units). Every game limit is an estimate until its stage measures it; a failing check is reported with the measured figure, and the Technical Director re-baselines. The per-routine limits add up to 6,115 for game_update (input measured at 40, not the 75 first estimated; collisions 2,825 since stage 2, when the collision module was measured: they were 2,475 and the total 5,765), + 500 for the sound tick = 6,615 against the engine's 7,200: 585 of headroom, which the idle check enforces (it was 935). STAGE 1 FIGURES CARRY NO DMA: with 3 sprites, game_update runs on raster lines 23-31, above the first badline (measured, docs/games/swarm/memory-map.md#stage-1-measured), so the display allowance (x 1.27) in every limit is untested until stage 2 puts the formation on screen. For that reason no limit here is re-baselined to a stage 1 measurement; each source line records the stage 1 figure beside the estimate. STAGE 2 PART A (formation, no collisions) was measured by tests/games/swarm/stage2a_costs.py, results beside it: still all above the first badline (docs/games/swarm/memory-map.md#stage-2-part-a-measured). A stage built in parts: memory-map.md#labels-the-game-must-provide, last paragraphs. warmup_frames 400: boot, the wave intro (100 frames) and the first launches; the game's own GAME_IDLE_WARMUP is 200 frames. The first memory check runs 3,000 more frames and the others read at that same moment (after_frames 0), except the stage 5 soak.",
   "checks": [
     {
       "name": "game_update: all game logic in the main loop",
@@ -13,11 +13,11 @@
         "game_update",
         "game_update_end"
       ],
-      "max_cycles": 5765,
+      "max_cycles": 6115,
       "samples": 600,
       "basis": "estimate",
       "from_stage": 1,
-      "source": "docs/games/swarm/memory-map.md#frame-budget, row 'Main loop, game_update in all'. Estimate (CPU cycles counted from the intended code x 1.27 for DMA); raster cycles, IRQs excluded. Replace with max over the run + ~5% once measured (Technical Director). Stage 1 measured: max 580 in this AUTOPLAY build (262-317 in the game proper), on lines 23-31, no DMA"
+      "source": "docs/games/swarm/memory-map.md#frame-budget, row 'Main loop, game_update in all'. Estimate (CPU cycles counted from the intended code x 1.27 for DMA); raster cycles, IRQs excluded. Replace with max over the run + ~5% once measured (Technical Director). The sum of the rows: 6,115 since stage 2 (row 8 raised by 350 from the collision spike's measurement; 5,765 before). Stage 1 measured: max 580 in this AUTOPLAY build (262-317 in the game proper), on lines 23-31, no DMA. Stage 2 part A measured: 841-1,007, lines 23-39, no DMA"
     },
     {
       "name": "player_update",
@@ -82,7 +82,7 @@
       "samples": 300,
       "basis": "estimate",
       "from_stage": 2,
-      "source": "docs/games/swarm/memory-map.md#frame-budget, row 5. Estimate (CPU cycles counted from the intended code x 1.27 for DMA); raster cycles, IRQs excluded. Replace with max over the run + ~5% once measured (Technical Director)"
+      "source": "docs/games/swarm/memory-map.md#frame-budget, row 5. Estimate (CPU cycles counted from the intended code x 1.27 for DMA); raster cycles, IRQs excluded. Replace with max over the run + ~5% once measured (Technical Director). Stage 2 part A measured: 323-437 on lines 29-36, no DMA (tests/games/swarm/stage2a_costs.txt). The limit stays 750: explosion shapes and timers (part B) and the wind-up wobble (stage 3) are still to come, about 190 for the two, and up to about 120 of sprite DMA from shots and divers at the top of the screen"
     },
     {
       "name": "collide_update (42 box tests and their responses)",
@@ -91,11 +91,11 @@
         "collide_update",
         "collide_update_end"
       ],
-      "max_cycles": 2475,
+      "max_cycles": 2825,
       "samples": 600,
       "basis": "estimate",
       "from_stage": 2,
-      "source": "docs/games/swarm/memory-map.md#frame-budget, row 8; method and per-test counts in engine/collision.md. Estimate (CPU cycles counted from the intended code x 1.27 for DMA); raster cycles, IRQs excluded. Replace with max over the run + ~5% once measured (Technical Director)"
+      "source": "docs/games/swarm/memory-map.md#frame-budget, row 8 and #the-collision-budget (Technical Director, 2026-10-02). 2,825 = 2,450 for the 42 tests (measured in tests/engine/collision: 1,813 with no DMA, max 2,335 through the display on lines 39-89, + 5%) + 375 for the responses to 2 enemy hits or a player hit (estimate, 295 CPU x 1.27). It was 2,475 on a count of 1,641 for the tests. Still an estimate for the game: its caller, its responses and where it lands in the frame are unmeasured. FALLBACK TRIGGER (the gameplay-engineer switches parked enemies to the row/column lookup and reports): this check's max over 2,050 in stage 2 part B (no divers or enemy shots yet), or over 2,825 from stage 3"
     },
     {
       "name": "diver_update (3 divers, launcher)",
@@ -213,9 +213,9 @@
       "after_frames": 0,
       "basis": "requirement",
       "from_stage": 1,
-      "source": "docs/games/swarm/memory-map.md#frame-budget: the engine promises 7,200, the game is budgeted 6,265, so at least 935 must be left idle in every frame. game_idle_min is idle-loop iterations of 16 cycles; expected about 3,000 or more with the whole game running (estimate). Stage 1 measured: 15,888 (3 sprites, no enemies)",
+      "source": "docs/games/swarm/memory-map.md#frame-budget: the engine promises 7,200, the game is budgeted 6,615 (6,265 before stage 2's collision figure), so at least 585 must be left idle in every frame. game_idle_min is idle-loop iterations of 16 cycles; expected about 3,000 or more with the whole game running (estimate). Stage 1 measured: 15,888 (3 sprites, no enemies). Stage 2 part A: 10,240 (21 sprites, no collisions)",
       "scale": 16,
-      "min": 935
+      "min": 585
     },
     {
       "name": "pinned sprites (player, enemy shots) never dropped",
@@ -280,9 +280,9 @@
       "after_frames": 0,
       "basis": "requirement",
       "from_stage": 5,
-      "source": "M4 stage 5 sign-off: as the stage 1 check, over a longer run",
+      "source": "M4 stage 5 sign-off: as the stage 1 check (headroom 585), over a longer run",
       "scale": 16,
-      "min": 935
+      "min": 585
     },
     {
       "name": "soak: no late chain entries or sprite writes (chain)",

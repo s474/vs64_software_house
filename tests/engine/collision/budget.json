@@ -3,7 +3,7 @@
   "src_dir": "tests/engine/collision",
   "warmup_frames": 50,
   "stage": 2,
-  "notes": "Checks from the contract's table (engine/collision.md#spike-testsenginecollision, Technical Director 2026-10-01), measured by the raster-engineer in M4 stage 2 (2026-10-02; figures and how they were taken: engine/collision.md#results, tests/engine/collision/measure.py). The spike cycles through three phases every 256 frames: M moving (224 frames), W the contract's worst mix held static (16), B the same layout with no tests, so that the border passes run with nothing else in the frame (16). The five 'border' checks are locks: constant paths run from line 252 on in phase B frames, no badline, no sprite DMA, no IRQ inside, so min_cycles = max_cycles = the measured figure; 32 samples = two whole cycles of the spike. Their spans are a jsr to the instruction after it, so they are WHOLE CALLS (profile span + jsr 6 + rts 6: engine/README.md#which-span-a-figure-is). TWO DEPARTURES from the contract's table, both reported to the Technical Director: (1) its first row, collision_begin -> collision_begin_end with limit 90, cannot be a lock on those labels, because the spike must also call collision_begin in the display (four times a frame, in spike_collide), where DMA lands on it (83-183 measured). It is locked here as the border call spike_begin -> spike_begin_end = 95 = 83 + 12; the contract's 90 is for the 83. (2) The worst frame through the display measures 2,335 against the contract's 2,100 (an estimate): the measured lock is 'max over 600 passes + 5%' as the contract says such a row becomes, and the 2,100 itself is kept as a separate check at from_stage 3, so it prints PENDING and fails under --strict until the Technical Director decides: the target is not moved here. 'stage': 2 = the spike as built in M4 stage 2. Schema: engine/README.md#budget-files.",
+  "notes": "Checks from the contract's table (engine/collision.md#spike-testsenginecollision, Technical Director 2026-10-01), measured by the raster-engineer in M4 stage 2 (2026-10-02; figures and how they were taken: engine/collision.md#results, tests/engine/collision/measure.py). The spike cycles through three phases every 256 frames: M moving (224 frames), W the contract's worst mix held static (16), B the same layout with no tests, so that the border passes run with nothing else in the frame (16). The five 'border' checks are locks: constant paths run from line 252 on in phase B frames, no badline, no sprite DMA, no IRQ inside, so min_cycles = max_cycles = the measured figure; 32 samples = two whole cycles of the spike. Their spans are a jsr to the instruction after it, so they are WHOLE CALLS (profile span + jsr 6 + rts 6: engine/README.md#which-span-a-figure-is). TWO DEPARTURES from the contract's table, both reported to the Technical Director: (1) its first row, collision_begin -> collision_begin_end with limit 90, cannot be a lock on those labels, because the spike must also call collision_begin in the display (four times a frame, in spike_collide), where DMA lands on it (83-183 measured). It is locked here as the border call spike_begin -> spike_begin_end = 95 = 83 + 12; the contract's 90 is for the 83. (2) The worst frame through the display measures 2,335 against the contract's 2,100, which was an estimate built on a count (1,641) that left out the calls round the tests. DECIDED (Technical Director, 2026-10-02): the requirement is the measured figure + 5% = 2,450, which is also what Swarm's memory map now budgets for the 42 tests (docs/games/swarm/memory-map.md#the-collision-budget, row 8 = 2,450 + 375). The separate PENDING check against 2,100 is removed: an estimate that a measurement has replaced is not a target, and the module is not asked to change. The five border locks are confirmed as measured (tests/engine/collision/measure_results.txt, DEBUG and release alike). 'stage': 2 = the spike as built in M4 stage 2. Schema: engine/README.md#budget-files.",
   "checks": [
     {
       "name": "collision_begin, the whole call (border)",
@@ -59,20 +59,10 @@
       "name": "Swarm's worst frame, 42 tests, through the display",
       "kind": "profile_excl_irq",
       "routine": ["spike_collide", "spike_collide_end"],
-      "max_cycles": 2500,
+      "max_cycles": 2450,
       "samples": 600,
       "basis": "measured",
-      "source": "engine/collision.md#cycle-budget: 'a max over 600 passes + 5%'. Measured max 2,335 over 5,760 passes (6,144 frames, measure.py): phase W (the contract's mix, lines 39-89) 2,227-2,335, phase M (moving, lines 47-113) 1,639-2,279. + 5% = 2,452, rounded up to 50. 600 passes span two and a half of the spike's 256-frame cycles, so phase W is always in them. THIS IS OVER THE CONTRACT'S 2,100: see the next check"
-    },
-    {
-      "name": "the same against the contract's 2,100: MEASURED 2,335, OVER, awaiting the Technical Director",
-      "kind": "profile_excl_irq",
-      "routine": ["spike_collide", "spike_collide_end"],
-      "max_cycles": 2100,
-      "samples": 600,
-      "from_stage": 3,
-      "basis": "estimate",
-      "source": "engine/collision.md#cycle-budget and docs/games/swarm/memory-map.md#frame-budget row 8: 2,100 raster for the 42 tests (1,641 CPU x 1.27). Measured 2,227-2,335 for that mix (1,813 CPU x 1.23-1.29). Held at from_stage 3 so that it is PENDING, not failing and not re-baselined: the raster-engineer reports the gap, the Technical Director moves the budget or the design. Under --strict it fails"
+      "source": "engine/collision.md#cycle-budget: 'a max over 600 passes + 5%'. Measured max 2,335 over 5,760 passes (6,144 frames, measure.py): phase W (the contract's mix, lines 39-89) 2,227-2,335, phase M (moving, lines 47-113) 1,639-2,279. + 5% = 2,452, set at 2,450 (Technical Director: the same figure as Swarm's budget for the tests, so the spike's limit and the game's row can't drift apart; the raster-engineer had 2,500). 600 passes span two and a half of the spike's 256-frame cycles, so phase W is always in them. The contract's first figure, 2,100, was an estimate and is withdrawn"
     },
     {
       "name": "nothing missed, nothing false (the spike's 6502 reference test)",
