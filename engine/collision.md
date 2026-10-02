@@ -1,7 +1,12 @@
 # Sprite collisions: `engine/collision.asm`
 
-Design contract for M4 (Technical Director, 2026-10-01). Status: **not implemented**. The
-raster-engineer builds it in M4 stage 2 with the spike below. Conventions are
+Design contract for M4 (Technical Director, 2026-10-01). Status: **implemented and measured**
+(raster-engineer, M4 stage 2, 2026-10-02): `engine/collision.asm`, 148 bytes, no zero page; spike
+`tests/engine/collision/`, **13 checks in `make test`, all passing, and 1 pending**: the worst
+frame of 42 tests measures **2,227–2,335 raster cycles through the display against the 2,100
+budgeted here** (1,813 CPU cycles against the 1,641 counted), which is for the Technical Director
+to settle: see [Results](#results-raster-engineer-2026-10-02). The single paths are all at or under
+their estimates except `collision_begin` (83 against 78, limit 90). Conventions are
 [engine/README.md](README.md)'s.
 
 ## Purpose
@@ -44,14 +49,15 @@ table the game provides.
 // Choose the object to test and the pair of kinds. Sets up the loop's constants from A's position.
 // In:  X = virtual sprite A (0-23), Y = pair index (row of col_pairs)
 // Out: nothing   Uses: A (X, Y preserved)
-// Cost: estimate 78 CPU cycles + jsr/rts 12
+// Cost: measured 83 raster cycles (no DMA) in the profile span, 95 for the whole call (estimate was 78 + 12)
 collision_begin:
 
 // Test A against every virtual sprite from X down to the first one, stopping at the first hit.
 // In:  X = last target (highest index), A = first target (lowest index); first <= last
 // Out: C = 1 and X = the target hit; C = 0 if none (X undefined)
 // Uses: A, X, Y
-// Cost: estimate 19 CPU cycles per target rejected on Y, 42 per target tested on X, + jsr/rts 12
+// Cost: measured 17 per target rejected on Y, 39 per target tested on X (35 if the X high bytes
+//       differ), + 10 + jsr/rts 12 (estimates were 19 and 42)
 collision_range:
 
 // Carry on below the last hit (same A, same pair, same first target).
@@ -61,7 +67,7 @@ collision_next:
 
 // Test A against one target.
 // In:  X = target   Out: C = 1 hit, C = 0 miss; X preserved   Uses: A, Y
-// Cost: estimate 42 CPU cycles + jsr/rts 12
+// Cost: measured 40 for a hit, 52 for the whole call (estimate was 42 + 12)
 collision_one:
 ```
 
@@ -127,6 +133,19 @@ bcs`: 22, so 42 for a target that passes Y (the taken `bcc` is 1 more than the r
 The first four become locks once measured (constant paths, no DMA); the last is a max over 600
 passes + 5%, as the README's multiplexer budgets are.
 
+**Measured** (raster-engineer, 2026-10-02; the loop as built is 17 / 39, not 19 / 42: the `sec` is
+not needed in either test, and the end test is `cpx # / dex / bcs`):
+
+| Path | Estimate / limit above | **Measured** | In `budget.json` |
+|---|---|---|---|
+| `collision_begin` → `collision_begin_end` | 78 / 90 | **83** in every border call (95 with `jsr` and `rts`); 83–183 in the display | lock 95 on the border call |
+| `collision_range`, 18 rejects, whole call | 360 | **327** | lock |
+| `collision_range`, 18 full misses, whole call | 780 | **723** | lock |
+| `collision_one`, a hit, whole call | 55 | **52** | lock |
+| Swarm's worst frame, no DMA | 1,641 CPU (counted) | **1,813** | lock (added) |
+| Swarm's worst frame through the display | 2,100 | **2,227–2,335: over by up to 235** | max 2,500 (2,335 + 5%), and the 2,100 kept as a PENDING check |
+| Size | 300 bytes | **148** | `.errorif` in the module |
+
 ## Spike: `tests/engine/collision/`
 
 The multiplexer with 24 sprites laid out as Swarm's worst case and moving: 18 "enemies" in three
@@ -163,3 +182,120 @@ It must demonstrate:
 
 The three border checks run their passes in the lower border (after the fixed entry at `$FB`),
 where no badline or sprite DMA can land on them.
+
+## Results (raster-engineer, 2026-10-02)
+
+Built as specified: the four routines and `ColPair` have the API above, the module reads
+`mux_x_lo` / `mux_x_hi` / `mux_y`, keeps its set-up in self-modified operands and uses no zero
+page. VICE 3.10 x64sc PAL. Everything below is reproduced by three commands (build first:
+`make GAME=collision SRC_DIR=tests/engine/collision`):
+
+```
+make test ARGS=collision                                                        # 13 checks + 1 pending, 20 s
+uv run --package budget-runner python tests/engine/collision/check.py           # model check, 8 s
+uv run --package budget-runner python tests/engine/collision/measure.py --frames 6144   # costs by phase, about a minute
+```
+
+Their output is committed beside them: `check_results.txt`, `measure_results.txt` (DEBUG, 6,144
+frames) and `measure_results_release.txt` (release, 768 frames).
+
+### Correctness
+
+`check.py` compares the 6502 routines with a Python model that is the plain definition (two boxes
+overlap when neither is wholly left of, right of, above or below the other; a hidden sprite
+overlaps nothing). **All parts pass in the DEBUG and the release build**, with the same counts:
+
+| Part | What | Counts |
+|---|---|---|
+| D demo (spike item 1) | The spike's own frames, stopped at `spike_frame_done`: positions and hit arrays read, all 42 pairs of the frame compared | 2,000 frames, 84,000 pairs, 1,532 overlaps in 772 frames: no false hit, no missed hit. `spike_mismatch_count` 0 (the spike's 6502 reference test), `spike_overrun_count` 0 |
+| E edges (item 2) | For each of the 3 pairs and 15 positions of A, B at every offset from 3 pixels outside the overlap rectangle on one side to 3 outside on the other, in X and Y | 1,272 scenes, 28,836 positions: 17,982 overlap, 10,854 don't. Touching by one pixel (must hit): left 906, right 906, top 727, bottom 660. One pixel apart (must miss): 906, 906, 714, 660. A and B on opposite sides of X 255/256 in 72 (pair, offset) cases; Y at `MUX_Y_MIN` and `MUX_Y_MAX` |
+| X far | A and B at 21 X values over 0–511, every combination | 2,646 pairs: no hit from 9-bit wrap-round |
+| H hidden (item 3) | B hidden at an X that would hit, A at every Y 30–221; A hidden, B at every Y and hidden | 627 scenes: nothing reported |
+| N next (items 3, 4) | 2–9 overlapping targets in the range, hidden ones among them, A inside its own range in half | 120 scenes, 400 hits returned by `collision_range` + `collision_next`, all in order (70 scenes with 3 or more) |
+| R random | Seed 20261002: random pair, A, range and positions | 400 scenes, 9,200 pairs: 1,202 overlap, 7,998 don't |
+
+Each scene also checks that `collision_begin` preserves X and Y and `collision_one` preserves X.
+The script was tried against four deliberate faults in the module (range_x off by one, range_y off
+by one, the hidden-A test removed, A's index not stored so that the self test is wrong): it failed
+on each.
+
+Item 2 is met by the script's scenes, not by a static phase of the spike's own motion: the script
+writes the positions and the C64 runs the module on them (`spike_scene`).
+
+### How it differs from the sketch above
+
+1. **Table bytes.** A `col_pairs` row is `(ax0 − bx1) & $FF, 256 − range_x, (ay1 − by0) & $FF,
+   range_y`: the X test is the same comparison shifted by `256 − range_x`, so that a hit leaves
+   C = 1 with no `sec` in `collision_one`. Games type `ColPair(...)` and never see the bytes.
+2. **A hidden target** is rejected by the arithmetic, and `ColPair` proves it with `.errorif`. The
+   condition is **`MUX_Y_MAX + ay1 − by0 < 255`**: true for any boxes when `MUX_Y_MAX` ≤ 234
+   (Swarm: 221), but a game with `MUX_Y_MAX` up to 249 could only use pairs with `ay1 − by0` ≤ 5,
+   and would need an explicit test in the loop (4 cycles a target). Not built: no game needs it.
+3. **A hidden A** (not in the contract) hits nothing: `collision_begin` tests for it (2 cycles).
+4. **A itself** is skipped by a test on the hit path only (4 cycles a hit, none a miss).
+   `collision_one` on A itself is not skipped.
+5. `collision_one` reads the loop's operands as data and writes nothing, so a `collision_next`
+   after it still continues the range.
+
+### Costs
+
+Raster cycles. Border = from line 252, no badline, no sprite DMA, no IRQ inside: the same figure
+in every pass (32 in `make test`, 384 in `measure.py`).
+
+| Path | Span | Estimate | **Measured** |
+|---|---|---|---|
+| `collision_begin` | to `collision_begin_end` (its `rts`) | 78 | **83** border (1,920 calls); **95** whole call. 83–183 for the calls in the display |
+| A target rejected on Y | in the loop | 19 | **17** |
+| A target that passes Y, misses on X | in the loop | 42 | **39** (35 when the X high bytes differ) |
+| `collision_range`, 18 rejects | whole call | 360 | **327** = 6 + 10 + 18 × 17 − 1 + 6 |
+| `collision_range`, 18 full misses | whole call | 780 | **723** = 6 + 10 + 18 × 39 − 1 + 6 |
+| `collision_one`, a hit | whole call | 54 | **52** = 6 + 40 + 6 |
+| 42 tests, the worst mix, no DMA | `spike_mix` → `spike_mix_end` | 1,641 | **1,813** |
+| 42 tests, the worst mix, in the display | `spike_collide` → `spike_collide_end`, IRQs excluded, lines 39–89 | 2,100 | **2,227–2,335** (384 passes): × 1.23–1.29 |
+| 42 tests, moving (typical) | the same, lines 47–113 | about 1,650 (1,300 × 1.27) | **1,639–2,279**, average 1,885 (5,376 passes) |
+
+**The worst frame is over its budget: 2,335 against 2,100.** Not because a test costs more than
+estimated (17 and 39 against 19 and 42) but because the count of 1,641 left out what goes round
+the tests. For the worst mix (21 full tests, 21 rejects, 4 hits):
+
+| | CPU cycles |
+|---|---|
+| 21 × 39 + 21 × 17 | 1,176 |
+| 4 × `collision_begin`, whole call (95; the count had 90) | 380 |
+| 3 × `collision_range`'s own 10 + `jsr` + `rts` | 66 |
+| 3 × `collision_one` instead of a loop pass (52 − 39) | 39 |
+| The caller: loading X, Y and A for 4 + 3 + 3 calls, the `bcc` after each | about 60 |
+| 4 hits: the hit exit, two stores to record it, `collision_next` | about 90 |
+| **Total** | **1,813 measured** |
+
+The DMA factor measured 1.23–1.29, as the 1.27 assumed. In the game `collide_update` runs later in
+the frame than the spike's (which starts on line 39–51), inside the rows' sprites, so the game's
+own measurement decides; the memory map's row 8 (2,100 + 375) needs **about 2,350 + 375** on these
+figures, 250 of the 935 headroom. `budget.json` keeps the 2,100 as a PENDING check (it fails under
+`--strict`) beside the measured lock (2,500 = 2,335 + 5%, rounded up to 50).
+
+Cheaper for the game, without touching the module: the player's two scans cost 2 × 95 for 6
+tests; and the fallback in the memory map (a player shot finds its one parked candidate by row and
+column) removes most of the 36.
+
+### The spike as built
+
+Swarm's 24 sprites, each drawn as its hit box; a sprite that hits or is hit is white in the next
+frame and the border is red. Three phases in a 256-frame cycle: **M** moving (224 frames), **W**
+the worst mix held static (16), **B** the same layout with no tests (16), in which the five border
+passes run. Phase B exists because a frame with the tests, `mux_update` and the reference test
+ends on line 236–318 in DEBUG (the tick is at 328), which leaves no room for border passes after it.
+
+Two checks differ from the table above, and one is added:
+
+- **`collision_begin` is locked as the border call** (`spike_begin` → `spike_begin_end`, 95), not on
+  `collision_begin` → `collision_begin_end`: the spike also calls it four times a frame in the
+  display, and a profile check on the module's labels takes those passes too (83–183).
+- **The 2,100 row** is two checks, as above.
+- **`spike_mix`** (1,813, a lock) is the worst mix with no DMA: the CPU count behind the display figure.
+
+Screenshots: `screenshots/collision-spike.png` (phase W: four hits, red border) and
+`screenshots/collision-spike-moving.png`.
+
+Not covered: Y values outside `MUX_Y_MIN`–`MUX_Y_MAX` other than `MUX_OFF` (not supported);
+`mux_x_hi` with bits above bit 0 set; more than 3 pairs in the table (the index × 4 is two `asl`s).

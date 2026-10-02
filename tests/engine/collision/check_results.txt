@@ -1,0 +1,10 @@
+[PASS] T tables: spike_boxes = the design's 3 pairs; col_pairs = f8 ef 04 16 fa f3 06 15 f3 e5 11 1d
+[PASS] D demo: 2000 frames (1772 moving, 116 worst mix, 112 border), 84000 pairs, 1532 overlaps in 772 frames: 2000 frames match the model
+[PASS] D spike counters: spike_mismatch_count 0, spike_overrun_count 0, spike_border_bad 0, border passes run in 112 frames, skipped in 0
+[PASS] E edges: 1272 scenes, 28836 positions of B round 15 positions of A x 3 pairs (5844 outside X 0-511 or Y 30-221 left out): 17982 overlap, 10854 don't; 1272 scenes match. One-pixel cases: touch left 906, touch right 906, touch top 727, touch bottom 660, apart left 906, apart right 906, apart top 714, apart bottom 660; 72 (pair, X offset) cases with A and B on opposite sides of X 255/256
+[PASS] X far: 126 scenes, 2646 pairs with X of A and of B from [0, 1, 2, 23, 24, 100, 232, 233, 254, 255, 256, 257, 258, 279, 280, 300, 487, 488, 489, 510, 511]: 366 overlap, 2280 don't; 126 scenes match
+[PASS] H hidden: 627 scenes, 13851 pairs with A or B (or both) at MUX_OFF, X overlapping, the other at every Y 30-221: 0 overlaps in the model, 0 reported; 627 scenes match
+[PASS] N next: 120 scenes, 400 hits returned by collision_range + collision_next, all in order; hits per scan: 0: 13, 1: 19, 2: 18, 3: 18, 4: 15, 5: 12, 6: 12, 7: 8, 8: 2, 9: 3 scenes (70 with 3 or more; A inside the range in 60); 120 scenes match
+[PASS] R random: 400 scenes (seed 20261002), 9200 pairs: 1202 overlap, 7998 don't; 304 hits returned by ranges; 400 scenes match
+
+ALL PASS: 84000 pairs in 2000 demo frames and 58535 target tests in scenes match the model

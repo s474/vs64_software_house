@@ -1,0 +1,146 @@
+{
+  "spike": "collision",
+  "src_dir": "tests/engine/collision",
+  "warmup_frames": 50,
+  "stage": 2,
+  "notes": "Checks from the contract's table (engine/collision.md#spike-testsenginecollision, Technical Director 2026-10-01), measured by the raster-engineer in M4 stage 2 (2026-10-02; figures and how they were taken: engine/collision.md#results, tests/engine/collision/measure.py). The spike cycles through three phases every 256 frames: M moving (224 frames), W the contract's worst mix held static (16), B the same layout with no tests, so that the border passes run with nothing else in the frame (16). The five 'border' checks are locks: constant paths run from line 252 on in phase B frames, no badline, no sprite DMA, no IRQ inside, so min_cycles = max_cycles = the measured figure; 32 samples = two whole cycles of the spike. Their spans are a jsr to the instruction after it, so they are WHOLE CALLS (profile span + jsr 6 + rts 6: engine/README.md#which-span-a-figure-is). TWO DEPARTURES from the contract's table, both reported to the Technical Director: (1) its first row, collision_begin -> collision_begin_end with limit 90, cannot be a lock on those labels, because the spike must also call collision_begin in the display (four times a frame, in spike_collide), where DMA lands on it (83-183 measured). It is locked here as the border call spike_begin -> spike_begin_end = 95 = 83 + 12; the contract's 90 is for the 83. (2) The worst frame through the display measures 2,335 against the contract's 2,100 (an estimate): the measured lock is 'max over 600 passes + 5%' as the contract says such a row becomes, and the 2,100 itself is kept as a separate check at from_stage 3, so it prints PENDING and fails under --strict until the Technical Director decides: the target is not moved here. 'stage': 2 = the spike as built in M4 stage 2. Schema: engine/README.md#budget-files.",
+  "checks": [
+    {
+      "name": "collision_begin, the whole call (border)",
+      "kind": "profile",
+      "routine": ["spike_begin", "spike_begin_end"],
+      "max_cycles": 95,
+      "min_cycles": 95,
+      "samples": 32,
+      "basis": "measured",
+      "source": "engine/collision.md#cycle-budget: contract limit 90 on collision_begin -> collision_begin_end, estimate 78. Measured 83 on that span in every border call (measure.py), so 95 with the jsr and the rts, every pass: the span here is the jsr to the instruction after it. Constant path for a shown A"
+    },
+    {
+      "name": "18 targets, all rejected on Y (border)",
+      "kind": "profile",
+      "routine": ["spike_reject", "spike_reject_end"],
+      "max_cycles": 327,
+      "min_cycles": 327,
+      "samples": 32,
+      "basis": "measured",
+      "source": "engine/collision.md#cycle-budget: contract limit 360 (12 + 18 x 19 + exit). Measured 327 every pass = jsr 6 + 10 + 18 x 17 - 1 + rts 6: 17 a rejected target"
+    },
+    {
+      "name": "18 targets, all tested on X (border)",
+      "kind": "profile",
+      "routine": ["spike_full", "spike_full_end"],
+      "max_cycles": 723,
+      "min_cycles": 723,
+      "samples": 32,
+      "basis": "measured",
+      "source": "engine/collision.md#cycle-budget: contract limit 780 (12 + 18 x 42 + exit). Measured 723 every pass = jsr 6 + 10 + 18 x 39 - 1 + rts 6: 39 a target that passes Y and misses on X by the longest path (X high bytes equal)"
+    },
+    {
+      "name": "collision_one, hit (border)",
+      "kind": "profile",
+      "routine": ["spike_one", "spike_one_end"],
+      "max_cycles": 52,
+      "min_cycles": 52,
+      "samples": 32,
+      "basis": "measured",
+      "source": "engine/collision.md#cycle-budget: contract limit 55 (42 + jsr/rts 12). Measured 52 every pass = jsr 6 + 40 + rts 6"
+    },
+    {
+      "name": "Swarm's worst frame, 42 tests, no DMA (border)",
+      "kind": "profile",
+      "routine": ["spike_mix", "spike_mix_end"],
+      "max_cycles": 1813,
+      "min_cycles": 1813,
+      "samples": 32,
+      "basis": "measured",
+      "source": "Not in the contract's table: the same 42 tests as the next check (the same macro, phase W's layout: 21 full tests, 21 rejects, 4 hits each recorded with two stores), run in the lower border, so it is the CPU count behind the display figure. Measured 1,813 every pass; the contract counted 1,641 (21 x 42 + 21 x 19 + 4 x 90), which leaves out the jsr and rts of the four collision_begin calls and the three collision_range calls, collision_one's 13 more than a loop pass, the caller's loads and the hits"
+    },
+    {
+      "name": "Swarm's worst frame, 42 tests, through the display",
+      "kind": "profile_excl_irq",
+      "routine": ["spike_collide", "spike_collide_end"],
+      "max_cycles": 2500,
+      "samples": 600,
+      "basis": "measured",
+      "source": "engine/collision.md#cycle-budget: 'a max over 600 passes + 5%'. Measured max 2,335 over 5,760 passes (6,144 frames, measure.py): phase W (the contract's mix, lines 39-89) 2,227-2,335, phase M (moving, lines 47-113) 1,639-2,279. + 5% = 2,452, rounded up to 50. 600 passes span two and a half of the spike's 256-frame cycles, so phase W is always in them. THIS IS OVER THE CONTRACT'S 2,100: see the next check"
+    },
+    {
+      "name": "the same against the contract's 2,100: MEASURED 2,335, OVER, awaiting the Technical Director",
+      "kind": "profile_excl_irq",
+      "routine": ["spike_collide", "spike_collide_end"],
+      "max_cycles": 2100,
+      "samples": 600,
+      "from_stage": 3,
+      "basis": "estimate",
+      "source": "engine/collision.md#cycle-budget and docs/games/swarm/memory-map.md#frame-budget row 8: 2,100 raster for the 42 tests (1,641 CPU x 1.27). Measured 2,227-2,335 for that mix (1,813 CPU x 1.23-1.29). Held at from_stage 3 so that it is PENDING, not failing and not re-baselined: the raster-engineer reports the gap, the Technical Director moves the budget or the design. Under --strict it fails"
+    },
+    {
+      "name": "nothing missed, nothing false (the spike's 6502 reference test)",
+      "kind": "memory",
+      "address": "spike_mismatch_count",
+      "size": 1,
+      "after_frames": 2000,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/collision.md#spike-testsenginecollision item 1: the module's result for each of the frame's 42 pairs against spike_ref (box edges compared one by one), every frame of phases M and W"
+    },
+    {
+      "name": "border passes have the right outcome",
+      "kind": "memory",
+      "address": "spike_border_bad",
+      "size": 1,
+      "after_frames": 0,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "tests/engine/collision/main.asm: the locked paths are the ones they claim to be (18 rejects and 18 full misses report C = 0, the collision_one pass C = 1 with X preserved)"
+    },
+    {
+      "name": "border passes never skipped",
+      "kind": "memory",
+      "address": "spike_border_skips",
+      "size": 2,
+      "after_frames": 0,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "tests/engine/collision/main.asm: a phase B frame's work ends before line 251 (measured: line 153-165), so the passes start on line 252-253"
+    },
+    {
+      "name": "no late chain entries",
+      "kind": "memory",
+      "address": "irq_late_count",
+      "size": 1,
+      "after_frames": 0,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/README.md#handler-conventions"
+    },
+    {
+      "name": "no late slots",
+      "kind": "memory",
+      "address": "mux_late_count",
+      "size": 1,
+      "after_frames": 0,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/README.md#slot-write-deadline"
+    },
+    {
+      "name": "no overrun",
+      "kind": "memory",
+      "address": "spike_overrun_count",
+      "size": 1,
+      "after_frames": 0,
+      "equals": 0,
+      "basis": "requirement",
+      "source": "engine/collision.md#spike-testsenginecollision. The spike's frame is nearly full in phase W (the tests, mux_update with flicker and the reference test end on line 268-318 of 328, measured over 6,144 frames)"
+    },
+    {
+      "name": "6502 routines equal the model (check.py)",
+      "kind": "script",
+      "basis": "requirement",
+      "source": "engine/collision.md#results: a Python model of the boxes against collision_begin / _range / _next / _one on the C64: 2,000 frames of the spike's own motion, every position of B round A's box for each pair (the four edges, X across 255/256, Y at MUX_Y_MIN and MUX_Y_MAX), hidden sprites, collision_next's order, and random scenes with a fixed seed. The script starts its own VICE on the spike's PRG; pass = exit code 0",
+      "command": ["uv", "run", "--quiet", "--package", "budget-runner", "python", "tests/engine/collision/check.py", "--prg", "{prg}"],
+      "timeout": 180
+    }
+  ]
+}

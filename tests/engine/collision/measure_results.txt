@@ -1,0 +1,23 @@
+engine/collision.asm in tests/engine/collision: 6144 frames, collision.prg. Raster cycles.
+
+spike_collide -> spike_collide_end, phase M (moving)
+    excl. IRQ: min 1639, avg 1885.4, max 2279 (5376 passes)
+    incl. IRQ: min 1639, avg 2461.6, max 4020 (5376 passes)
+    starts on line 47-56, ends on line 73-113
+spike_collide -> spike_collide_end, phase W (the contract's worst mix: 21 full tests, 21 rejects, 4 hits)
+    excl. IRQ: min 2227, avg 2286.3, max 2335 (384 passes)
+    incl. IRQ: min 2227, avg 2317.6, max 3152 (384 passes)
+    starts on line 39-39, ends on line 74-89
+collision_begin -> collision_begin_end (its rts), calls with no IRQ inside
+    all calls: min 83, avg 111.8, max 183 (23481 passes); 7425 at the minimum
+    histogram: {83: 7425, 87: 24, 88: 421, 89: 29, 90: 564, 91: 1, 92: 97, 93: 267, 94: 1, 95: 17, 96: 61, 97: 778, 98: 1969, 99: 239, 100: 786, 101: 105, 102: 317, 103: 5, 104: 2, 105: 10, 106: 3, 107: 8, 108: 7, 109: 44, 112: 327, 113: 1998, 114: 9, 115: 13, 116: 203, 117: 1213, 118: 11, 119: 68, 120: 178, 121: 1212, 125: 8, 126: 98, 134: 3, 135: 7, 136: 92, 138: 7, 139: 40, 140: 219, 141: 26, 143: 15, 144: 49, 145: 2, 146: 26, 147: 105, 151: 3, 152: 5, 153: 53, 154: 2, 155: 242, 156: 441, 157: 1, 158: 1, 159: 23, 160: 110, 161: 1, 162: 2, 163: 28, 164: 108, 165: 1, 169: 56, 170: 304, 171: 1427, 172: 3, 173: 17, 174: 7, 175: 25, 176: 104, 177: 418, 178: 12, 179: 46, 180: 9, 181: 1, 182: 192, 183: 730}
+    border calls (line >= 251): min 83, avg 83.0, max 83 (1920 passes)
+spike_mix -> spike_mix_end (border): min 1813, avg 1813.0, max 1813 (384 passes); starts on line 253-253, ends on 281-282
+spike_begin -> spike_begin_end (border): min 95, avg 95.0, max 95 (384 passes); starts on line 290-290, ends on 291-291
+spike_reject -> spike_reject_end (border): min 327, avg 327.0, max 327 (384 passes); starts on line 291-291, ends on 297-297
+spike_full -> spike_full_end (border): min 723, avg 723.0, max 723 (384 passes); starts on line 300-300, ends on 0-0
+spike_one -> spike_one_end (border): min 52, avg 52.0, max 52 (384 passes); starts on line 0-0, ends on 1-1
+spike_frame_done, phase M: line 236-305 (5376 frames; over 311 = into the next top border, the tick is at 328)
+spike_frame_done, phase W: line 268-318 (384 frames; over 311 = into the next top border, the tick is at 328)
+spike_frame_done, phase B: line 153-165 (384 frames; over 311 = into the next top border, the tick is at 328)
+spike_overrun_count 0, spike_mismatch_count 0
