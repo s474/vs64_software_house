@@ -1,0 +1,17 @@
+  ...1000 game frames, 3082 slots
+  ...2000 game frames, 6456 slots
+  ...3000 game frames, 9073 slots
+
+build/swarm/swarm.prg: 3000 game frames, 9073 consecutive zone slots, deadline line Y cycle 55, mux_late_count 0, irq_late_count 0
+coverage (game frames): {'Title': 90, 'phase0': 2594, 'Play': 1433, 'phase1': 256, 'Dying': 985, 'Respawn': 300, 'phase2': 150, 'GameOver': 192} games started: 3
+divers active (frames): {0: 1665, 1: 998, 2: 293, 3: 44}
+lines from the slot's last write to its line Y (-1 = past Y, 6 = 6 or more): [(1, 1), (4, 1), (6, 9071)]
+slack histogram (cycles, 10-wide bins, 200 = 200 or more): [(110, 1), (200, 9072)]
+class                    slots  on line Y  latest cyc  min slack
+all                       9073          0           -        115
+Y badline                   47          0           -        264
+Y 1-3 below badline       2451          0           -        832
+other                     6575          0           -        115
+DEBUG counters: {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 1, 'flicker_frames': 3, 'idle_min': 558}
+
+ALL PASS (every last write before line Y cycle 55)

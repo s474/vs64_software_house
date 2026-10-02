@@ -1,0 +1,11 @@
+RESULT fuzz: 40185 frames; states {'Title': 266, 'Play': 31042, 'Dying': 5464, 'Respawn': 1800, 'GameOver': 1613}
+RESULT counters {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 1, 'flicker_frames': 27, 'idle_min': 494}; lowest game_idle_min 494 (= 7904 cycles) at (20359, 'Play', 'wave 86', 'phase 0', 'alive 18', 'divers 1'); floor 45
+RESULT frames with a dropped sprite (game_flicker_frames): 27 of 39919 non-title frames = 0.07%; in Fight/Play frames: 27 of 28281 = 0.10%; back-to-back flicker frames: 17 (mux_max_age, not this, is the 'no sprite missing two frames running' rule)
+RESULT   divers out 0: 0 of 12824 frames = 0.00%
+RESULT   divers out 1: 26 of 16964 frames = 0.15%
+RESULT   divers out 2: 1 of 8747 frames = 0.01%
+RESULT   divers out 3: 0 of 1384 frames = 0.00%
+RESULT max divers 3; wraps to Y 30 seen 72
+NOTE random jumps: {'x': 13, 'thin': 11, 'lives': 15, 'score': 11, 'wave': 10}
+RESULT PASS (0 failures)
+)

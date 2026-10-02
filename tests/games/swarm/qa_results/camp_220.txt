@@ -1,0 +1,3 @@
+X 220 wave  1: 6 hits in 3788 frames of Play = 1.58 per 1,000 frames
+X 220 wave  3: 2 hits in 4700 frames of Play = 0.43 per 1,000 frames
+X 220 wave 12: 11 hits in 2835 frames of Play = 3.88 per 1,000 frames

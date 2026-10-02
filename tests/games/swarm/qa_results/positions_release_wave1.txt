@@ -1,0 +1,36 @@
+  ...250 game frames, 250 mux frames, 4509 stops, 231 in Play
+  ...500 game frames, 500 mux frames, 6287 stops, 481 in Play
+  ...750 game frames, 750 mux frames, 9013 stops, 731 in Play
+  ...1000 game frames, 1000 mux frames, 11623 stops, 854 in Play
+  ...1250 game frames, 1250 mux frames, 12653 stops, 1006 in Play
+  ...1500 game frames, 1500 mux frames, 16897 stops, 1206 in Play
+  ...1750 game frames, 1750 mux frames, 19351 stops, 1356 in Play
+  ...2000 game frames, 2000 mux frames, 20473 stops, 1427 in Play
+  ...2250 game frames, 2250 mux frames, 23383 stops, 1537 in Play
+  ...2500 game frames, 2500 mux frames, 26827 stops, 1770 in Play
+  ...2750 game frames, 2750 mux frames, 27827 stops, 1887 in Play
+  ...3000 game frames, 3000 mux frames, 32043 stops, 1987 in Play
+
+build/swarm-release/swarm.prg: 3000 game frames, 3000 multiplexer frames, 32043 monitor stops, wave placed 1, seed-wait 1
+coverage (game frames): {'Title': 38, 'phase0': 2525, 'Play': 1987, 'phase1': 250, 'phase2': 225, 'Dying': 575, 'Respawn': 200, 'GameOver': 200} games started: 2
+divers active (frames): {0: 2081, 1: 812, 2: 107}
+builds 2999, slow (flicker) builds 0 (0.00%), kept sprite-frames 29147, with X > 255: 5044
+hardware slot checks 29139: X bit 8 set in 5041, multicolour bit set in 0
+zone slots finished ON line Y: 0, latest cycle seen 0
+mux_late_count None, irq_late_count None, DEBUG counters {}
+
+attribute       checked  mismatch
+x_lo              29139         0  PASS
+x_hi              29139         0  PASS
+y                 29139         0  PASS
+ptr               29139         0  PASS
+col               29139         0  PASS
+mc                29139         0  PASS
+enable            29139         0  PASS
+before_y_line     29139         0  PASS
+free_before_write    10022         0  PASS
+d015_top           2999         0  PASS
+park_d015          2998         0  PASS
+park_mask          2998         0  PASS
+
+ALL PASS

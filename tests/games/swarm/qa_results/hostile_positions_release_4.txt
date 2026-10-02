@@ -1,0 +1,36 @@
+  ...250 game frames, 250 mux frames, 7511 stops, 100 in Play
+  ...500 game frames, 500 mux frames, 16071 stops, 250 in Play
+  ...750 game frames, 750 mux frames, 23991 stops, 356 in Play
+  ...1000 game frames, 1000 mux frames, 30927 stops, 389 in Play
+  ...1250 game frames, 1250 mux frames, 39147 stops, 489 in Play
+  ...1500 game frames, 1500 mux frames, 46947 stops, 655 in Play
+  ...1750 game frames, 1750 mux frames, 54847 stops, 787 in Play
+  ...2000 game frames, 2000 mux frames, 62567 stops, 931 in Play
+  ...2250 game frames, 2250 mux frames, 69903 stops, 1071 in Play
+  ...2500 game frames, 2500 mux frames, 78383 stops, 1171 in Play
+  ...2750 game frames, 2750 mux frames, 86343 stops, 1254 in Play
+  ...3000 game frames, 3000 mux frames, 94079 stops, 1324 in Play
+
+build/swarm-release/swarm.prg: 3000 game frames, 3000 multiplexer frames, 94079 monitor stops, wave placed 13, seed-wait 4
+coverage (game frames): {'Title': 88, 'phase0': 2715, 'Play': 1324, 'phase1': 210, 'Dying': 1010, 'Respawn': 300, 'GameOver': 278, 'phase2': 75} games started: 4 hostile layouts: {'staircase 2-4': 75, 'dense random': 35, 'staircase 2-6 wide': 36}
+divers active (frames): {0: 1653, 1: 1023, 2: 324}
+builds 2999, slow (flicker) builds 220 (7.34%), kept sprite-frames 64536, with X > 255: 17774
+hardware slot checks 64520: X bit 8 set in 17771, multicolour bit set in 0
+zone slots finished ON line Y: 39, latest cycle seen 12
+mux_late_count None, irq_late_count None, DEBUG counters {}
+
+attribute       checked  mismatch
+x_lo              64520         0  PASS
+x_hi              64520         0  PASS
+y                 64520         0  PASS
+ptr               64520         0  PASS
+col               64520         0  PASS
+mc                64520         0  PASS
+enable            64520         0  PASS
+before_y_line     64520         0  PASS
+free_before_write    41040         0  PASS
+d015_top           2999         0  PASS
+park_d015          2998         0  PASS
+park_mask          2998         0  PASS
+
+ALL PASS

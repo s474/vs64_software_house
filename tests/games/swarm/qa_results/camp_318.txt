@@ -1,0 +1,3 @@
+X 318 wave  1: 0 hits in 5000 frames of Play = 0.00 per 1,000 frames
+X 318 wave  3: 2 hits in 4661 frames of Play = 0.43 per 1,000 frames
+X 318 wave 12: 1 hits in 4836 frames of Play = 0.21 per 1,000 frames

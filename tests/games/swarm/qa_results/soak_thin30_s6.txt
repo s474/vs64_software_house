@@ -1,0 +1,8 @@
+RESULT thin30: 6021 frames; states {'Title': 20, 'Play': 6001}
+RESULT counters {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 0, 'flicker_frames': 0, 'idle_min': 889}; lowest game_idle_min 889 (= 14224 cycles) at (4455, 'Play', 'wave 30', 'phase 0', 'alive 1', 'divers 1'); floor 45
+RESULT frames with a dropped sprite (game_flicker_frames): 0 of 6001 non-title frames = 0.00%; in Fight/Play frames: 0 of 5948 = 0.00%; back-to-back flicker frames: 0 (mux_max_age, not this, is the 'no sprite missing two frames running' rule)
+RESULT   divers out 0: 0 of 111 frames = 0.00%
+RESULT   divers out 1: 0 of 5890 frames = 0.00%
+RESULT max divers 1; wraps to Y 30 seen 48
+NOTE Fight starts thinned to k alive: {1: 1}
+RESULT PASS (0 failures)

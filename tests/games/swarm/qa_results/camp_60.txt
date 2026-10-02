@@ -1,0 +1,3 @@
+X  60 wave  1: 2 hits in 4700 frames of Play = 0.43 per 1,000 frames
+X  60 wave  3: 2 hits in 4690 frames of Play = 0.43 per 1,000 frames
+X  60 wave 12: 2 hits in 4693 frames of Play = 0.43 per 1,000 frames

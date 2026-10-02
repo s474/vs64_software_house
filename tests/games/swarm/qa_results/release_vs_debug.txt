@@ -1,0 +1,14 @@
+state per frame, 1500 frames, DEBUG vs release: IDENTICAL
+  DEBUG end: f1522 Title lives 0 wave 02 ph 0 alive 15 div 0 score 003460
+  release end: f1522 Title lives 0 wave 02 ph 0 alive 15 div 0 score 003460
+  screenshots with the game state: {'ready': 453, 'over': 1197} {'ready': 453, 'over': 1197}
+  screenshot title: differing pixels 0
+  screenshot intro: differing pixels 0
+  screenshot play: differing pixels 0
+  screenshot ready: differing pixels 0
+  screenshot gameover: differing pixels 0
+  (swarm-release control: 3101 stores to $D015 seen in the same run)
+stores to $D020/$D021 over 3,000 frames in release: 0 from PCs []; final border/background (0, 0)
+  (swarm control: 3116 stores to $D015 seen in the same run)
+stores to $D020/$D021 over 3,000 frames in debug: 0 from PCs []; final border/background (0, 0)
+PASS

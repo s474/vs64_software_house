@@ -1,0 +1,95 @@
+== game 1
+  . f49: new game: press frame 43, game frame 49 (press + 6), lives 3
+  . f74: first player shot 25 frames after the game's first frame (design: 25)
+  . f109: first wind-up 60 frames after the game's first frame (design: 60 into the wave)
+  . f412: hit: lives 2, score 1780, divers 1, X 120
+  . f556: Dying -> Respawn after 144 frames (divers_active 0)
+  . f590: wave 01 cleared: score 1930 -> 2930
+  . f808: hit: lives 1, score 3540, divers 2, X 201
+  . f984: Dying -> Respawn after 176 frames (divers_active 0)
+  . f1166: hit: lives 0, score 3850, divers 2, X 189
+  . f1266: Dying -> GameOver after 100 frames (divers_active 1)
+  . f1466: GameOver -> Title after 200 frames
+  . f1466: game over after 1423 frames, wave reached 02, deaths 3, counters {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 0, 'flicker_frames': 0, 'idle_min': 632}
+   title: score 3850 hi 5000 zp_wave 02 panel 'SCORE 003850  HI 005000  WAVE 02'
+== game 2
+  . f1497: new game: press frame 1491, game frame 1497 (press + 6), lives 3
+  . f1522: first player shot 25 frames after the game's first frame (design: 25)
+  . f1557: first wind-up 60 frames after the game's first frame (design: 60 into the wave)
+  . f1860: hit: lives 2, score 1780, divers 1, X 120
+  . f2004: Dying -> Respawn after 144 frames (divers_active 0)
+  . f2038: wave 01 cleared: score 1930 -> 2930
+  . f2336: hit: lives 1, score 4160, divers 1, X 171
+  . f2436: Dying -> Respawn after 100 frames (divers_active 0)
+  . f2707: wave 02 cleared: score 5230 -> 6230
+  . f2713: hit: lives 0, score 6230, divers 0, X 165
+  . f2813: Dying -> GameOver after 100 frames (divers_active 0)
+  . f3013: GameOver -> Title after 200 frames
+  . f3013: game over after 1522 frames, wave reached 02, deaths 3, counters {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 0, 'flicker_frames': 0, 'idle_min': 632}
+   title: score 6230 hi 6230 zp_wave 02 panel 'SCORE 006230  HI 006230  WAVE 02'
+== game 3
+  . f3044: new game: press frame 3038, game frame 3044 (press + 6), lives 3
+  . f3069: first player shot 25 frames after the game's first frame (design: 25)
+  . f3104: first wind-up 60 frames after the game's first frame (design: 60 into the wave)
+  . f3407: hit: lives 2, score 1780, divers 1, X 120
+  . f3551: Dying -> Respawn after 144 frames (divers_active 0)
+  . f3585: wave 01 cleared: score 1930 -> 2930
+  . f3783: hit: lives 1, score 3540, divers 0, X 264
+  . f3883: Dying -> Respawn after 100 frames (divers_active 0)
+  . f4188: wave 02 cleared: score 5190 -> 6190
+  . f4470: hit: lives 0, score 6850, divers 1, X 273
+  . f4570: Dying -> GameOver after 100 frames (divers_active 1)
+  . f4770: GameOver -> Title after 200 frames
+  . f4770: game over after 1732 frames, wave reached 03, deaths 3, counters {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 0, 'flicker_frames': 0, 'idle_min': 632}
+   title: score 6850 hi 6850 zp_wave 03 panel 'SCORE 006850  HI 006850  WAVE 03'
+== game 4
+  . f4801: new game: press frame 4795, game frame 4801 (press + 6), lives 3
+  . f4826: first player shot 25 frames after the game's first frame (design: 25)
+  . f4861: first wind-up 60 frames after the game's first frame (design: 60 into the wave)
+  . f5164: hit: lives 2, score 1550, divers 1, X 147
+  . f5326: Dying -> Respawn after 162 frames (divers_active 0)
+  . f5516: hit: lives 1, score 2010, divers 0, X 123
+  . f5616: Dying -> Respawn after 100 frames (divers_active 0)
+  . f5692: wave 01 cleared: score 2160 -> 3160
+  . f6070: hit: lives 0, score 4260, divers 2, X 174
+  . f6170: Dying -> GameOver after 100 frames (divers_active 1)
+  . f6370: GameOver -> Title after 200 frames
+  . f6370: game over after 1575 frames, wave reached 02, deaths 3, counters {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 0, 'flicker_frames': 0, 'idle_min': 632}
+   title: score 4260 hi 6850 zp_wave 02 panel 'SCORE 004260  HI 006850  WAVE 02'
+== game 5
+  . f6401: new game: press frame 6395, game frame 6401 (press + 6), lives 3
+  . f6426: first player shot 25 frames after the game's first frame (design: 25)
+  . f6461: first wind-up 60 frames after the game's first frame (design: 60 into the wave)
+  . f6744: hit: lives 2, score 1100, divers 0, X 114
+  . f6844: Dying -> Respawn after 100 frames (divers_active 0)
+  . f7051: hit: lives 1, score 2010, divers 1, X 162
+  . f7204: Dying -> Respawn after 153 frames (divers_active 0)
+  . f7290: wave 01 cleared: score 2160 -> 3160
+  . f7483: hit: lives 0, score 3410, divers 0, X 240
+  . f7583: Dying -> GameOver after 100 frames (divers_active 0)
+  . f7783: GameOver -> Title after 200 frames
+  . f7783: game over after 1388 frames, wave reached 02, deaths 3, counters {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 1, 'flicker_frames': 1, 'idle_min': 548}
+   title: score 3460 hi 6850 zp_wave 02 panel 'SCORE 003460  HI 006850  WAVE 02'
+== game 6
+  . f7814: new game: press frame 7808, game frame 7814 (press + 6), lives 3
+  . f7839: first player shot 25 frames after the game's first frame (design: 25)
+  . f7874: first wind-up 60 frames after the game's first frame (design: 60 into the wave)
+  . f8157: hit: lives 2, score 1090, divers 1, X 153
+  . f8257: Dying -> Respawn after 100 frames (divers_active 0)
+  . f8464: hit: lives 1, score 1620, divers 2, X 108
+  . f8606: Dying -> Respawn after 142 frames (divers_active 0)
+  . f8808: hit: lives 0, score 2000, divers 1, X 168
+  . f8908: Dying -> GameOver after 100 frames (divers_active 1)
+  . f9108: GameOver -> Title after 200 frames
+  . f9108: game over after 1300 frames, wave reached 01, deaths 3, counters {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 1, 'flicker_frames': 1, 'idle_min': 548}
+   title: score 2000 hi 6850 zp_wave 01 panel 'SCORE 002000  HI 006850  WAVE 01'
+
+STATS {'frames': 8940, 'kills': 179, 'kill_diving': 39, 'clears': 7, 'deaths': 18, 'games': 6}
+GAME {'frames': 1423, 'wave': 2, 'deaths': 3, 'first_shot': 25, 'first_windup': 60, 'score': 3850, 'hi': 5000}
+GAME {'frames': 1522, 'wave': 2, 'deaths': 3, 'first_shot': 25, 'first_windup': 60, 'score': 6230, 'hi': 6230}
+GAME {'frames': 1732, 'wave': 3, 'deaths': 3, 'first_shot': 25, 'first_windup': 60, 'score': 6850, 'hi': 6850}
+GAME {'frames': 1575, 'wave': 2, 'deaths': 3, 'first_shot': 25, 'first_windup': 60, 'score': 4260, 'hi': 6850}
+GAME {'frames': 1388, 'wave': 2, 'deaths': 3, 'first_shot': 25, 'first_windup': 60, 'score': 3460, 'hi': 6850}
+GAME {'frames': 1300, 'wave': 1, 'deaths': 3, 'first_shot': 25, 'first_windup': 60, 'score': 2000, 'hi': 6850}
+COUNTERS {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 1, 'flicker_frames': 1, 'idle_min': 548}
+0 rule violations

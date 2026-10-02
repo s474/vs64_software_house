@@ -1,0 +1,3 @@
+X 171 wave  1: 12 hits in 2577 frames of Play = 4.66 per 1,000 frames
+X 171 wave  3: 10 hits in 2768 frames of Play = 3.61 per 1,000 frames
+X 171 wave 12: 12 hits in 2404 frames of Play = 4.99 per 1,000 frames

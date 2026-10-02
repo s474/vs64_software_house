@@ -1,0 +1,26 @@
+[PASS] title-soak: 3,000 title frames: blink runs (first, 3 middle, last) [21] [32, 32, 32] [3], all middle runs 32 long: True; no errors
+[PASS] title-soak-counters: {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 0, 'flicker_frames': 0, 'idle_min': 1005}
+[PASS] edge-left: stick ['left', 'fire'] for 160 frames: X over frames 110-159 [24] (expect 24); shots in flight at X [24, 24]
+[PASS] edge-right: stick ['right', 'fire'] for 160 frames: X over frames 110-159 [318] (expect 318); shots in flight at X [318, 318]
+[PASS] edge-both: left+right+fire 100 frames: X [318] (stays 318)
+[PASS] edges-counters: {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 1, 'flicker_frames': 1, 'idle_min': 589}
+[PASS] fire-held-all-states: fire never released after the press, ship left alone: states visited ['Dying', 'GameOver', 'Play', 'Respawn', 'Title']; at the title 150 more frames held: game started = False; no restart; shots seen in GameOver/Title: 0/0 (in flight from the last frame of play are allowed to finish: see below)
+[PASS] fire-held-counters: {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 0, 'flicker_frames': 0, 'idle_min': 758}
+[PASS] both-shots-at-clear: two shots in flight (Y 150, 120) as the last explosion ended: Clear after 1 frames, score +1000 (expect 1000), shots gone True, next wave 02, divers 0
+[PASS] both-shots-counters: {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 0, 'flicker_frames': 0, 'idle_min': 637}
+[PASS] death-on-clear: first frame: {'gs': 'Dying', 'ph': 2, 'lives': 2, 'score': 1000}; transitions (frame, state, phase, row 9): [(75, 'Dying', 1, 'WAVE 02'), (100, 'Respawn', 1, 'WAVE 02'), (125, 'Respawn', 0, ''), (150, 'Play', 0, ''), (282, 'Dying', 0, '')]; final f494 Dying lives 1 wave 02 ph 0 alive 18 div 1 score 001000; score +1000; hiscore 0 -> 0
+[PASS] death-on-clear-counters: {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 0, 'flicker_frames': 0, 'idle_min': 669}
+[PASS] death-on-clear-last-life: first frame: {'gs': 'Dying', 'ph': 2, 'lives': 0, 'score': 1000}; transitions (frame, state, phase, row 9): [(100, 'GameOver', 2, 'GAME OVER'), (270, 'Title', 2, '')]; final f524 Title lives 0 wave 01 ph 2 alive 0 div 0 score 001000; score +1000; hiscore 0 -> 1000; wave timer in GameOver (0, 0) (stands still)
+[PASS] death-on-clear-last-life-counters: {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 0, 'flicker_frames': 0, 'idle_min': 944}
+[PASS] last-enemy-diving-row0: enemy 3 Diving, last alive, shot: (state, score +, divers, alive) = ('0x83', 300, 0, 1) (expect 0x83, +300, 0, 1); Clear 16 frames later with +1000; next Intro divers 0, diver slots ffffff
+[PASS] last-enemy-diving-row0-counters: {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 0, 'flicker_frames': 0, 'idle_min': 65535}
+[PASS] last-enemy-diving-row1: enemy 9 Diving, last alive, shot: (state, score +, divers, alive) = ('0x83', 160, 0, 1) (expect 0x83, +160, 0, 1); Clear 16 frames later with +1000; next Intro divers 0, diver slots ffffff
+[PASS] last-enemy-diving-row1-counters: {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 0, 'flicker_frames': 0, 'idle_min': 65535}
+[PASS] last-enemy-diving-row2: enemy 15 Diving, last alive, shot: (state, score +, divers, alive) = ('0x83', 100, 0, 1) (expect 0x83, +100, 0, 1); Clear 16 frames later with +1000; next Intro divers 0, diver slots ffffff
+[PASS] last-enemy-diving-row2-counters: {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 0, 'flicker_frames': 0, 'idle_min': 65535}
+[PASS] last-enemy-rams: died True; (state, score +, lives, alive, divers) at the hit: (131, 100, 2, 1, 0); after: f533 Respawn lives 1 wave 02 ph 0 alive 18 div 0 score 001100; the diver is a kill worth 100 (row 2 diving)
+[PASS] last-enemy-rams-counters: {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 0, 'flicker_frames': 0, 'idle_min': 680}
+[PASS] shot-in-flight-at-gameover: the last life lost in the frame a shot reaches an enemy: first frame ('Dying', 0, 50, 131); after 130 frames f205 GameOver lives 0 wave 01 ph 0 alive 17 div 0 score 000050, hiscore 5000
+[PASS] shot-in-flight-counters: {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 0, 'flicker_frames': 0, 'idle_min': 794}
+
+24 of 24 passed

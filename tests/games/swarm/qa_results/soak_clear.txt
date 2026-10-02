@@ -1,0 +1,20 @@
+RESULT clear: 29206 frames; states {'Title': 40, 'Play': 28866, 'Dying': 100, 'GameOver': 200}
+RESULT counters {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 1, 'flicker_frames': 18, 'idle_min': 539}; lowest game_idle_min 539 (= 8624 cycles) at (24747, 'Play', 'wave 99', 'phase 0', 'alive 13', 'divers 2'); floor 45
+RESULT frames with a dropped sprite (game_flicker_frames): 18 of 29166 non-title frames = 0.06%; in Fight/Play frames: 18 of 12615 = 0.14%; back-to-back flicker frames: 9 (mux_max_age, not this, is the 'no sprite missing two frames running' rule)
+RESULT   divers out 0: 0 of 20388 frames = 0.00%
+RESULT   divers out 1: 6 of 6654 frames = 0.09%
+RESULT   divers out 2: 12 of 1711 frames = 0.70%
+RESULT   divers out 3: 0 of 413 frames = 0.00%
+RESULT max divers 3; wraps to Y 30 seen 14
+NOTE after 11 clears: wave store 12 pattern 2 loop 3; panel 'SCORE 999990  HI 005000  WAVE 12  ]]'; row 9 'WAVE 12'; score 999990
+NOTE after 12 clears: wave store 13 pattern 0 loop 3; panel 'SCORE 999990  HI 005000  WAVE 13  ]]'; row 9 'WAVE 13'; score 999990
+NOTE after 13 clears: wave store 14 pattern 1 loop 3; panel 'SCORE 999990  HI 005000  WAVE 14  ]]'; row 9 'WAVE 14'; score 999990
+NOTE after 97 clears: wave store 98 pattern 1 loop 3; panel 'SCORE 999990  HI 005000  WAVE 98  ]]'; row 9 'WAVE 98'; score 999990
+NOTE after 98 clears: wave store 99 pattern 2 loop 3; panel 'SCORE 999990  HI 005000  WAVE 99  ]]'; row 9 'WAVE 99'; score 999990
+NOTE after 99 clears: wave store 99 pattern 0 loop 3; panel 'SCORE 999990  HI 005000  WAVE 99  ]]'; row 9 'WAVE 99'; score 999990
+NOTE after 100 clears: wave store 99 pattern 1 loop 3; panel 'SCORE 999990  HI 005000  WAVE 99  ]]'; row 9 'WAVE 99'; score 999990
+NOTE after 101 clears: wave store 99 pattern 2 loop 3; panel 'SCORE 999990  HI 005000  WAVE 99  ]]'; row 9 'WAVE 99'; score 999990
+NOTE after 129 clears: wave store 99 pattern 0 loop 3; panel 'SCORE 999990  HI 005000  WAVE 99  ]]'; row 9 'WAVE 99'; score 999990
+NOTE waves cleared by the monitor: 130; final score 999990; shown wave 99
+NOTE after GameOver at the cap: state Title, hiscore 999990, panel 'SCORE 999990  HI 999990  WAVE 99'
+RESULT PASS (0 failures)

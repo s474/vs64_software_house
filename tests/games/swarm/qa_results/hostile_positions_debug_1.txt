@@ -1,0 +1,36 @@
+  ...250 game frames, 250 mux frames, 7327 stops, 231 in Play
+  ...500 game frames, 500 mux frames, 15087 stops, 481 in Play
+  ...750 game frames, 750 mux frames, 22007 stops, 731 in Play
+  ...1000 game frames, 1000 mux frames, 29487 stops, 941 in Play
+  ...1250 game frames, 1250 mux frames, 37567 stops, 983 in Play
+  ...1500 game frames, 1500 mux frames, 46207 stops, 1098 in Play
+  ...1750 game frames, 1750 mux frames, 53553 stops, 1205 in Play
+  ...2000 game frames, 2000 mux frames, 60719 stops, 1328 in Play
+  ...2250 game frames, 2250 mux frames, 67879 stops, 1480 in Play
+  ...2500 game frames, 2500 mux frames, 75999 stops, 1542 in Play
+  ...2750 game frames, 2750 mux frames, 83179 stops, 1620 in Play
+  ...3000 game frames, 3000 mux frames, 90271 stops, 1857 in Play
+
+build/swarm/swarm.prg: 3000 game frames, 3000 multiplexer frames, 90271 monitor stops, wave placed 1, seed-wait 1
+coverage (game frames): {'Title': 57, 'phase0': 2600, 'Play': 1857, 'phase1': 250, 'phase2': 150, 'Dying': 740, 'Respawn': 200, 'GameOver': 146} games started: 3 hostile layouts: {'staircase 2-4': 57, 'staircase 2-6 wide': 40, 'dense random': 51}
+divers active (frames): {0: 1978, 1: 1007, 2: 15}
+builds 2999, slow (flicker) builds 440 (14.67%), kept sprite-frames 62805, with X > 255: 17212
+hardware slot checks 62789: X bit 8 set in 17209, multicolour bit set in 0
+zone slots finished ON line Y: 1033, latest cycle seen 21
+mux_late_count 0, irq_late_count 0, DEBUG counters {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 1, 'flicker_frames': 440, 'idle_min': 227}
+
+attribute       checked  mismatch
+x_lo              62789         0  PASS
+x_hi              62789         0  PASS
+y                 62789         0  PASS
+ptr               62789         0  PASS
+col               62789         0  PASS
+mc                62789         0  PASS
+enable            62789         0  PASS
+before_y_line     62789         0  PASS
+free_before_write    39136         0  PASS
+d015_top           2999         0  PASS
+park_d015          2998         0  PASS
+park_mask          2998         0  PASS
+
+ALL PASS

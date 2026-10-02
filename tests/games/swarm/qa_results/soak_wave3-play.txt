@@ -1,0 +1,9 @@
+RESULT wave3-play: 12021 frames; states {'Title': 20, 'Play': 12001}
+RESULT counters {'irq_late_count': 0, 'mux_late_count': 0, 'game_overrun_count': 0, 'mux_pin_drop_count': 0, 'mux_pin_excess_count': 0, 'mux_max_age': 1, 'flicker_frames': 2, 'idle_min': 538}; lowest game_idle_min 538 (= 8608 cycles) at (6002, 'Play', 'wave 03', 'phase 0', 'alive 18', 'divers 1'); floor 45
+RESULT frames with a dropped sprite (game_flicker_frames): 2 of 12001 non-title frames = 0.02%; in Fight/Play frames: 2 of 9323 = 0.02%; back-to-back flicker frames: 0 (mux_max_age, not this, is the 'no sprite missing two frames running' rule)
+RESULT   divers out 0: 0 of 4104 frames = 0.00%
+RESULT   divers out 1: 2 of 5238 frames = 0.04%
+RESULT   divers out 2: 0 of 2070 frames = 0.00%
+RESULT   divers out 3: 0 of 589 frames = 0.00%
+RESULT max divers 3; wraps to Y 30 seen 21
+RESULT PASS (0 failures)
