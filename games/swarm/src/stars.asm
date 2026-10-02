@@ -39,8 +39,11 @@ stars_init:
 // The twinkle: step the next star's colour. One colour RAM write a frame.
 // In:  nothing       Out: nothing
 // Uses: A, X, Y, zp_star_ptr, zp_star_idx
-// Cost: 56-57 raster cycles to stars_update_end (measured: vice_profile 100 passes and make test
-//       ARGS=swarm 300 passes, max 57; budget 100). Runs in the top border: no DMA
+// Cost: 56-57 raster cycles to stars_update_end (measured: make test ARGS=swarm, 300 passes, max
+//       57; budget 60, memory-map.md row 10). Called straight after panel_update, on about lines
+//       27-29 of the top border: no badline and no sprite DMA, so the cost is the CPU count and
+//       depends only on the star counter. (Stage 2 part B called it last, after the collisions,
+//       where it met badlines: 100-129 measured. Don't move it back.)
 stars_update:
         ldx zp_star_idx                 // 3
         inx                             // 2

@@ -18,8 +18,9 @@
 //   autoplay.asm  the scripted stick of the AUTOPLAY budget build (tests/games/swarm/main.asm)
 //
 // Chain: entry 0 mux_irq_top at line 16, entry 1 game_irq_bottom at line 251 (nothing to do
-// until the sound stage). Main loop: irq_wait_frame, input_read, panel_update (first, so it is
-// always in the top border: memory-map.md "The panel's budget"), the update routines, mux_update.
+// until the sound stage). Main loop: irq_wait_frame, input_read, panel_update and stars_update
+// (first, so they are always in the top border: memory-map.md "The panel's budget", "Order of the
+// frame"), pshot_update, formation_update, collide_update, player_update, then mux_update.
 //
 // Rules this code keeps (engine v1, memory-map.md "(c) The four conditions"): after irq_init
 // there is no sei, no write to $01, $DC00 or $DC02; $D011 is written once (screen_init); $D017
@@ -133,6 +134,8 @@ game_update:
 #endif
         jsr panel_update                // straight after the input: always in the top border. It
                                         // draws what the previous frame's updates made dirty
+        jsr stars_update                // in the border too (memory-map.md "Order of the frame"):
+                                        // no badline, no sprite DMA, so its cost is its CPU count
         jsr pshot_update                // before player_update: see pshot_update's header
         // Stand-in for stage 4's wave clear: when the last explosion has ended (enemy_kill starts
         // the timer) wait WAVE_CLEAR_PAUSE frames, then the same 18 again. No bonus, no wave + 1.
@@ -144,7 +147,6 @@ game_update:
 !:      jsr formation_update            // every mover has moved before the collisions ...
         jsr collide_update
         jsr player_update               // ... and the player moves and fires after them
-        jsr stars_update
 game_update_end:
         jsr mux_update
 
