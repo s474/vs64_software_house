@@ -3,7 +3,7 @@
   "src_dir": "tests/engine/rng",
   "warmup_frames": 600,
   "stage": 2,
-  "notes": "Checks from the contract (engine/rng.md#spike-testsenginerng, Technical Director; low-bit limits re-baselined 2026-10-02 from tests/engine/rng/limits_model.py, reasoning in engine/rng.md#low-bit-limits). 'stage': 1 = the spike as first built (it reported spike_low5_min/max only); 2 = the spike also reports spike_bit_min and spike_bit_max (reached in commit 9e6c11e: measured 103 and 157, equal to the model). The two interim low-5-bit locks (spike_low5_min == 0, spike_low5_max == 21) were removed by the Technical Director on 2026-10-02, once the four 'ones per block' checks ran: 11 checks. The spike still reports the two spike_low5 labels and check.py still compares them with the model. warmup_frames 600: the whole-period statistics finish at frame 450 after entry (measured: check.py --finish-frame); every memory check reads the finished result. The profile check is a lock: rng_next has no branches and is called on a top-border line with no DMA and no IRQ inside it, so min_cycles = max_cycles = the measured figure (as tests/engine/irq_chain). Its span is rng_next to rng_next_end (the rts label): the rts and the caller's jsr are NOT in it (engine/README.md#which-span-a-figure-is). The model check against the 6502 routine is tests/engine/rng/check.py. Schema: engine/README.md#budget-files.",
+  "notes": "Checks from the contract (engine/rng.md#spike-testsenginerng, Technical Director; low-bit limits re-baselined 2026-10-02 from tests/engine/rng/limits_model.py, reasoning in engine/rng.md#low-bit-limits). 'stage': 1 = the spike as first built (it reported spike_low5_min/max only); 2 = the spike also reports spike_bit_min and spike_bit_max (reached in commit 9e6c11e: measured 103 and 157, equal to the model). The two interim low-5-bit locks (spike_low5_min == 0, spike_low5_max == 21) were removed by the Technical Director on 2026-10-02, once the four 'ones per block' checks ran: 11 checks, + check.py as a 'script' check = 12. The spike still reports the two spike_low5 labels and check.py still compares them with the model. warmup_frames 600: the whole-period statistics finish at frame 450 after entry (measured: check.py --finish-frame); every memory check reads the finished result. The profile check is a lock: rng_next has no branches and is called on a top-border line with no DMA and no IRQ inside it, so min_cycles = max_cycles = the measured figure (as tests/engine/irq_chain). Its span is rng_next to rng_next_end (the rts label): the rts and the caller's jsr are NOT in it (engine/README.md#which-span-a-figure-is). The model check against the 6502 routine is tests/engine/rng/check.py. Schema: engine/README.md#budget-files.",
   "checks": [
     {
       "name": "rng_next",
@@ -121,6 +121,14 @@
       "equals": 0,
       "basis": "requirement",
       "source": "engine/README.md#handler-conventions"
+    },
+    {
+      "name": "6502 routine equals the model (check.py)",
+      "kind": "script",
+      "basis": "requirement",
+      "source": "engine/rng.md#results-raster-engineer-2026-10-02: the Python model against rng_next on the C64 (state, A, X and Y preserved, zero seed, the spike's statistics labels including spike_low5_min/max), and the model's period and distribution. The script starts its own VICE on the spike's PRG; pass = exit code 0",
+      "command": ["uv", "run", "--quiet", "--package", "budget-runner", "python", "tests/engine/rng/check.py", "--prg", "{prg}"],
+      "timeout": 120
     }
   ]
 }

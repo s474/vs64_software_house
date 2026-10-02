@@ -2,7 +2,7 @@
   "spike": "input",
   "src_dir": "tests/engine/input",
   "warmup_frames": 50,
-  "notes": "Checks from the contract's table (engine/input.md#spike-testsengineinput, Technical Director 2026-10-01). The profile check is a lock: input_read is straight-line code called on a top-border line with no DMA and no IRQ inside it, so the measured figure is exact and min_cycles = max_cycles = that figure (as tests/engine/irq_chain). A change to engine/input.asm that moves it must re-baseline deliberately. make test can't press buttons: directions, fire, combinations, edges, port 1 and the $DC02 cases are tests/engine/input/check.py. Schema: engine/README.md#budget-files.",
+  "notes": "Checks from the contract's table (engine/input.md#spike-testsengineinput, Technical Director 2026-10-01). The profile check is a lock: input_read is straight-line code called on a top-border line with no DMA and no IRQ inside it, so the measured figure is exact and min_cycles = max_cycles = that figure (as tests/engine/irq_chain). A change to engine/input.asm that moves it must re-baseline deliberately. The profile and memory checks can't press buttons: directions, fire, combinations, edges, port 1 and the $DC02 cases are tests/engine/input/check.py, which make test runs as the last check (kind 'script'). Schema: engine/README.md#budget-files.",
   "checks": [
     {
       "name": "input_read",
@@ -36,6 +36,14 @@
       "equals": 0,
       "basis": "requirement",
       "source": "engine/README.md#handler-conventions: any late run means a budget was blown"
+    },
+    {
+      "name": "joystick behaviour (check.py)",
+      "kind": "script",
+      "basis": "requirement",
+      "source": "engine/input.md: directions, fire, combinations, edges, port 1 and the $DC02 cases, driven through the monitor's joystick. The script starts its own VICE on the spike's PRG; pass = exit code 0",
+      "command": ["uv", "run", "--quiet", "--package", "budget-runner", "python", "tests/engine/input/check.py", "--prg", "{prg}"],
+      "timeout": 60
     }
   ]
 }

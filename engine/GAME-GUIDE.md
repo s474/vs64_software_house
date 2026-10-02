@@ -134,5 +134,6 @@ Budget the game against 7,200, sound included. Code that runs through the displa
   the game, which then plays its worst case with no stick. Put `name:` and `name_end:` (on the
   final `rts`) around each budgeted routine, and keep the DEBUG overrun count and idle minimum.
 - Stick-driven behaviour is checked by a script beside the budget file (Swarm:
-  `tests/games/swarm/check.py`), on DEBUG and release.
+  `tests/games/swarm/check.py`). `make test` runs it as a `script` check in the budget file
+  (DEBUG build); run it by hand with `--prg` on the release build.
 - A failing budget check is reported with the measured figure. Limits aren't edited to pass.

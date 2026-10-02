@@ -1,6 +1,7 @@
 {
   "spike": "swarm_budget",
   "src_dir": "tests/games/swarm",
+  "asset_dir": "games/swarm/src",
   "warmup_frames": 400,
   "stage": 1,
   "notes": "Swarm's budget checks (M4). Written by the Technical Director at stage 0, before the game exists: until tests/games/swarm/main.asm does, the runner reports SKIP. That file is the gameplay-engineer's, two lines: '#define AUTOPLAY' then '#import \"games/swarm/src/main.asm\"'. AUTOPLAY makes the game play the designer's worst case by itself (wave 12, scripted stick, nothing dies): docs/games/swarm/memory-map.md#labels-the-game-must-provide lists what it does and every label these checks read. 'stage' is the M4 stage the game's code has reached (docs/milestones/M4-training-game.md, stages 1-5): the gameplay-engineer sets it at the start of each stage and changes nothing else here. Checks with a higher from_stage print PENDING. Units: raster cycles, DMA included, IRQs excluded for main-loop routines (engine/README.md#budget-units). Every game limit is an estimate until its stage measures it; a failing check is reported with the measured figure, and the Technical Director re-baselines. The per-routine limits add up to 5,765 for game_update (input measured at 40, not the 75 first estimated), + 500 for the sound tick = 6,265 against the engine's 7,200: 935 of headroom, which the idle check enforces. STAGE 1 FIGURES CARRY NO DMA: with 3 sprites, game_update runs on raster lines 23-31, above the first badline (measured, docs/games/swarm/memory-map.md#stage-1-measured), so the display allowance (x 1.27) in every limit is untested until stage 2 puts the formation on screen. For that reason no limit here is re-baselined to a stage 1 measurement; each source line records the stage 1 figure beside the estimate. warmup_frames 400: boot, the wave intro (100 frames) and the first launches; the game's own GAME_IDLE_WARMUP is 200 frames. The first memory check runs 3,000 more frames and the others read at that same moment (after_frames 0), except the stage 5 soak.",
@@ -304,6 +305,15 @@
       "from_stage": 5,
       "source": "M4 stage 5 sign-off",
       "equals": 0
+    },
+    {
+      "name": "stick behaviour (check.py)",
+      "kind": "script",
+      "basis": "requirement",
+      "source": "tests/games/swarm/check.py: joystick-driven cases on the game itself (the DEBUG build of games/swarm, not this AUTOPLAY wrapper, which ignores the stick; 'build' makes it first). The script starts its own VICE; pass = exit code 0. The release build is still checked by hand with --prg",
+      "command": ["uv", "run", "--quiet", "--package", "budget-runner", "python", "tests/games/swarm/check.py", "--prg", "{prg}"],
+      "build": {"game": "swarm"},
+      "timeout": 300
     }
   ]
 }

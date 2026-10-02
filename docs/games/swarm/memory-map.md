@@ -591,7 +591,9 @@ game_idle_start:
 - The budget build is selected by the spike's name or a part of it: **`make test ARGS=swarm`**
   (the spike is `swarm_budget`, built into `build/swarm_budget/`).
 - Joystick behaviour is checked by a script, not by the profile and memory checks (they have no
-  stick): `uv run --package budget-runner python tests/games/swarm/check.py`, on DEBUG and release.
+  stick): `tests/games/swarm/check.py`. **`make test` now runs it** on the DEBUG build of the game,
+  as the `script` check at the end of `budget.json`; the release build is still run by hand
+  (`uv run --package budget-runner python tests/games/swarm/check.py --prg <release prg>`).
 - Strings use `GameText()` ([Character set](#character-set)); `zp_wave` and the scores are BCD
   ([Zero page](#zero-page)).
 
