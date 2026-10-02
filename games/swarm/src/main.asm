@@ -86,24 +86,12 @@ start:
         jsr game_sprites_init
         jsr stars_init
         jsr panel_init
-        jsr player_init
-        jsr pshot_init
-#if AUTOPLAY
-        lda #GAME_LOOP_MAX              // the budget build plays the hardest loop: the formation
-#else                                   // drifts every frame (memory-map.md, AUTOPLAY)
-        lda #0                          // loop 0 until the wave stage counts it
-#endif
-        sta zp_loop
-        jsr formation_init              // after zp_loop: the drift's period depends on it
         jsr input_init                  // $DC02: before irq_init, and never written again
-        lda #<GAME_RNG_SEED             // stage 1 draws no random numbers; a game start will seed
-        ldx #>GAME_RNG_SEED             // from zp_irq_frame and $D012 (engine/rng.md), AUTOPLAY
-        jsr rng_seed                    // with this constant
-        lda #GAME_STATE_PLAY
-        sta zp_game_state
+        lda #<GAME_RNG_SEED             // a fixed seed until stage 4's title seeds from zp_irq_frame
+        ldx #>GAME_RNG_SEED             // and $D012 at the press of fire (engine/rng.md); AUTOPLAY
+        jsr rng_seed                    // keeps this constant
+        jsr game_new                    // score 0, lives 3, the formation, the ship, state Play
         lda #0
-        sta zp_state_timer
-        sta zp_state_timer + 1
 #if DEBUG
         sta game_overrun_count
         sta game_flicker_frames
@@ -136,15 +124,10 @@ game_update:
                                         // draws what the previous frame's updates made dirty
         jsr stars_update                // in the border too (memory-map.md "Order of the frame"):
                                         // no badline, no sprite DMA, so its cost is its CPU count
-        jsr pshot_update                // before player_update: see pshot_update's header
-        // Stand-in for stage 4's wave clear: when the last explosion has ended (enemy_kill starts
-        // the timer) wait WAVE_CLEAR_PAUSE frames, then the same 18 again. No bonus, no wave + 1.
-        lda zp_state_timer              // 3
-        beq !+                          // 3: no pause running, the usual frame
-        dec zp_state_timer
-        bne !+
-        jsr formation_init              // a frame with no enemy and nothing to hit: time to spare
-!:      jsr formation_update            // every mover has moved before the collisions ...
+        jsr pshot_update                // the shots move first, in the border ...
+        jsr eshot_update                // ... so a shot fired this frame stays at its spawn position
+        jsr game_state_update           // the state's timer and changes; the formation's return
+        jsr formation_update            // every mover has moved before the collisions ...
         jsr collide_update
         jsr player_update               // ... and the player moves and fires after them
 game_update_end:
@@ -243,8 +226,10 @@ game_idle_warm:         .byte 0         // frames left before game_idle_min star
 #import "stars.asm"
 #import "panel.asm"
 #import "pshot.asm"
+#import "eshot.asm"
 #import "player.asm"
 #import "formation.asm"
+#import "game.asm"
 #import "collide.asm"                   // after formation.asm: it uses the ENEMY_* states
 #if AUTOPLAY
 #import "autoplay.asm"

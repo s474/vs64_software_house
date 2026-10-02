@@ -63,7 +63,39 @@ collide_update:
                 jsr collide_enemy_hit
 !next:
         }
-        // Stage 3: the player's two scans go here (see the top of the file).
+        // (b) The player against the enemy shots (design Stage 3 rules, step 6b). Only in Play
+        // with the invulnerability timer at 0; the budget build tests in every frame.
+#if !AUTOPLAY
+        lda zp_game_state               // 3
+        ora zp_player_invuln            // 3
+        bne collide_update_end          // 2 / 3   dying, respawning, game over or invulnerable
+#endif
+        // The Y guard (memory-map.md "The collision budget", rule 3): a shot can touch the ship
+        // only at Y >= 207. MUX_OFF passes the first compare, so it is excluded by the second.
+        .for (var i = 0; i < SPR_ESHOT_COUNT; i++) {
+                lda mux_y + SPR_ESHOT + i       // 4
+                cmp #PLAYER_HIT_ESHOT_Y         // 2
+                bcc !no+                        // 3 / 2   too high
+                cmp #MUX_OFF                    // 2
+                bne !scan+                      // 2 / 3   in flight at the ship's height
+!no:
+        }
+        jmp !divers+                    // 3   no shot low enough: the usual frame
+!scan:  ldx #SPR_PLAYER
+        ldy #COL_PAIR_PLAYER_ESHOT
+        jsr collision_begin             // the ship's position: last frame's, it moves after this
+        ldx #SPR_ESHOT + SPR_ESHOT_COUNT - 1
+        lda #SPR_ESHOT
+        jsr collision_range
+        bcc !divers+
+#if AUTOPLAY
+        jsr autoplay_count_hit          // counted, not answered: the shot is left alone
+#else
+        jsr player_hit                  // at most one player hit a frame: (c) is skipped
+        jmp collide_update_end
+#endif
+!divers:
+        // (c) The player against the diving enemies: step 2.
 collide_update_end:
         rts
 

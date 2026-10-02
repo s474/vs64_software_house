@@ -28,9 +28,12 @@
 
 // $18-$1F: game core (main.asm)
 .label zp_game_frame  = $18     // the value irq_wait_frame returned for the frame being worked on
-.label zp_game_state  = $19     // GAME_STATE_* (stage 1: always GAME_STATE_PLAY)
-.label zp_state_timer = $1a     // 2 bytes: frames left in the current state. Stage 2 part B: the low byte counts
-                                // the pause after the last enemy's explosion (0 = no pause running)
+.label zp_game_state  = $19     // GAME_STATE_* (consts.asm; the state machine is game.asm)
+.label zp_state_timer = $1a     // frames the current game state has run, counted up from 0 (the state's
+                                // first frame) and stopping at 255. Not counted in Play. One byte
+.label zp_clear_timer = $1b     // frames left of the pause after the last enemy's explosion (0 = no pause
+                                // running): its own timer, whatever the game state (design, Stage 3 rule
+                                // 12). Until stage 3 this was the low byte of a 2-byte zp_state_timer
 .label zp_idle_lo     = $1c     // DEBUG: idle-loop iterations this frame
 .label zp_idle_hi     = $1d
 .label game_idle_min  = $1e     // 2 bytes, DEBUG, little-endian: fewest idle iterations in a frame
@@ -48,11 +51,11 @@
 .label zp_divers_active   = $28 // enemies in WindUp, Dive or Return (stage 3)
 .label zp_enemies_alive   = $29 // enemies whose state isn't ENEMY_DEAD (an exploding one still counts)
 .label zp_wave            = $2a // wave number as shown, BCD 01-99
-.label zp_loop            = $2b // difficulty loop 0-3 (counted from stage 4; 0 until then)
+.label zp_loop            = $2b // difficulty loop 0-3 (a store: counted from stage 4; stage 3 sets it to 0)
 .label zp_drift_timer     = $2c // frames until the drift's next 1-pixel step
 .label zp_anim_timer      = $2d // frames until the enemies' next animation swap
 .label zp_anim_frame      = $2e // the enemies' animation frame, 0 or 1
-                                // $2f free
+.label zp_pattern         = $2f // wave pattern index 0-2 (a store: counted from stage 4; stage 3 sets it to 2)
 
 // $30-$3F: pointers and per-call scratch for game routines
 .label zp_star_ptr  = $30       // 2 bytes: colour RAM cell of the star being twinkled

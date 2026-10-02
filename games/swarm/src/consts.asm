@@ -163,8 +163,37 @@
 .errorif SPR_ENEMY + ENEMY_COUNT != 24, "the enemies are virtual sprites 6-23"
 .errorif FORM_X0 + FORM_FX_MAX + FORM_COL_DX * (FORM_COLS - 1) != 310, "design: the formation's sprite X is 34-310"
 
-// --- Game core ----------------------------------------------------------------------------
-.const GAME_STATE_PLAY  = 0     // stage 1 has no other state
+// --- Enemy shots, divers, the launcher (design.md "Enemy behaviour", "Firing", "Waves") -------
+.const DIVER_SLOTS     = 3      // enemies in WindUp, Dive or Return at once (the waves' maximum)
+.const DIVER_X_MIN     = 0      // a diver's and an enemy shot's X is clamped to 0-344: both ends
+.const DIVER_X_MAX     = 344    // are off screen
+.const DIVER_WRAP_Y    = 30     // a wrapping diver re-enters at (home X, 30), under the top border
+.const DIVER_RETURN_SPEED = 2   // Return: X and Y toward home by at most 2 a frame
+.const ESHOT_FIRE_X_MIN = 24    // a diver fires only with its X in 24-320
+.const ESHOT_FIRE_X_MAX = 320
+.const ESHOT_AIM_DEAD  = 15     // a shot's dx is 0 when |player X - shot X| <= 15
+.const LAUNCH_TIMER_START = 50  // the launch timer when Play is entered and when a formation returns
+.const LAUNCH_HALVE_ALIVE = 4   // the interval is halved with 4 or fewer enemies alive
+.const STAGE3_PATTERN  = 2      // Stage 3 rule 1: pattern 3 (index 2) at loop 0 on every formation
+.errorif DIVER_WRAP_Y < 30 || DIVER_X_MAX > 511, "divers stay inside the multiplexer's range"
+
+// --- Game core and the game states (design.md "Game flow", "Stage 3 rules" 8-13) --------------
+// The order matters: the ship is shown (and moves and fires) in the states below
+// GAME_STATE_DYING, and Play is 0 so that "in Play" is one beq.
+.const GAME_STATE_PLAY     = 0
+.const GAME_STATE_RESPAWN  = 1  // READY: 50 frames, the ship back and controllable
+.const GAME_STATE_DYING    = 2  // PlayerDying: the explosion, then the wait for the divers
+.const GAME_STATE_GAMEOVER = 3
+.const PLAYER_EXPLOSION_FRAMES = 32     // the hit's frame and the 31 after: 4 shapes of 8 frames
+.const PLAYER_INVULN_FRAMES = 150       // from the first frame of Respawn: 50 of READY + 100 of play
+.const RESPAWN_FRAMES      = 50
+.const DYING_MIN_FRAMES    = 100        // PlayerDying ends in the first frame, 100 or later, with no diver out
+.const GAMEOVER_FRAMES     = 200
+.const GAMEOVER_SKIP_FRAME = 50         // from this frame of GameOver a new press of fire ends it
+.const MSG_ROW             = 12         // READY, GAME OVER (and stage 4's WAVE nn): row 12, centred
+.const MSG = SCREEN + MSG_ROW * SCREEN_COLS
 .const GAME_IDLE_WARMUP = 200   // frames before game_idle_min starts counting
 .const HISCORE_START    = $005000       // BCD
 .const GAME_RNG_SEED    = $1d5a  // any non-zero value: the fixed seed of AUTOPLAY runs (and of stage 1)
+.errorif PLAYER_EXPLOSION_FRAMES != 2 * EXPLOSION_FRAMES, "player_update reads the enemies' explosion_shape table at half speed"
+.errorif PLAYER_EXPLOSION_FRAMES >= DYING_MIN_FRAMES, "the player's explosion must be over before PlayerDying can end"

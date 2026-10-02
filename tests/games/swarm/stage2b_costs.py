@@ -34,7 +34,10 @@ Run from the repo root (about 2 minutes):
 
     uv run --package budget-runner python tests/games/swarm/stage2b_costs.py
 
-Results of the last run: tests/games/swarm/stage2b_costs.txt.
+Results of the last run: tests/games/swarm/stage2b_costs.txt (the stage 2 part B build, commit
+2dee8cf). From stage 3 the pause timer it sets is zp_clear_timer (it was zp_state_timer); the game
+now also launches divers, so a new run measures a different game: stage 3's figures are
+stage3_costs.py's.
 """
 
 import sys
@@ -131,7 +134,7 @@ def main() -> int:
         hits = []
         for _ in range(HIT_RUNS):
             stop_at_frame_end()
-            poke("zp_state_timer", [1])            # the game's own respawn: all 18 parked next frame
+            poke("zp_clear_timer", [1])            # the game's own respawn: all 18 parked next frame
             stop_at_frame_end()
             stop_at_frame_end()
             poke("zp_drift_timer", [2])            # no drift step in the next frame: X stays as read
@@ -159,7 +162,7 @@ def main() -> int:
 
         # explosions: all 4 slots animating, EXPL_RUNS explosions of 15 animated frames each
         stop_at_frame_end()
-        poke("zp_state_timer", [1])
+        poke("zp_clear_timer", [1])
         stop_at_frame_end()
         stop_at_frame_end()
         poke("zp_loop", [3])

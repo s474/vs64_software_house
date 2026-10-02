@@ -23,7 +23,7 @@ will be in the frame the shot reaches it (predict()), and presses fire in the fr
 offset it wants. Only the stick is used to make a hit or a miss; the monitor is used to read, to
 take a missed shot away after an "outside" edge case, to empty the sky for stage 1's shot cases
 (which need shots that hit nothing) and to bring the formation back for the later cases through the
-game's own pause timer (zp_state_timer = 1).
+game's own pause timer (zp_clear_timer = 1).
 
 Cases (PASS/FAIL each, exit code 1 on any failure):
   setup        $D011 = $5B, $D018 = $1A, $D020/21/22 = black/black/blue, $D017 = $D01D = 0,
@@ -63,7 +63,7 @@ Cases (PASS/FAIL each, exit code 1 on any failure):
                frame after it spawns, so a slot is always free: spawns are exactly 10 frames apart
   fire-tap     fire pressed for 1 frame: exactly one shot; pressed again 5 frames later: none
                (cooldown); pressed at 10 frames: a second shot
-  (the formation is brought back: zp_state_timer = 1, the game's own path)
+  (the formation is brought back: zp_clear_timer = 1, the game's own path)
   hit          a shot fired under enemy 15 (row 2, column 3): nothing until frame f + 8, then in that
                frame the enemy is Exploding (timer 16, shape $C9, orange), the shot's slot is free,
                the score is 50 and the panel's score is marked dirty; the panel shows 000050 one
@@ -411,12 +411,12 @@ def main() -> int:
             mon.mem_set(sym["enemy_state"], bytes([ENEMY_DEAD] * ENEMIES))
             mon.mem_set(sym["mux_y"] + ENEMY0, bytes([MUX_OFF] * ENEMIES))
             mon.mem_set(sym["explosion_enemy"], bytes([0xFF] * 4))
-            mon.mem_set(sym["zp_state_timer"], bytes([0]))
+            mon.mem_set(sym["zp_clear_timer"], bytes([0]))
 
         def respawn():
             """The game's own path back to a full formation: the pause timer's last frame."""
             settle()
-            mon.mem_set(sym["zp_state_timer"], bytes([1]))
+            mon.mem_set(sym["zp_clear_timer"], bytes([1]))
             frame()
 
         empty_sky()
@@ -761,7 +761,7 @@ def main() -> int:
             waited += 1
         fx, fdir, en = enemies()
         gone = (estates() == [ENEMY_DEAD] * ENEMIES and all(q[1] == MUX_OFF for q in en)
-                and mem(sym["zp_state_timer"])[0] == CLEAR_PAUSE)
+                and mem(sym["zp_clear_timer"])[0] == CLEAR_PAUSE)
         empty = 0
         for i in range(1, CLEAR_PAUSE):
             frame()
@@ -777,7 +777,7 @@ def main() -> int:
         frame()
         fx2 = mem(sym["zp_fx"])[0]
         rep("clear", not errs and final == 1680 and gone and empty == CLEAR_PAUSE - 1 and back and score() == final
-            and row == " SCORE 001680  HI 005000  WAVE 01 " and mem(sym["zp_state_timer"])[0] == 0 and fx2 == FX_START + 1,
+            and row == " SCORE 001680  HI 005000  WAVE 01 " and mem(sym["zp_clear_timer"])[0] == 0 and fx2 == FX_START + 1,
             f"{shot_down} more enemies shot, each for its row's value (errors: {errs[:3] or 'none'}); score {final} "
             f"(6 x 280 = 1680); when the last explosion ended: all Dead and hidden, pause timer {CLEAR_PAUSE}: {gone}; sky "
             f"empty for the next {empty} frames; in frame {CLEAR_PAUSE} all 18 Parked at their homes for fx {fx} in their "
@@ -859,6 +859,337 @@ def main() -> int:
             f"{len(good)} are enemies in their row's Y, colour and shape (Y {sorted({q[1] for q in others})}); "
             f"$D017/$D01D/$D01C = {d[0x17]}/{d[0x1D]}/{d[0x1C]}")
         frame()
+
+
+        # ================================================================ stage 3
+        GS_PLAY, GS_RESPAWN, GS_DYING, GS_OVER = 0, 1, 2, 3
+        ESHOT0, SHAPE_ESHOT, ESHOT_HIT_Y, ESHOT_HIT_DX = 1, 0xC2, 207, 6
+        PANEL_DIRTY_LIVES, PANEL_DIRTY_HI = 2, 8
+        MSG = SCREEN + 12 * 40
+
+        def poke(label, data, off=0):
+            mon.mem_set(sym[label] + off, bytes(data))
+
+        def peek(label, off=0):
+            return mem(sym[label] + off)[0]
+
+        def eshots():
+            ys, xl, xh = mem(sym["mux_y"] + ESHOT0, 3), mem(sym["mux_x_lo"] + ESHOT0, 3), mem(sym["mux_x_hi"] + ESHOT0, 3)
+            return [None if ys[i] == MUX_OFF else (xl[i] + 256 * xh[i], ys[i]) for i in range(3)]
+
+        def put_eshot(i, x, y, dx=0):
+            """Place enemy shot i through the monitor (as a diver's fire step would leave it)."""
+            poke("mux_x_lo", [x & 255], ESHOT0 + i)
+            poke("mux_x_hi", [x >> 8], ESHOT0 + i)
+            poke("mux_y", [y], ESHOT0 + i)
+            poke("eshot_dx", [dx & 255], i)
+
+        def clear_eshots():
+            poke("mux_y", [MUX_OFF] * 3, ESHOT0)
+
+        def gstate():
+            return peek("zp_game_state"), peek("zp_state_timer")
+
+        def ship():
+            """The ship's multiplexer entry: (X, Y, shape, colour)."""
+            return (peek("mux_x_lo") + 256 * peek("mux_x_hi"), peek("mux_y"), peek("mux_ptr"), peek("mux_col") & 15)
+
+        def msg():
+            """Row 12 as text, 40 characters; the cells outside the star-free band (columns 10-29) as spaces."""
+            return "".join(" " if i not in BAND_COLS else chr((c & 63) + 64) if 0 < (c & 63) < 27 else chr(c & 63)
+                           for i, c in enumerate(mem(MSG, 40)))
+
+        def walk_to(x0):
+            x = state()[0]
+            for _ in range(120):
+                if x == x0:
+                    frame(0)
+                    return
+                x = frame(BITS["right"] if x < x0 else BITS["left"])[0]
+            raise MeasureError(f"walk_to({x0}): at {x}")
+
+        def revive():
+            """After a death: lives back to 3 (monitor), then the game's own PlayerDying and Respawn,
+            with the invulnerability taken away (monitor) once Play is back. Returns frames waited."""
+            poke("zp_lives", [3])
+            n = 0
+            while gstate()[0] != GS_PLAY:
+                frame(0)
+                n += 1
+                if n > 400:
+                    raise MeasureError(f"revive: still in state {gstate()}")
+            poke("zp_player_invuln", [0])
+            frame()
+            return n
+
+        respawn()
+        ct = mem(sym["colour_table"], 19)
+
+        # eshot-move: placed shots move Y + 2 and X + dx, are removed when Y > 221, and clamp at 0 / 344
+        walk_to(X_MIN)
+        put_eshot(0, 200, 101, 0)
+        put_eshot(1, 254, 100, 1)
+        put_eshot(2, 257, 100, -1)
+        errs, last = [], [None] * 3
+        for k in range(1, 63):
+            frame()
+            got = eshots()
+            want = [(200, 101 + 2 * k) if 101 + 2 * k <= 221 else None,
+                    (254 + k, 100 + 2 * k) if 100 + 2 * k <= 221 else None,
+                    (257 - k, 100 + 2 * k) if 100 + 2 * k <= 221 else None]
+            if got != want:
+                errs.append(f"frame {k}: {got}, expected {want}")
+            last = [g[1] if g else last[i] for i, g in enumerate(got)]
+        look = (list(mem(sym["mux_ptr"] + ESHOT0, 3)), [c & 15 for c in mem(sym["mux_col"] + ESHOT0, 3)],
+                list(mem(sym["mux_flags"] + ESHOT0, 3)))
+        put_eshot(0, 343, 100, 1)
+        put_eshot(1, 1, 100, -1)
+        put_eshot(2, 300, 100, 0)
+        clamp = []
+        for k in range(1, 5):
+            frame()
+            clamp.append(eshots())
+        okc = ([c[0][0] for c in clamp] == [344] * 4 and [c[1][0] for c in clamp] == [0] * 4
+               and [c[2] for c in clamp] == [(300, 100 + 2 * k) for k in range(1, 5)])
+        clear_eshots()
+        poke("zp_loop", [2])
+        put_eshot(0, 200, 100, 1)
+        fast = [(frame(), eshots()[0])[1] for _ in range(3)]
+        poke("zp_loop", [0])
+        clear_eshots()
+        frame()
+        rep("eshot-move", not errs and last == [221, 220, 220] and look == ([SHAPE_ESHOT] * 3, [ct[9]] * 3, [0x80] * 3)
+            and ct[9] == 10 and okc and fast == [(201, 103), (202, 106), (203, 109)] and gstate()[0] == GS_PLAY,
+            f"three placed shots, dx 0 / + 1 / - 1: Y + 2 and X + dx every frame (X through 255/256 both ways), last "
+            f"seen at Y {last}, removed when Y > 221; shape {hex(look[0][0])}, colour {look[1][0]} (light red), pinned "
+            f"{look[2] == [0x80] * 3}; clamp: X 343 + 1 -> {[c[0][0] for c in clamp]}, X 1 - 1 -> {[c[1][0] for c in clamp]} "
+            f"(the design's 0-344); zp_loop 2: {fast} (Y + 3); errors: {errs[:2] or 'none'}")
+
+        # eshot-edge-*: the player's box (columns 6-17) against a shot's (11-12): a hit when |shot X - ship X| <= 6,
+        # and only from shot Y 207 (rows 14-20 against the ship's 6-20 at Y 221)
+        def shot_case(name, px, off, y0, frames_, want):
+            """Ship at px, shot placed at (px + off, y0) with dx 0: `want` = the frame (1-based) of the hit, or None."""
+            walk_to(px)
+            lives0 = peek("zp_lives")
+            put_eshot(0, px + off, y0, 0)
+            seen = None
+            for k in range(1, frames_ + 1):
+                frame()
+                if gstate()[0] == GS_DYING and seen is None:
+                    seen = k
+            sh = eshots()[0]
+            ok = seen == want and peek("zp_lives") == lives0 - (1 if want else 0)
+            if want is None:
+                ok = ok and sh == (px + off, y0 + 2 * frames_)
+            rep(name, ok, f"ship at X {px} (box {px + 6}-{px + 17}, lines 227-241), shot placed at ({px + off}, {y0}) (box "
+                f"{px + off + 11}-{px + off + 12}): after {frames_} frame(s) " + (f"hit in frame {seen} at Y {y0 + 2 * seen} "
+                f"(lines {y0 + 2 * seen + 14}-{y0 + 2 * seen + 20})" if seen else f"no hit, shot at {sh}") +
+                f"; expected {'a hit in frame ' + str(want) if want else 'no hit'}; lives {lives0} -> {peek('zp_lives')}")
+            clear_eshots()
+            if seen:
+                revive()
+
+        shot_case("eshot-edge-left-out", X_START, -7, 209, 6, None)
+        shot_case("eshot-edge-left-in", X_START, -6, 209, 1, 1)
+        shot_case("eshot-edge-right-out", 252, 7, 209, 6, None)
+        shot_case("eshot-edge-right-in", 252, 6, 209, 1, 1)
+        shot_case("eshot-edge-right-in-x256", 300, 6, 209, 1, 1)
+        shot_case("eshot-y-guard-206", X_START, 0, 202, 2, None)       # Y 204, 206: above the ship's box
+        shot_case("eshot-y-207", X_START, 0, 205, 1, 1)                 # Y 207: the first line of overlap
+        shot_case("eshot-y-206-then-208", X_START, 0, 204, 2, 2)        # Y 206 misses, 208 hits a frame later
+        shot_case("eshot-y-221", X_START, 6, 219, 1, 1)                 # the last Y a shot is shown at
+
+        # death: the player's death, frame by frame
+        walk_to(X_START + 30)
+        px = settle()
+        frame(BITS["fire"])                                   # a player shot in flight when the hit comes
+        frame(0)
+        for _ in range(3):
+            frame()
+        pshot0 = [q for q in state()[1] if q][0]
+        hi0, lives0 = mem(sym["game_hiscore"], 3).hex(), peek("zp_lives")
+        put_eshot(1, px, 205, 0)                              # this one hits
+        put_eshot(0, 40, 100, 1)                              # these two are in flight elsewhere
+        put_eshot(2, 300, 150, -1)
+        errs = []
+        x, shots = frame(BITS["right"] | BITS["fire"])        # frame H = frame 0 of PlayerDying; stick held from here
+        gs0, dirty = gstate(), peek("panel_dirty")
+        row0 = list(mem(SCREEN + 960 + 35, 3))
+        if not (gs0 == (GS_DYING, 0) and peek("zp_lives") == lives0 - 1 == 2 and dirty & PANEL_DIRTY_LIVES
+                and eshots() == [None] * 3 and ship() == (px, PLAYER_Y, SHAPE_EXPLOSION, ct[11]) and ct[11] == 1
+                and x == px and shots.count(None) == 1 and (pshot0[0], pshot0[1] - SHOT_SPEED) in shots
+                and row0 == [SHIP + PANEL_BG, SHIP + PANEL_BG, SPACE + PANEL_BG]):
+            errs.append(f"frame 0: state {gs0}, lives {peek('zp_lives')}, dirty {dirty}, enemy shots {eshots()}, ship {ship()}, "
+                        f"player X {x}, shots {shots}, markers {row0}")
+        shapes, hidden_at, pshot_life, respawn_at = [ship()[2]], None, 1, None
+        for k in range(1, 100):
+            x, shots = frame()
+            sp, gs = ship(), gstate()
+            if k == 1 and list(mem(SCREEN + 960 + 35, 3)) != [SHIP + PANEL_BG, SPACE + PANEL_BG, SPACE + PANEL_BG]:
+                errs.append(f"frame 1: markers {list(mem(SCREEN + 960 + 35, 3))}")
+            if k < 32:
+                shapes.append(sp[2])
+                if sp[:2] != (px, PLAYER_Y) or sp[3] != ct[11]:
+                    errs.append(f"frame {k}: ship {sp}")
+            elif sp[1] != MUX_OFF:
+                errs.append(f"frame {k}: ship not hidden {sp}")
+            elif hidden_at is None:
+                hidden_at = k
+            if any(shots) and (pshot0[0], pshot0[1] - SHOT_SPEED * (k + 1)) in shots:
+                pshot_life = k + 1
+            if sum(1 for q in shots if q) > (1 if pshot_life == k + 1 else 0) or x != px:
+                errs.append(f"frame {k}: the dead ship moved or fired: X {x}, shots {shots}")
+            if gs != (GS_DYING, k):
+                errs.append(f"frame {k}: state {gs}")
+            if k == 50:
+                frame_stick = mon.joyport_set(PORT2, 0x1F)       # release before the ship comes back
+        want_shapes = [SHAPE_EXPLOSION + k // 8 for k in range(32)]
+        ok_death = not errs and shapes == want_shapes and hidden_at == 32
+        rep("death", ok_death,
+            f"hit at ship X {px} with right + fire held from the hit's frame: frame 0 PlayerDying, lives {lives0} -> "
+            f"{lives0 - 1}, all 3 enemy shots removed, markers redrawn in frame 1, white explosion at the ship's X, shapes "
+            f"{[hex(p)[2:] for p in shapes[::8]]} 8 frames each: {shapes == want_shapes}; hidden from frame {hidden_at} "
+            f"(design: 32); the player shot in flight carried on ({pshot_life} more frames to Y 53); no move, no new shot; "
+            f"state PlayerDying with its timer = the frame number through frame 99; errors: {errs[:3] or 'none'}")
+
+        # respawn: frame 100 (no diver out): READY, the ship back at 171, controllable, invulnerable for exactly 150
+        errs = []
+        x, shots = frame()                                    # frame 100 of PlayerDying = frame 0 of Respawn (R)
+        if not (gstate() == (GS_RESPAWN, 0) and x == X_START and ship()[:3] == (X_START, PLAYER_Y, 0xC0)
+                and msg()[17:22] == "READY" and msg().strip() == "READY" and peek("zp_player_invuln") == 149):
+            errs.append(f"frame R: state {gstate()}, ship {ship()}, row 12 '{msg().strip()}', invuln {peek('zp_player_invuln')}")
+        cols, xs, ready_frames, play_at, launch_at_play, n_shots = [ship()[3]], [x], 1, None, None, 0
+        through = []
+        for k in range(1, 152):
+            stick = None
+            if k == 5:
+                stick = BITS["right"]
+            if k == 15:
+                stick = BITS["fire"]
+            if k == 17:
+                stick = 0
+            if k == 60:
+                put_eshot(0, x, 199, 0)                       # falls through the invulnerable ship (Y 207-221 in R + 63-70)
+            if k == 148:
+                put_eshot(1, x, 207, 0)                       # over the ship in R + 148, 149 (invulnerable) and R + 150
+            x, shots = frame(stick)
+            gs = gstate()
+            xs.append(x)
+            n_shots = max(n_shots, sum(1 for q in shots if q))
+            if k <= 149:
+                cols.append(ship()[3])
+            if msg()[17:22] == "READY":
+                ready_frames += 1
+            if gs[0] == GS_PLAY and play_at is None:
+                play_at, launch_at_play = k, peek("zp_launch_timer")
+                if msg().strip():
+                    errs.append(f"frame R + {k}: Play with row 12 '{msg().strip()}'")
+            if 60 < k <= 72:
+                through.append(eshots()[0])
+            if k < 150 and gs[0] not in (GS_RESPAWN, GS_PLAY):
+                errs.append(f"frame R + {k}: state {gs} (hit while invulnerable?)")
+            if k == 149 and (gs[0] != GS_PLAY or eshots()[1] != (x, 211) or peek("zp_player_invuln") != 0):
+                errs.append(f"frame R + 149: state {gs}, the shot {eshots()[1]}, invuln {peek('zp_player_invuln')}")
+            if k == 150 and gs != (GS_DYING, 0):
+                errs.append(f"frame R + 150: state {gs}: the first frame the ship can be hit")
+        want_cols = [ct[12] if (149 - k) & 4 else ct[3] for k in range(150)]
+        moved = xs[5] - xs[4], xs[14] - xs[4]
+        ok_thr = through == [(xs[59], 201 + 2 * i) for i in range(1, 11)] + [None, None]
+        rep("respawn", not errs and cols == want_cols and ready_frames == 50 and play_at == 50 and moved == (3, 30)
+            and n_shots >= 1 and ok_thr and launch_at_play in (49, 50) and (ct[3], ct[12]) == (3, 11),
+            f"frame 100 of PlayerDying = Respawn's frame R: ship at X {xs[0]}, READY at columns 17-21; stick right from "
+            f"R + 5: X + {moved[0]} in that frame, + {moved[1]} after 10 (controllable during READY), fire at R + 15: "
+            f"{n_shots} shot; READY shown {ready_frames} frames, Play in R + {play_at} with the launch timer at "
+            f"{launch_at_play}; colour by frame cyan/dark grey by the timer, 4 frames each: {cols == want_cols} (first 12: "
+            f"{cols[:12]}, last 6: {cols[-6:]}); a shot dropped on the ship (Y 207-221 in R + 63-70) passed through to Y 221 and was removed: {ok_thr}; "
+            f"a shot over the ship in R + 148 and R + 149 did nothing, the same shot hit in R + 150: invulnerable for "
+            f"exactly 150 frames; errors: {errs[:3] or 'none'}")
+
+        # game-over: the last life. The score is put above the high score first (monitor).
+        for _ in range(101):
+            frame(0)                                          # this death's PlayerDying, then Respawn (lives 1)
+        lives_r = peek("zp_lives")
+        while gstate()[0] != GS_PLAY:
+            frame()
+        poke("zp_player_invuln", [0])
+        poke("game_score", [0x00, 0x61, 0x50])
+        hi_before = mem(sym["game_hiscore"], 3).hex()
+        x = state()[0]
+        put_eshot(0, x, 205, 0)
+        frame(BITS["fire"])                                   # the last hit; fire is held through GameOver's start
+        errs = []
+        if not (gstate() == (GS_DYING, 0) and peek("zp_lives") == 0 and lives_r == 1):
+            errs.append(f"the last hit: state {gstate()}, lives {lives_r} -> {peek('zp_lives')}")
+        for k in range(1, 100):
+            frame()
+            if gstate() != (GS_DYING, k) or mem(sym["game_hiscore"], 3).hex() != hi_before:
+                errs.append(f"frame {k}: state {gstate()}, high score {mem(sym['game_hiscore'], 3).hex()}")
+        markers = list(mem(SCREEN + 960 + 35, 3))
+        frame()                                               # frame 100: GameOver's frame 0 (G)
+        hi_after, dirty = mem(sym["game_hiscore"], 3).hex(), peek("panel_dirty")
+        if not (gstate() == (GS_OVER, 0) and msg()[15:24] == "GAME OVER" and msg().strip() == "GAME OVER"
+                and hi_before == "005000" and hi_after == "006150" and dirty & PANEL_DIRTY_HI
+                and markers == [SPACE + PANEL_BG] * 3 and ship()[1] == MUX_OFF):
+            errs.append(f"frame G: state {gstate()}, row 12 '{msg().strip()}', high score {hi_before} -> {hi_after}, "
+                        f"dirty {dirty}, markers {markers}")
+        frame()
+        panel_hi = "".join(chr(c - PANEL_BG) for c in mem(SCREEN + 960 + 18, 6))
+        for k in range(2, 80):                                # fire still held: not a new press, no skip
+            frame()
+            if gstate() != (GS_OVER, k):
+                errs.append(f"frame G + {k} with fire held since the hit: state {gstate()}")
+        frame(0)                                              # G + 80: released
+        frame(BITS["fire"])                                   # G + 81: a new press
+        gs_press = gstate()
+        frame()                                               # G + 82: the new game
+        fx, fdir, en = enemies()
+        new = dict(state=gstate()[0], score=score(), lives=peek("zp_lives"), hi=mem(sym["game_hiscore"], 3).hex(),
+                   row12=msg().strip(), ship=ship(), invuln=peek("zp_player_invuln"), fx=fx,
+                   parked=estates() == [ENEMY_PARKED] * ENEMIES, home=[q[:2] for q in en] == home(FX_START),
+                   launch=peek("zp_launch_timer"), eshots=eshots(), divers=peek("zp_divers_active"),
+                   expl=list(mem(sym["explosion_enemy"], 4)))
+        ok_new = (new["state"] == GS_PLAY and new["score"] == 0 and new["lives"] == 3 and new["hi"] == "006150"
+                  and new["row12"] == "" and new["ship"][:3] == (X_START, PLAYER_Y, 0xC0) and new["ship"][3] == ct[3]
+                  and new["invuln"] == 0 and new["fx"] == FX_START and new["parked"] and new["home"]
+                  and new["launch"] in (49, 50) and new["eshots"] == [None] * 3 and new["divers"] == 0
+                  and new["expl"] == [0xFF] * 4)
+        frame(0)
+        row = "".join("^" if c == SHIP + PANEL_BG else chr((c & 63) + 64) if (c & 63) < 27 else chr(c & 63)
+                      for c in mem(SCREEN + 960, 40))
+        rep("game-over", not errs and gs_press[0] == GS_OVER and ok_new and panel_hi == "006150"
+            and row == " SCORE 000000  HI 006150  WAVE 01  ^^   ",
+            f"last life lost with the score at 6150: high score {hi_before} through PlayerDying's 100 frames, GameOver in "
+            f"frame 100 with GAME OVER at columns 15-23, no markers, high score {hi_after} (panel {panel_hi} a frame "
+            f"later); fire held since the hit didn't skip it in 80 frames; released, then a new press in G + 81: a new "
+            f"game in G + 82: {new}; panel '{row}'; errors: {errs[:3] or 'none'}")
+
+        # game-over-early and game-over-timeout: a press before frame 50 does nothing; with no press the
+        # screen stays 200 frames and the new game starts in frame 200. Lives set to 1 through the monitor.
+        poke("zp_lives", [1])
+        x = settle()
+        put_eshot(0, x, 205, 0)
+        frame()
+        for _ in range(100):
+            frame()
+        errs = []
+        if gstate() != (GS_OVER, 0):
+            errs.append(f"GameOver not entered: {gstate()}")
+        for k in range(1, 200):
+            stick = None
+            if k in (20, 49):
+                stick = BITS["fire"]                          # new presses in G + 20 and G + 49: too early
+            if k in (21, 50):
+                stick = 0
+            frame(stick)
+            if gstate() != (GS_OVER, k) or msg().strip() != "GAME OVER":
+                errs.append(f"frame G + {k}: state {gstate()}, row 12 '{msg().strip()}'")
+        frame()
+        rep("game-over-timeout", not errs and gstate()[0] == GS_PLAY and msg().strip() == "" and peek("zp_lives") == 3
+            and score() == 0 and mem(sym["game_hiscore"], 3).hex() == "006150",
+            f"GameOver again (lives set to 1, a hit): new presses of fire in frames 20 and 49 did nothing; GAME OVER "
+            f"stayed through frame 199; frame 200 is the new game (state {gstate()[0]}, lives {peek('zp_lives')}, score "
+            f"{score()}, high score kept {mem(sym['game_hiscore'], 3).hex()}); errors: {errs[:3] or 'none'}")
+        poke("game_hiscore", [0x00, 0x50, 0x00])
 
         mon.checkpoint_delete(cp.number)
     finally:

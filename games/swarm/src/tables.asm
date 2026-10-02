@@ -150,6 +150,16 @@ score_hi:               .byte $01, $00, $00,  $03, $01, $01
 // shows the first shape with the timer at 16): 4 frames each, 16 frames in all.
 explosion_shape:        .fill EXPLOSION_FRAMES + 1, SHAPE_EXPLOSION + EXPLOSION_SHAPES - 1 - floor((max(i, 1) - 1) / EXPLOSION_SHAPE_FRAMES)
 
+// The respawned ship's colour by its invulnerability timer after the frame's countdown (149 down
+// to 0), as a colour_table index: dark grey while bit 2 of the timer is set, cyan otherwise, so 4
+// frames each and cyan when the timer runs out (design.md "Colours", Stage 3 rule 10). A table of
+// indices, not colours: the colours themselves live only in colour_table.
+player_flash:           .fill PLAYER_INVULN_FRAMES + 1, ((i & 4) != 0) ? COL_RESPAWN_ALT : COL_PLAYER
+
+// Enemy shots: Y step a frame by loop 0-3 (design "What faster means").
+eshot_dy:               .byte 2, 2, 3, 3
+.errorif * - eshot_dy != GAME_LOOP_MAX + 1, "eshot_dy: one entry per loop"
+
 // ------------------------------------------------------------------------------------------
 // Strings. Stored as glyph codes 0-63 and written to the play area as they are; the panel
 // routine adds PANEL_BG. GameText() is the only way a text gets into the tables: it accepts
@@ -180,3 +190,16 @@ panel_template:
         //        0123456789012345678901234567890123456789
         GameText(" SCORE         HI         WAVE          ")
 .errorif * - panel_template != SCREEN_COLS, "panel_template is 40 cells"
+
+// Messages on row 12, centred (design.md "Text cells and the star rule"): first column
+// (40 - length) div 2, all inside the star-free band (columns 10-29).
+.const TEXT_READY_LEN     = 5
+.const TEXT_READY_COL     = floor((SCREEN_COLS - TEXT_READY_LEN) / 2)   // 17
+.const TEXT_GAME_OVER_LEN = 9
+.const TEXT_GAME_OVER_COL = floor((SCREEN_COLS - TEXT_GAME_OVER_LEN) / 2)       // 15
+text_ready:     GameText("READY")
+.errorif * - text_ready != TEXT_READY_LEN, "text_ready's length"
+text_game_over: GameText("GAME OVER")
+.errorif * - text_game_over != TEXT_GAME_OVER_LEN, "text_game_over's length"
+.errorif TEXT_READY_COL != 17 || TEXT_GAME_OVER_COL != 15, "design: READY at columns 17-21, GAME OVER at 15-23"
+.errorif TEXT_GAME_OVER_COL < STAR_BAND_COL_MIN || TEXT_GAME_OVER_COL + TEXT_GAME_OVER_LEN - 1 > STAR_BAND_COL_MAX, "messages must stay inside the star-free band"

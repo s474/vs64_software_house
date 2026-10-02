@@ -41,7 +41,7 @@
 // of explosion_enemy. formation_update's tail walks those entries (not the 18 states) after the
 // animation swap: it counts the timer down, writes the shape for the frames left, and when the
 // timer reaches 0 calls enemy_kill: Dead, hidden, zp_enemies_alive - 1, and at 0 alive the pause
-// before the next formation starts (zp_state_timer; main.asm). So zp_enemies_alive counts every
+// before the next formation starts (zp_clear_timer; game.asm). So zp_enemies_alive counts every
 // enemy that isn't Dead, an exploding one included: it reaches 0 when the last explosion ends
 // (design: "all 18 dead and exploded").
 // The sprite is shown exploding for exactly 16 frames: the hit's frame and the 15 after it.
@@ -164,7 +164,7 @@ enemy_explode:
         rts
 
 // Enemy X is dead: hide its sprite, count it, and when it was the last one start the pause
-// before the next formation (design "Waves": 75 frames; main.asm counts it).
+// before the next formation (design "Waves": 75 frames; game_state_update counts it).
 // In:  X = enemy index 0-17      Out: X preserved
 // Uses: A
 // Cost: 28 cycles + jsr/rts (counted); only when an explosion ends
@@ -176,7 +176,7 @@ enemy_kill:
         dec zp_enemies_alive
         bne !+
         lda #WAVE_CLEAR_PAUSE
-        sta zp_state_timer
+        sta zp_clear_timer
 !:      rts
 
 // The formation's frame: step the drift, work out the six columns' home X and write it to every
