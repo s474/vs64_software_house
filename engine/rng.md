@@ -2,10 +2,12 @@
 
 Design contract for M4 (Technical Director, 2026-10-01). Status: **implemented and measured**
 (raster-engineer, M4 stage 1, 2026-10-02): `engine/rng.asm`, a 16-bit xorshift (shifts 7, 9, 8)
-returning the new high byte; spike `tests/engine/rng/`, 9 checks in `make test`, and the model
-check `tests/engine/rng/check.py`. The first-guess limits for the low 5 bits (2–20) were wrong and
-are **replaced** (Technical Director, 2026-10-02): see [Low-bit limits](#low-bit-limits), which
-also says what the spike still has to report. Conventions are [engine/README.md](README.md)'s.
+returning the new high byte; spike `tests/engine/rng/` at its stage 2 (commit 9e6c11e), **11 checks
+in `make test`, all passing** (`make test ARGS=rng`, 2026-10-02), and the model check
+`tests/engine/rng/check.py`. The first-guess limits for the low 5 bits (2–20) were wrong and
+are **replaced** (Technical Director, 2026-10-02) by a ones-per-block test the spike now reports:
+**measured 103–157**, equal to the model: see [Low-bit limits](#low-bit-limits). Conventions are
+[engine/README.md](README.md)'s.
 
 ## Purpose
 
@@ -96,13 +98,13 @@ RAM. Chain: entry 0 only (so the budget runner has its IRQ labels). It must demo
    `spike_zero_ok` = 1.
 5. The measured cost of `rng_next`.
 
-A whole period is 65,535 calls: **measured** about 300 frames at the spike's 90 cycles a call
-(screen off), and an estimated 450–500 once the five bit counters are added. The
-statistics run to completion once, then the spike keeps calling `rng_next` once a frame so the
-profile check has passes to measure.
+A whole period is 65,535 calls: the statistics finish (`spike_done` = 1) at **frame 450** after
+the program's entry (**measured**: `check.py --finish-frame`; about 300 before the five bit counters
+were added). They run to completion once, then the spike keeps calling `rng_next` once a frame so
+the profile check has passes to measure.
 
-`tests/engine/rng/budget.json` (`warmup_frames` 600, so the statistics are finished; `stage` 1
-until the spike reports the two `spike_bit_*` labels, then 2):
+`tests/engine/rng/budget.json` (`warmup_frames` 600, so the statistics are finished; `stage` 2:
+the spike reports the two `spike_bit_*` labels). 11 checks:
 
 | Check | Kind | Labels | Limit | Basis |
 |---|---|---|---|---|
@@ -110,11 +112,15 @@ until the spike reports the two `spike_bit_*` labels, then 2):
 | statistics finished | `memory` | `spike_done` | equals 1 | requirement |
 | period | `memory` | `spike_period`, size 2 | equals 65535 | requirement |
 | every byte value 255–257 times | `memory` ×2 | `spike_hist_min`, `spike_hist_max` | min 255; max 257 | requirement |
-| ones per block for bits 0–4, not too uneven | `memory` ×2, `from_stage` 2 | `spike_bit_min`, `spike_bit_max` | min 92; max 164 | requirement ([model](#low-bit-limits)) |
+| ones per block for bits 0–4, not too uneven | `memory` ×2, `from_stage` 2 | `spike_bit_min`, `spike_bit_max` | min 92; max 164 (**measured** 103, 157) | requirement ([model](#low-bit-limits)) |
 | ones per block for bits 0–4, not too even | `memory` ×2, `from_stage` 2 | `spike_bit_min`, `spike_bit_max` | max 116; min 140 | requirement ([model](#low-bit-limits)) |
-| interim: count of each 5-bit value per block | `memory` ×2 | `spike_low5_min`, `spike_low5_max` | equals 0; equals 21 | measured: a regression lock on the sequence, not a quality limit. The Technical Director removes it when the four checks above run |
 | no late chain entries | `memory` | `irq_late_count` | equals 0 after 100 frames | requirement |
 | zero seed handled | `memory` | `spike_zero_ok` | equals 1 | requirement |
+
+The two interim locks on the count of each 5-bit value (`spike_low5_min` equals 0, `spike_low5_max`
+equals 21) were **removed** on 2026-10-02, when the four ones-per-block checks first ran and
+passed. The spike still reports both labels, and `check.py` still compares them with the model, so
+a change to the sequence is still caught there.
 
 ### Low-bit limits
 
@@ -148,9 +154,10 @@ in which the bit is 1. One period gives 255 × 5 = **1,275 cells**; a fair bit's
 - **Why the "too even" pair.** A range alone is passed by a generator that alternates or counts
   (exactly 128 every time), which is the fault requirement 3 names. A fair source's fewest is
   91–108 and its most 148–166 (1,000 trials), so 116 and 140 are far from anything chance does.
-- **The generator**: 103–157 from the spike's seed, 102–158 over the eight seeds `check.py` uses
-  (*model*: the Python model that `check.py` proves equal to the 6502 routine). Inside the outer
-  limits by 6 or more.
+- **The generator**: **103–157 measured** on the C64 from the spike's seed (`spike_bit_min` 103,
+  `spike_bit_max` 157, `make test ARGS=rng`, stage 2), equal to the model's figures; 102–158 over
+  the eight seeds `check.py` uses (*model*: the Python model that `check.py` proves equal to the
+  6502 routine). Inside the outer limits by 6 or more.
 - **What this statistic can't see**, and what covers it: one bit that is too even while the other
   four are fine (the fewest and most are taken over all five bits), and bits that copy each other
   (an LFSR stepped one bit a call passes). `check.py` part D covers the first (longest run of each
@@ -159,8 +166,8 @@ in which the bit is 1. One period gives 255 × 5 = **1,275 cells**; a fair bit's
 - The sequence is deterministic, so there is no run-to-run noise: the limits matter when the
   algorithm or the spike's seed changes, and a change that fails them is reported, not re-baselined.
 
-**What the spike must add** (raster-engineer; the checks are already in `budget.json` with
-`from_stage` 2 and print PENDING until then):
+**What the spike adds at its stage 2** (raster-engineer, done in commit 9e6c11e; this is the
+specification it was built to):
 
 | Label | Size | Starts | Meaning when `spike_done` = 1 |
 |---|---|---|---|
@@ -170,12 +177,11 @@ in which the bit is 1. One period gives 255 × 5 = **1,275 cells**; a fair bit's
 - Five 1-byte counters, cleared at each block end after folding into the two results (as
   `spike_block_end` does for `spike_low5`). A bit that is 1 in all 256 calls wraps its counter to
   0, which fails the min 92 check: no 16-bit count is needed.
-- Expected from seed `$1234`: **103** and **157** (*model*). Show both on the spike's screen.
-- `check.py` compares the two labels with the model's figures, and its warm-up (400 frames,
-  hard-coded) rises to 600 with `budget.json`'s: the extra counting takes the period past 400
-  frames (*estimate*: about 135 cycles a call, 450 frames).
-- Then set `"stage": 2` in `budget.json` and change nothing else in it. The Technical Director
-  removes the two interim `spike_low5` locks after that run is reported.
+- From seed `$1234`: **103** and **157**, the model's figures and the **measured** ones. Both are
+  on the spike's screen.
+- `check.py` compares the two labels with the model's figures; its warm-up is 600 frames, as
+  `budget.json`'s (the statistics finish at frame 450, **measured**).
+- `"stage"` is 2 in `budget.json`, and the two interim `spike_low5` locks are removed.
 
 **Does a game need to care that a 5-bit value can be absent for 256 calls? No, with one rule.**
 It is what dice do: any particular value misses a whole block of 256 calls once in about 3,400
@@ -211,8 +217,9 @@ most 19–22, and none of the 20 met 2–20. Other seeds of this generator give 
 generator that did meet 2–20 would be *less* random (too even). For Swarm this means: in some
 stretch of 256 calls a particular 5-bit value won't appear at all, which is what dice do.
 Options for the Technical Director: keep the measured pair as a regression lock (what `budget.json`
-does now), or replace the statistic with one a good generator passes and a bad one fails (for
+did at the time), or replace the statistic with one a good generator passes and a bad one fails (for
 example ones per block for each bit within 96–160, measured 103–157).
 
 **Decided** (Technical Director, 2026-10-02): the second, with limits 92–164 and a "not too even"
-pair, and the measured pair kept as an interim lock: [Low-bit limits](#low-bit-limits).
+pair: [Low-bit limits](#low-bit-limits). The measured pair was kept as an interim lock until the
+spike reported the new statistic, and is now removed.

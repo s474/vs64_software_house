@@ -3,7 +3,7 @@
   "src_dir": "tests/engine/rng",
   "warmup_frames": 600,
   "stage": 2,
-  "notes": "Checks from the contract (engine/rng.md#spike-testsenginerng, Technical Director; low-bit limits re-baselined 2026-10-02 from tests/engine/rng/limits_model.py, reasoning in engine/rng.md#low-bit-limits). 'stage': 1 = the spike as first built (it reports spike_low5_min/max); 2 = the spike also reports spike_bit_min and spike_bit_max (engine/rng.md#low-bit-limits says exactly what). The raster-engineer sets stage 2 when those labels exist and changes nothing else here; until then the four 'ones per block' checks print PENDING and the two low-5-bit locks stand in for them. warmup_frames 600: the whole-period statistics take about 300 frames at stage 1 (90 cycles a call, screen off) and an estimated 450-500 once five bit counters are added; every memory check reads the finished result. The profile check is a lock: rng_next has no branches and is called on a top-border line with no DMA and no IRQ inside it, so min_cycles = max_cycles = the measured figure (as tests/engine/irq_chain). Its span is rng_next to rng_next_end (the rts label): the rts and the caller's jsr are NOT in it (engine/README.md#which-span-a-figure-is). The model check against the 6502 routine is tests/engine/rng/check.py. Schema: engine/README.md#budget-files.",
+  "notes": "Checks from the contract (engine/rng.md#spike-testsenginerng, Technical Director; low-bit limits re-baselined 2026-10-02 from tests/engine/rng/limits_model.py, reasoning in engine/rng.md#low-bit-limits). 'stage': 1 = the spike as first built (it reported spike_low5_min/max only); 2 = the spike also reports spike_bit_min and spike_bit_max (reached in commit 9e6c11e: measured 103 and 157, equal to the model). The two interim low-5-bit locks (spike_low5_min == 0, spike_low5_max == 21) were removed by the Technical Director on 2026-10-02, once the four 'ones per block' checks ran: 11 checks. The spike still reports the two spike_low5 labels and check.py still compares them with the model. warmup_frames 600: the whole-period statistics finish at frame 450 after entry (measured: check.py --finish-frame); every memory check reads the finished result. The profile check is a lock: rng_next has no branches and is called on a top-border line with no DMA and no IRQ inside it, so min_cycles = max_cycles = the measured figure (as tests/engine/irq_chain). Its span is rng_next to rng_next_end (the rts label): the rts and the caller's jsr are NOT in it (engine/README.md#which-span-a-figure-is). The model check against the 6502 routine is tests/engine/rng/check.py. Schema: engine/README.md#budget-files.",
   "checks": [
     {
       "name": "rng_next",
@@ -59,26 +59,6 @@
       "source": "engine/rng.md requirement 2. Measured 256"
     },
     {
-      "name": "low 5 bits in every 256 calls: fewest of any value",
-      "kind": "memory",
-      "address": "spike_low5_min",
-      "size": 1,
-      "after_frames": 0,
-      "equals": 0,
-      "basis": "measured",
-      "source": "INTERIM regression lock, to be removed by the Technical Director when the stage 2 checks below run. Not a quality limit: the contract's first guess (min 2) is withdrawn, because a fair source has an empty cell in about 91% of periods (limits_model.py part 5). Measured 0 from seed $1234 over 255 blocks; the sequence is deterministic, so a change of algorithm or seed shows up here"
-    },
-    {
-      "name": "low 5 bits in every 256 calls: most of any value",
-      "kind": "memory",
-      "address": "spike_low5_max",
-      "size": 1,
-      "after_frames": 0,
-      "equals": 21,
-      "basis": "measured",
-      "source": "INTERIM regression lock, as the one above. The first guess (max 20) is withdrawn: a fair source exceeds it in about 42% of periods (limits_model.py part 5). Measured 21 from seed $1234 over 255 blocks"
-    },
-    {
       "name": "ones per block, bits 0-4: fewest not too low",
       "kind": "memory",
       "address": "spike_bit_min",
@@ -87,7 +67,7 @@
       "min": 92,
       "from_stage": 2,
       "basis": "requirement",
-      "source": "engine/rng.md#low-bit-limits, requirement 3. Statistic: ones per block of 256 calls for each of bits 0-4, 255 blocks x 5 bits = 1,275 cells; binomial n=256 p=1/2, mean 128, sd 8. Not too uneven: 92-164 is +/- 4.5 sd; a fair source has a cell outside it in 0.56% of periods (5.5% for 96-160). A stuck or biased bit (p >= 0.6) fails. Model: tests/engine/rng/limits_model.py. Generator (model): 103 (seed $1234), 102-103 over 8 seeds"
+      "source": "engine/rng.md#low-bit-limits, requirement 3. Statistic: ones per block of 256 calls for each of bits 0-4, 255 blocks x 5 bits = 1,275 cells; binomial n=256 p=1/2, mean 128, sd 8. Not too uneven: 92-164 is +/- 4.5 sd; a fair source has a cell outside it in 0.56% of periods (5.5% for 96-160). A stuck or biased bit (p >= 0.6) fails. Model: tests/engine/rng/limits_model.py. Generator: measured 103 (seed $1234), equal to the model; 102-103 over 8 seeds (model)"
     },
     {
       "name": "ones per block, bits 0-4: fewest not too even",
@@ -120,7 +100,7 @@
       "max": 164,
       "from_stage": 2,
       "basis": "requirement",
-      "source": "engine/rng.md#low-bit-limits, requirement 3. Statistic: ones per block of 256 calls for each of bits 0-4, 255 blocks x 5 bits = 1,275 cells; binomial n=256 p=1/2, mean 128, sd 8. Not too uneven, as the first of these four. Generator (model): 157 (seed $1234), 154-158 over 8 seeds. Model: tests/engine/rng/limits_model.py"
+      "source": "engine/rng.md#low-bit-limits, requirement 3. Statistic: ones per block of 256 calls for each of bits 0-4, 255 blocks x 5 bits = 1,275 cells; binomial n=256 p=1/2, mean 128, sd 8. Not too uneven, as the first of these four. Generator: measured 157 (seed $1234), equal to the model; 154-158 over 8 seeds (model). Model: tests/engine/rng/limits_model.py"
     },
     {
       "name": "zero seed handled",
