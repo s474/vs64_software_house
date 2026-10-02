@@ -1817,7 +1817,8 @@ non-zero if any fails.
 
 | Field | Meaning |
 |---|---|
-| `spike`, `src_dir` | Build with `make GAME=<spike> SRC_DIR=<src_dir>` (DEBUG build) |
+| `spike`, `src_dir` | Build with `make GAME=<spike> SRC_DIR=<src_dir>` (DEBUG build). `spike` is the build directory name (`build/<spike>/`) and the name printed on every result line |
+| `asset_dir` (optional) | A directory, or a list of them, added to the build as `ASSET_DIR=`: their `*.hires.png` / `*.mc.png` sheets are converted into `build/<spike>/` under the same names, as for a program whose own source directory had them. For a wrapper build in `tests/` that `#import`s a game's source. `build/<spike>/` is on the assembler's include path, so the source says `#import "sprites.hires.inc"` and `LoadBinary("sprites.hires.bin")` whichever program it is built as |
 | `warmup_frames` | Frames to run after boot before any check |
 | `stage` (optional) | The build stage the spike's code has reached (M3 brief, rule 1). The raster-engineer bumps it at the start of each stage |
 | `checks[].from_stage` (optional) | The stage the check applies from. While it's above the file's `stage`, the check isn't run: it prints `PENDING` and doesn't fail, except under `--strict` (M3 sign-off), where it fails. Needs a top-level `stage` |
@@ -1834,6 +1835,7 @@ Check kinds (`kind` defaults to `profile`, so the brief's single-object example 
 | `start_cycle` | `label`, `line`, `frames` (default 100), `max_spread`, optional `max_cycle` | Raster line and cycle each time `label` is about to execute, over consecutive frames (`vice_run_until` reports the same) | Every hit on `line`, max − min cycle ≤ `max_spread`, and max ≤ `max_cycle` if given |
 | `irq_time_per_frame` | `max_cycles`, `frames` | Sum of IRQ spans (as above) per frame | max over the frames ≤ `max_cycles` |
 | `memory` | `address` (label), `size` (1 or 2, little-endian), `after_frames`, one of `equals` / `max` / `min`, optional `scale` | Value after running `after_frames` more frames, times `scale` | Comparison holds |
+| `script` | `command` (a command line, or a list of arguments), optional `timeout` (seconds, default 120), optional `build` | Runs the command from the repo root; `{prg}` in it is replaced by the program's repo-relative PRG path, and `BUDGET_PRG` / `BUDGET_SPIKE` are in its environment. The runner starts no VICE for it (the script starts its own, on a free port) and runs it in file order, so it neither sees nor advances the frames of the spike's other checks. For behaviour `make test` cannot drive, such as joystick presses (`tests/engine/input/check.py`, `tests/games/swarm/check.py`). `build` is `{"game": "swarm", "src_dir": optional, "asset_dir": optional}`: make that program first (`make GAME=<game> ...`) and give its PRG as `{prg}`, for a script that checks a different build from the spike's (the game itself, not its AUTOPLAY wrapper). With `--no-build` the existing PRG is used | Exit code 0 within the timeout. The last line of the script's output is on the result line; a failure shows the command and the last 12 lines of output. `scale` (long runs) does not change the timeout |
 
 Output, one line per check (`spike  name  figures  PASS|FAIL  (basis)`); a failing check adds
 indented lines saying what is over or under, what was measured, and the check's `source`:
@@ -1868,13 +1870,19 @@ irq_chain  irq_exit overhead                     max 60 / budget 50  FAIL  (meas
 
 ```
 make test                    # every tests/**/budget.json
-make test ARGS=irq_chain     # one spike (a name, or a path to any budget.json, e.g. a scratch copy)
+make test ARGS=irq_chain     # one spike (see below for what a name matches, or give the path to any budget.json, e.g. a scratch copy)
 uv run budget-runner --no-build irq_chain   # reuse the existing build
 uv run budget-runner --strict               # a missing main.asm or a PENDING check is a failure (M3 sign-off)
 make test-long                              # long run: every samples / frames / after_frames x 34 (~20,000 passes for a 600-sample check; ~30 min for the multiplexer)
 make test-long LONG_SCALE=10 ARGS=multiplexer   # another factor, one spike
 uv run budget-runner --scale 34 multiplexer     # the same, without make
 ```
+
+`ARGS` takes any number of selectors. A selector matches a budget file's **directory name** (`swarm`
+for `tests/games/swarm/budget.json`), its **spike name** (the `"spike"` field, `swarm_budget`: the
+name every result line starts with), or a path. Both of those work for the same file, so
+`make test ARGS=swarm` and `make test ARGS=swarm_budget` run the same spike; for most spikes the
+two names are the same. An unknown selector fails with the list of both names.
 
 A long run exists to find maxima a short window misses: the limits must hold in any window, so it
 uses the same budget files and the same limits, with `samples` (profile kinds), `frames`

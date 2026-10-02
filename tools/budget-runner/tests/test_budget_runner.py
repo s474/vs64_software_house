@@ -450,3 +450,98 @@ def test_cli_rejects_a_scale_below_one(capsys):
     with pytest.raises(SystemExit) as e:
         cli.main(["--scale", "0"])
     assert e.value.code == 2
+
+
+# -- script checks, asset_dir, spike-name selection ---------------------------
+
+
+def test_find_budgets_selects_by_directory_or_spike_name():
+    assert [p.parent.name for p in find_budgets(REPO, ["swarm"])] == ["swarm"]  # directory tests/games/swarm
+    assert [p.parent.name for p in find_budgets(REPO, ["swarm_budget"])] == ["swarm"]  # its "spike" field
+    with pytest.raises(BudgetError, match=r"swarm \(spike swarm_budget\)"):  # the error says both names
+        find_budgets(REPO, ["nope"])
+
+
+def test_script_check_parses_with_defaults():
+    c = check(kind="script", command="python3 -c pass")
+    assert c.params["timeout"] == 120 and c.params["build"] is None
+
+
+@pytest.mark.parametrize("raw, message", [
+    ({"command": ""}, "'command' must be"),
+    ({"command": 5}, "'command' must be"),
+    ({"command": "x", "timeout": 0}, "'timeout' must be"),
+    ({"command": "x", "build": "swarm"}, "'build' must be an object"),
+    ({"command": "x", "build": {"game": "g", "oops": 1}}, "'build' must be an object"),
+    ({"command": "x", "max_cycles": 5}, "unknown field.s. max_cycles"),
+])
+def test_bad_script_checks_are_rejected(raw, message):
+    with pytest.raises(BudgetError, match=message):
+        check(kind="script", **raw)
+
+
+def test_asset_dir_in_a_budget_file(tmp_path):
+    p = tmp_path / "budget.json"
+    body = {"spike": "s", "src_dir": "d", "checks": [{"name": "m", "basis": "requirement", "kind": "memory",
+                                                       "address": "x", "size": 1, "after_frames": 1, "equals": 0}]}
+    p.write_text(json.dumps(body))
+    assert load_budget(p).asset_dir == []
+    p.write_text(json.dumps(body | {"asset_dir": "games/swarm/src"}))
+    assert load_budget(p).asset_dir == ["games/swarm/src"]
+    p.write_text(json.dumps(body | {"asset_dir": ["a", "b"]}))
+    assert load_budget(p).asset_dir == ["a", "b"]
+    p.write_text(json.dumps(body | {"asset_dir": 3}))
+    with pytest.raises(BudgetError, match="'asset_dir' must be"):
+        load_budget(p)
+
+
+def run_script_for(tmp_path, command, timeout=20):
+    from budget_runner.script import run_script
+
+    prg = REPO / "build" / "x" / "x.prg"
+    return run_script(check(kind="script", command=command, timeout=timeout), prg, "x")
+
+
+def test_script_passes_on_exit_0_and_shows_the_last_line():
+    r = run_script_for(None, ["python3", "-c", "print('first'); print('all 7 cases ok')"])
+    assert r.passed
+    line = format_result("sp", r, 1)
+    assert "all 7 cases ok" in line and "first" not in line and "PASS" in line
+
+
+def test_script_fails_on_a_non_zero_exit_with_its_output():
+    r = run_script_for(None, ["python3", "-c", "import sys; print('case a ok'); print('case b BAD', file=sys.stderr); sys.exit(3)"])
+    assert not r.passed
+    text = format_result("sp", r, 1)
+    assert "exit code 3 (required == 0)" in text and "FAIL" in text
+    assert "case a ok" in text and "case b BAD" in text  # the output tail is under the failing line
+
+
+def test_script_gets_the_prg_path_in_the_command_and_environment():
+    r = run_script_for(None, "python3 -c \"import os,sys; print(sys.argv[1], os.environ['BUDGET_PRG'].endswith('build/x/x.prg'))\" {prg}")
+    assert r.passed and "build/x/x.prg True" in format_result("sp", r, 1)
+
+
+def test_script_runs_from_the_repo_root():
+    r = run_script_for(None, ["python3", "-c", "import os; print(os.getcwd())"])
+    assert str(REPO) in format_result("sp", r, 1)
+
+
+def test_script_timeout_and_missing_command_are_errors():
+    r = run_script_for(None, ["python3", "-c", "import time; time.sleep(30)"], timeout=1)
+    assert not r.passed and "timed out after 1 s" in format_result("sp", r, 1)
+    r = run_script_for(None, ["no-such-command-xyz"])
+    assert not r.passed and "could not run 'no-such-command-xyz'" in format_result("sp", r, 1)
+
+
+def test_script_check_runs_without_a_vice_and_after_a_pending_check(tmp_path, monkeypatch):
+    from budget_runner import cli, session
+    from budget_runner.spec import Budget
+
+    monkeypatch.setattr(session, "build", lambda b: REPO / "build" / "x" / "x.prg")
+    monkeypatch.setattr(session, "Vice", lambda *a: pytest.fail("a script-only budget must not start VICE"))
+    sc = check(kind="script", command=["python3", "-c", "print('ok')"], from_stage=2)
+    sc2 = check(kind="script", command=["python3", "-c", "print('fine')"])
+    b = Budget(Path("b.json"), "x", "d", 1, [sc, sc2], stage=1)
+    results = cli.run_budget(b, True)
+    assert results[0].pending and results[1].passed

@@ -29,18 +29,47 @@ def pending_result(budget: Budget, check, strict: bool = False) -> Result:
     return Result(check, error=f"{why} (--strict: every stage must be done)") if strict else Result(check, pending=why)
 
 
+def run_script_check(budget: Budget, check, prg: Path | None, build_error: str | None, do_build: bool) -> Result:
+    """A `script` check. Its own `build` (another program, e.g. the game itself) is made first."""
+    from . import session
+    from .script import run_script
+
+    spec = check.params["build"]
+    try:
+        if spec:
+            game = spec["game"]
+            if do_build:
+                assets = spec.get("asset_dir")
+                prg = session.build_program(game, spec.get("src_dir"), [assets] if isinstance(assets, str) else assets)
+            else:
+                prg = REPO / "build" / game / f"{game}.prg"
+        elif prg is None:
+            return Result(check, error=build_error or "the spike has no PRG")
+    except Exception as e:
+        return Result(check, error=str(e))
+    return run_script(check, prg, budget.spike)
+
+
 def run_budget(budget: Budget, do_build: bool, strict: bool = False) -> list[Result]:
     from . import session  # imports the VICE client; kept out of module load so tests need no VICE
 
-    vice = error = None
+    vice = error = prg = None
     try:
         prg = session.build(budget) if do_build else REPO / "build" / budget.spike / f"{budget.spike}.prg"
-        vice = session.Vice(prg, budget.warmup_frames)
+        if any(c.kind != "script" and not budget.pending(c) for c in budget.checks):  # scripts need no runner VICE
+            vice = session.Vice(prg, budget.warmup_frames)
     except Exception as e:  # build failure, VICE not installed, program never started
         error = str(e)
-    try:  # a pending check runs no frames, so later memory checks see the same frames as without it
-        return [pending_result(budget, c, strict) if budget.pending(c)
-                else Result(c, error=error) if vice is None else vice.run(c) for c in budget.checks]
+
+    def one(c) -> Result:
+        if budget.pending(c):  # a pending check runs no frames, so later memory checks see the same frames
+            return pending_result(budget, c, strict)
+        if c.kind == "script":
+            return run_script_check(budget, c, prg, error, do_build)
+        return Result(c, error=error) if vice is None else vice.run(c)
+
+    try:
+        return [one(c) for c in budget.checks]
     finally:
         if vice:
             vice.close()
@@ -55,7 +84,8 @@ def report(budget: Budget, results: list[Result], out=None) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="budget-runner", description=__doc__.split("\n\n")[0])
-    ap.add_argument("select", nargs="*", help="spike name or budget.json path (default: all)")
+    ap.add_argument("select", nargs="*", metavar="SPIKE",
+                    help="directory name (swarm), spike name (swarm_budget) or budget.json path; default: all")
     ap.add_argument("--strict", action="store_true",
                     help="treat a spike whose main.asm does not exist yet, and a check pending a later "
                          "build stage, as a failure")

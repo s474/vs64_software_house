@@ -25,19 +25,22 @@ class MeasureError(Exception):
     """The program did not behave well enough to measure (label never reached, no symbols...)."""
 
 
-def build(budget: Budget) -> Path:
-    """make GAME=<spike> SRC_DIR=<src_dir> (DEBUG build); returns the PRG path."""
-    proc = subprocess.run(
-        ["make", "-s", f"GAME={budget.spike}", f"SRC_DIR={budget.src_dir}"],
-        cwd=REPO, capture_output=True, text=True,
-    )
+def build_program(game: str, src_dir: str | None = None, asset_dir: list[str] | None = None) -> Path:
+    """make GAME=<game> [SRC_DIR=<src_dir>] [ASSET_DIR=<dirs>] (DEBUG build); returns the PRG path."""
+    args = [f"GAME={game}"] + ([f"SRC_DIR={src_dir}"] if src_dir else []) \
+        + ([f"ASSET_DIR={' '.join(asset_dir)}"] if asset_dir else [])
+    proc = subprocess.run(["make", "-s", *args], cwd=REPO, capture_output=True, text=True)
     if proc.returncode:
-        raise MeasureError(f"build failed (make GAME={budget.spike} SRC_DIR={budget.src_dir}):\n"
-                           + (proc.stdout + proc.stderr).strip())
-    prg = REPO / "build" / budget.spike / f"{budget.spike}.prg"
+        raise MeasureError(f"build failed (make {' '.join(args)}):\n" + (proc.stdout + proc.stderr).strip())
+    prg = REPO / "build" / game / f"{game}.prg"
     if not prg.exists():
         raise MeasureError(f"build produced no {prg}")
     return prg
+
+
+def build(budget: Budget) -> Path:
+    """Build the spike: make GAME=<spike> SRC_DIR=<src_dir> [ASSET_DIR=...] (DEBUG build)."""
+    return build_program(budget.spike, budget.src_dir, budget.asset_dir)
 
 
 class Vice:

@@ -11,6 +11,8 @@
 # SRC_DIR, e.g. make GAME=badline SRC_DIR=tests/timing/badline
 # BUILD=release drops the DEBUG define (matching VS64's "build" setting). Tool paths can
 # be overridden from the environment, e.g. KICKASS_JAR=~/tools/KickAss.jar make
+# ASSET_DIR=<dir> (optional, several allowed) also converts the sprite sheets of those directories
+# into this build's directory, e.g. a wrapper build in tests/ that #imports a game from games/.
 
 GAME        ?= hello
 BUILD       ?= debug
@@ -27,14 +29,18 @@ MAIN      := $(SRC_DIR)/main.asm
 PRG       := $(OUT_DIR)/$(GAME).prg
 SFX       := $(OUT_DIR)/$(GAME)-sfx.prg
 D64       := $(OUT_DIR)/$(GAME).d64
-# Sprite sheets in SRC_DIR are converted by tools/png2sprites: NAME.hires.png (24x21 cells) and
-# NAME.mc.png (12x21 multicolour cells) become build/<game>/NAME.{hires,mc}.bin, plus .col (one
-# colour byte per sprite) and .inc (KickAssembler constants). The source loads them with
-# LoadBinary("build/<game>/NAME.mc.bin"); constants are NAME_MC_COUNT/_MC1/_MC2 and
-# NAME_HIRES_COUNT. See tools/png2sprites/README.md.
+# Sprite sheets in SRC_DIR (and in each ASSET_DIR, if given) are converted by tools/png2sprites:
+# NAME.hires.png (24x21 cells) and NAME.mc.png (12x21 multicolour cells) become
+# build/<game>/NAME.{hires,mc}.bin, plus .col (one colour byte per sprite) and .inc (KickAssembler
+# constants). The source loads them with LoadBinary("build/<game>/NAME.mc.bin"); constants are
+# NAME_MC_COUNT/_MC1/_MC2 and NAME_HIRES_COUNT. build/<game>/ is also on the include path, so a
+# source shared by two builds can say #import "NAME.hires.inc" / LoadBinary("NAME.hires.bin") with
+# no build-specific path. See tools/png2sprites/README.md.
 PNG2SPRITES := uv run --quiet --package png2sprites png2sprites
-SPRITE_PNGS := $(wildcard $(SRC_DIR)/*.hires.png $(SRC_DIR)/*.mc.png)
-SPRITE_BINS := $(patsubst $(SRC_DIR)/%.png,$(OUT_DIR)/%.bin,$(SPRITE_PNGS))
+ASSET_DIR   ?=
+ASSET_DIRS  := $(SRC_DIR) $(ASSET_DIR)
+SPRITE_PNGS := $(foreach d,$(ASSET_DIRS),$(wildcard $(d)/*.hires.png $(d)/*.mc.png))
+SPRITE_BINS := $(sort $(patsubst %.png,$(OUT_DIR)/%.bin,$(notdir $(SPRITE_PNGS))))
 SOURCES   := $(wildcard $(SRC_DIR)/*.asm $(SRC_DIR)/*.inc engine/*.asm) $(SPRITE_BINS)
 DEFINES   := $(if $(filter release,$(BUILD)),,-define DEBUG)
 
@@ -50,6 +56,17 @@ ifeq ($(shell [ -f $(STAMP) ] && [ "`cat $(STAMP)`" = "$(DEFINES)" ] && echo sam
 $(shell rm -f $(PRG))
 endif
 
+# Dependency file: SOURCES only knows SRC_DIR and engine/, but a program may #import files from
+# anywhere (a wrapper build in tests/ importing games/<title>/src/). KickAssembler reports every
+# file it read (-asminfo all, [files] section); the recipe turns that list into
+# build/<game>/<game>.d ("PRG: file file ..."), which is included below, so the next run rebuilds
+# when any of them changes. Each non-build file also gets an empty rule, so a deleted or renamed
+# source does not stop make ("No rule to make target"). The first build has no .d: the PRG is
+# missing, so it builds anyway. KickAss.jar's own include is skipped.
+DEP      := $(OUT_DIR)/$(GAME).d
+DEPINFO  := $(OUT_DIR)/.asminfo
+DEPAWK   := '/^\[files\]/{f=1;next} /^\[/{f=0} f{sub(/^[0-9]+;/,""); sub(/^\.\//,""); if ($$0 !~ /^KickAss.jar:/) print}'
+
 .PHONY: all run run-sfx crunch d64 clean test test-long test-tools
 
 all: $(PRG)
@@ -59,21 +76,31 @@ all: $(PRG)
 $(PRG): $(SOURCES)
 	@mkdir -p $(OUT_DIR)
 	$(JAVA) -jar $(KICKASS_JAR) $(MAIN) -o $(PRG) -odir $(abspath $(OUT_DIR)) \
-		-libdir $(CURDIR) -vicesymbols -symbolfile -bytedumpfile main.dump -showmem $(DEFINES)
+		-libdir $(CURDIR) -libdir $(abspath $(OUT_DIR)) -vicesymbols -symbolfile -bytedumpfile main.dump -showmem \
+		-asminfo all -asminfofile $(abspath $(DEPINFO)) $(DEFINES)
+	@awk $(DEPAWK) $(DEPINFO) | awk -v prg=$(PRG) '{ d = d " " $$0; if ($$0 !~ /(^|\/)build\//) p = p $$0 ":\n" } \
+		END { print prg ":" d; printf "%s", p }' > $(DEP)
+	@rm -f $(DEPINFO)
 	@echo "$(DEFINES)" > $(STAMP)
 
-# Absolute paths, so the rules do not depend on the directory uv runs from.
-$(OUT_DIR)/%.hires.bin $(OUT_DIR)/%.hires.col $(OUT_DIR)/%.hires.inc: $(SRC_DIR)/%.hires.png $(wildcard tools/png2sprites/src/png2sprites/*.py) Makefile
-	@mkdir -p $(OUT_DIR)
-	@$(PNG2SPRITES) -m hires $(abspath $<) -o $(abspath $(OUT_DIR))/$*.hires.bin \
-		--colors $(abspath $(OUT_DIR))/$*.hires.col --inc $(abspath $(OUT_DIR))/$*.hires.inc \
-		--prefix $(shell echo $* | tr 'a-z-' 'A-Z_')_HIRES
+-include $(DEP)
 
-$(OUT_DIR)/%.mc.bin $(OUT_DIR)/%.mc.col $(OUT_DIR)/%.mc.inc: $(SRC_DIR)/%.mc.png $(wildcard tools/png2sprites/src/png2sprites/*.py) Makefile
-	@mkdir -p $(OUT_DIR)
-	@$(PNG2SPRITES) -m multicolour $(abspath $<) -o $(abspath $(OUT_DIR))/$*.mc.bin \
-		--colors $(abspath $(OUT_DIR))/$*.mc.col --inc $(abspath $(OUT_DIR))/$*.mc.inc \
-		--prefix $(shell echo $* | tr 'a-z-' 'A-Z_')_MC
+# One pair of conversion rules per source directory (SRC_DIR, then each ASSET_DIR); the first
+# whose PNG exists is used. Absolute paths, so the rules do not depend on the directory uv runs from.
+define SPRITE_RULES
+$$(OUT_DIR)/%.hires.bin $$(OUT_DIR)/%.hires.col $$(OUT_DIR)/%.hires.inc: $(1)/%.hires.png $$(wildcard tools/png2sprites/src/png2sprites/*.py) Makefile
+	@mkdir -p $$(OUT_DIR)
+	@$$(PNG2SPRITES) -m hires $$(abspath $$<) -o $$(abspath $$(OUT_DIR))/$$*.hires.bin \
+		--colors $$(abspath $$(OUT_DIR))/$$*.hires.col --inc $$(abspath $$(OUT_DIR))/$$*.hires.inc \
+		--prefix $$(shell echo $$* | tr 'a-z-' 'A-Z_')_HIRES
+
+$$(OUT_DIR)/%.mc.bin $$(OUT_DIR)/%.mc.col $$(OUT_DIR)/%.mc.inc: $(1)/%.mc.png $$(wildcard tools/png2sprites/src/png2sprites/*.py) Makefile
+	@mkdir -p $$(OUT_DIR)
+	@$$(PNG2SPRITES) -m multicolour $$(abspath $$<) -o $$(abspath $$(OUT_DIR))/$$*.mc.bin \
+		--colors $$(abspath $$(OUT_DIR))/$$*.mc.col --inc $$(abspath $$(OUT_DIR))/$$*.mc.inc \
+		--prefix $$(shell echo $$* | tr 'a-z-' 'A-Z_')_MC
+endef
+$(foreach d,$(ASSET_DIRS),$(eval $(call SPRITE_RULES,$(d))))
 
 # Python tests for every workspace member that has some (no VICE needed).
 test-tools:

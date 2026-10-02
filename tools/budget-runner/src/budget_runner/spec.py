@@ -8,7 +8,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[4]
 
-KINDS = ("profile", "profile_excl_irq", "start_cycle", "irq_time_per_frame", "memory")
+KINDS = ("profile", "profile_excl_irq", "start_cycle", "irq_time_per_frame", "memory", "script")
 BASES = ("measured", "estimate", "requirement")
 COMPARISONS = ("equals", "max", "min")
 
@@ -19,6 +19,7 @@ FIELDS: dict[str, tuple[tuple[str, ...], dict[str, object]]] = {
     "start_cycle": (("label", "line", "max_spread"), {"frames": 100, "max_cycle": None}),
     "irq_time_per_frame": (("max_cycles", "frames"), {}),
     "memory": (("address", "size", "after_frames"), {"scale": 1}),
+    "script": (("command",), {"timeout": 120, "build": None}),
 }
 COMMON = {"name", "kind", "basis", "source", "notes", "from_stage"}
 
@@ -45,6 +46,7 @@ class Budget:
     warmup_frames: int
     checks: list[Check]
     stage: int | None = None  # the build stage the spike's code has reached (see from_stage)
+    asset_dir: list[str] = field(default_factory=list)  # make ASSET_DIR=: more sprite-sheet directories
 
     def pending(self, check: Check) -> bool:
         """True if the check belongs to a later stage than the spike has reached."""
@@ -93,6 +95,8 @@ def parse_check(path: Path, index: int, raw: object) -> Check:
             raise BudgetError(f"{where}: 'scale' must be a number")
         if not isinstance(raw[comparison[0]], (int, float)):
             raise BudgetError(f"{where}: '{comparison[0]}' must be a number")
+    if kind == "script":
+        parse_script(where, params)
     if "routine" in params:
         r = params["routine"]
         if not (isinstance(r, list) and len(r) == 2 and all(isinstance(x, str) for x in r)):
@@ -114,6 +118,30 @@ def parse_check(path: Path, index: int, raw: object) -> Check:
     from_stage = _int(where, "from_stage", raw["from_stage"], 1) if "from_stage" in raw else None
     return Check(name=name, kind=kind, basis=basis, source=str(raw.get("source", "")), params=params,
                  from_stage=from_stage)
+
+
+def _strings(where: str, key: str, value: object) -> list[str]:
+    """A string or a list of strings, as a list (a space-separated string is one item)."""
+    if isinstance(value, str) and value:
+        return [value]
+    if isinstance(value, list) and value and all(isinstance(x, str) and x for x in value):
+        return list(value)
+    raise BudgetError(f"{where}: '{key}' must be a non-empty string or list of strings, got {value!r}")
+
+
+def parse_script(where: str, params: dict) -> None:
+    """Validate a `script` check: command (string or argv list), timeout, optional build."""
+    cmd = params["command"]
+    if not (isinstance(cmd, str) and cmd.strip()) and not (
+            isinstance(cmd, list) and cmd and all(isinstance(x, str) for x in cmd)):
+        raise BudgetError(f"{where}: 'command' must be a command line string or a list of arguments")
+    _int(where, "timeout", params["timeout"], 1)
+    b = params["build"]
+    if b is not None:
+        if not isinstance(b, dict) or not isinstance(b.get("game"), str) or set(b) - {"game", "src_dir", "asset_dir"}:
+            raise BudgetError(f"{where}: 'build' must be an object with 'game' and optionally 'src_dir', 'asset_dir'")
+        if "asset_dir" in b:
+            _strings(where, "build.asset_dir", b["asset_dir"])
 
 
 def scaled(budget: Budget, factor: int) -> Budget:
@@ -149,13 +177,23 @@ def load_budget(path: Path) -> Budget:
         staged = [c.name for c in checks if c.from_stage is not None]
         if staged:
             raise BudgetError(f"{path}: check {staged[0]!r} has 'from_stage' but the file has no top-level 'stage'")
-    return Budget(path, str(raw["spike"]), str(raw["src_dir"]), warmup, checks, stage)
+    assets = _strings(str(path), "asset_dir", raw["asset_dir"]) if "asset_dir" in raw else []
+    return Budget(path, str(raw["spike"]), str(raw["src_dir"]), warmup, checks, stage, assets)
+
+
+def spike_name(path: Path) -> str | None:
+    """The "spike" field of a budget file, or None if it cannot be read (load_budget reports why)."""
+    try:
+        return json.loads(path.read_text()).get("spike")
+    except (OSError, ValueError, AttributeError):
+        return None
 
 
 def find_budgets(root: Path, selectors: list[str]) -> list[Path]:
     """All tests/**/budget.json under root, or only those a selector names.
 
-    A selector is a spike/directory name ('irq_chain') or a path to any budget.json or its folder.
+    A selector is a directory name ('swarm' for tests/games/swarm), a spike name (the "spike" field,
+    'swarm_budget': the name printed in every result line) or a path to any budget.json or its folder.
     """
     found = sorted((root / "tests").rglob("budget.json"))
     if not selectors:
@@ -167,9 +205,11 @@ def find_budgets(root: Path, selectors: list[str]) -> list[Path]:
         if direct.is_file():  # any budget.json by path, e.g. a scratch copy
             chosen.append(direct)
             continue
-        matches = [f for f in found
-                   if f.parent.name == sel or f.resolve() in (p.resolve(), (p / "budget.json").resolve())]
+        matches = [f for f in found if sel in (f.parent.name, spike_name(f))
+                   or f.resolve() in (p.resolve(), (p / "budget.json").resolve())]
         if not matches:
-            raise BudgetError(f"no budget.json matches {sel!r} (found: {', '.join(f.parent.name for f in found) or 'none'})")
+            names = [f.parent.name if f.parent.name == spike_name(f) else f"{f.parent.name} (spike {spike_name(f)})"
+                     for f in found]
+            raise BudgetError(f"no budget.json matches {sel!r} (directory or spike names: {', '.join(names) or 'none'})")
         chosen += [m for m in matches if m not in chosen]
     return chosen

@@ -53,6 +53,8 @@ class Result:
     info: str = ""
     error: str | None = None  # the measurement itself could not be made
     pending: str | None = None  # not run: the check belongs to a later build stage
+    detail: str = ""  # shown on the result line whether it passes or not (a script's last output line)
+    output: str = ""  # shown, indented, under a failing result (a script's output tail)
 
     @property
     def passed(self) -> bool:
@@ -201,6 +203,8 @@ def format_result(spike: str, r: Result, name_width: int) -> str:
     if r.pending:
         return f"{spike}  {r.check.name.ljust(name_width)}  {r.pending}  PENDING  ({r.check.basis})"
     figures = "; ".join(p.describe() for p in r.parts) or "not measured"
+    if r.detail:
+        figures += f"; {r.detail}"
     status = "PASS" if r.passed else "FAIL"
     lines = [f"{spike}  {r.check.name.ljust(name_width)}  {figures}  {status}  ({r.check.basis})"]
     if not r.passed:
@@ -215,6 +219,9 @@ def format_result(spike: str, r: Result, name_width: int) -> str:
                     lines.append(f"    {p.label}: got {fmt(p.value)}, required {p.op} {fmt(p.limit)}")
         if r.info:
             lines.append(f"    measured: {r.info}")
+        if r.output:
+            lines.append("    output (last lines, after the command):")
+            lines += [f"      {x}" for x in r.output.splitlines()]
         if r.check.source:
             lines.append(f"    budget source: {r.check.source}")
     return "\n".join(lines)
