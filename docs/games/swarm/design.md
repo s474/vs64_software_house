@@ -13,7 +13,11 @@ rules for whoever draws the sprites are collected in [Art rules](#art-rules), in
 that enemy shapes keep their bottom row empty. **2026-10-02, no behaviour change:** stars are kept
 out of every cell that text uses ([Text cells and the star rule](#text-cells-and-the-star-rule)),
 sprite and text colours have a table ([Colours](#colours)), and the hit boxes and the area the art
-may occupy are exact ([Hit boxes](#hit-boxes)).
+may occupy are exact ([Hit boxes](#hit-boxes)). **2026-10-02, after stage 1, no behaviour change:**
+feel target 2 states the measured fire rate (4.76 a second, not 5), the choices the stage 1 build
+made where this document was silent are written down as rules
+([Stage 1 rules](#stage-1-rules-confirmed-from-the-build)), and the fire-rate options wait for
+Simon's playtest ([Tuning options awaiting playtest](#tuning-options-awaiting-playtest)).
 
 Every number that can be checked without the game is checked by
 [tests/games/swarm/check_design.py](../../../tests/games/swarm/check_design.py)
@@ -62,7 +66,8 @@ shooting the thing that's trying to kill you.
 
 - `MUX_Y_MAX` = **221** (panel line 243 − 22). The player sits at Y 221, displayed on 222–242.
 - Panel columns: `SCORE` 1–5, six digits 7–12; `HI` 15–16, six digits 18–23; `WAVE` 26–29, two
-  digits 31–32; spare ships 35–37 (one ship character each, 2 at the start of a game).
+  digits 31–32; spare ships 35–37 (one ship character each, 2 at the start of a game: see
+  [Stage 1 rules](#stage-1-rules-confirmed-from-the-build) for what the wave number and the markers mean).
 - Messages in the play area, row 12, centred: `WAVE nn`, `READY`, `GAME OVER`.
 - **Star field:** 48 stars at fixed cells in rows 0–23, from a table (built once from a fixed seed;
   none in the cells reserved for text: [the star rule](#text-cells-and-the-star-rule)). Two star characters (dot high, dot low: one
@@ -144,8 +149,9 @@ Joystick in port 2.
 | Input | Effect |
 |---|---|
 | Left / right | Player X − 3 / + 3 a frame, clamped to 24–318. No inertia |
+| Left and right together | Nothing: they cancel |
 | Fire (held or pressed) | Fires if a player-shot slot is free and the cooldown is 0. The cooldown is 10 frames from each shot. Holding fire repeats |
-| Up / down | Nothing |
+| Up / down | Nothing, alone or with any other input |
 
 - **What kills the player:** an enemy shot's box or an enemy's box overlapping the player's box
   (boxes below). An enemy that rams the player dies too and scores its diving value.
@@ -153,13 +159,30 @@ Joystick in port 2.
 - The player has **3 lives**. No extra lives. (Tuning note: if five minutes feels short, add one at
   10,000 points.)
 
+### Stage 1 rules (confirmed from the build)
+
+Cases this document left open, which the stage 1 build chose. **All confirmed as built: no
+behaviour change.** Measured by [check.py](../../../tests/games/swarm/check.py)
+([results](../../../tests/games/swarm/check_results.txt)).
+
+| # | Rule | Why |
+|---|---|---|
+| 1 | **Left and right together cancel:** no movement, fire still works | A stick can't do it; a keyboard-mapped emulator can. No direction should win by accident of the code |
+| 2 | **Start X = respawn X = 171**, at the start of every game and after every death | The middle of 24–318, and on the 3-pixel grid: 49 frames to either edge |
+| 3 | **Order each frame: player shots move and are removed, then the player moves, then fires.** So (a) a shot spawns at the player's X **after** this frame's move; (b) a new shot is shown at Y 213 for one frame before it moves: 21 frames in all, Y 213 down to 53; (c) a slot freed this frame can fire this frame | (b) puts the shot's first frame at the ship's nose, so it is seen to leave the ship. (c) costs a miss nothing extra. Later stages keep the order: shots move, collisions, then the player |
+| 4 | **The cooldown** is set to 10 when a shot spawns and counts down once a frame: the next shot is 10 frames later at the earliest, fire held or tapped | Measured: gaps of exactly 10 with a slot always free |
+| 5 | **Up and down do nothing,** alone or with other inputs | As the table above |
+| 6 | **Spare-ship markers = lives − 1** (none at 0 lives), filled from column 35, redrawn whenever lives changes. 3 lives: 2 markers, column 37 blank (it is there for the extra life of decision 4, if that is ever added) | The ship in play isn't a spare. The marker goes at the hit, when lives goes down, not at the respawn: one rule, one redraw |
+| 7 | **The panel's `WAVE` and the `WAVE nn` message both show n, the running count** from 1: n = loop × 3 + pattern (pattern 1–3, loop from 0). Two digits, **stopping at 99**; the game carries on past it | A pattern number would read 1, 2, 3, 1: the player wants to see how far he got |
+| 8 | **From stage 4, three stores:** the shown wave (BCD, 01–99, sticks at 99), the pattern index (0–2, cycles for ever), the loop (0–3, sticks at 3, first reached at wave 10). Pattern and loop are counted, never derived from the shown number | No divide by 3 in 6502, and the pattern must keep cycling after the display stops at 99 |
+
 ## Entities
 
 | Kind | Virtual sprites | Most at once | Pinned | Speed | Notes |
 |---|---|---|---|---|---|
 | Player | 0 | 1 | **Yes** | 3 px/frame, X only | Y fixed at 221. Its explosion uses the same slot |
 | Enemy shot | 1–3 | 3 | **Yes** | Y + 2 a frame (+ 3 from loop 2), X − 1, 0 or + 1 | Removed when Y > 221 |
-| Player shot | 4–5 | 2 | No | Y − 8 a frame | Spawns at (player X, 213). Removed when Y < 46, or on a hit |
+| Player shot | 4–5 | 2 | No | Y − 8 a frame | Spawns at (player X, 213), shown there for one frame. Removed when Y < 46 (last shown at Y 53), or on a hit |
 | Enemy | 6–23 (6 + row × 6 + column) | 18 | No | Parked: the drift. Diving: up to 2 px X, 3 px Y a path step | Its explosion uses the same slot |
 
 **Total 24 of 24, 4 pinned of 4.** This is the brief's split, reordered so the pinned sprites have
@@ -367,8 +390,9 @@ frame. An enemy always uses its own row's path.
 
 ## Waves
 
-Wave n (from 1): pattern = (n − 1) mod 3, loop = (n − 1) div 3. The formation is the same 18 each
-time. Loops past 3 play as loop 3.
+Wave n (from 1): pattern = (n − 1) mod 3 + 1 (the table's 1–3), loop = (n − 1) div 3. The formation
+is the same 18 each time. Loops past 3 play as loop 3. What is shown and what is stored:
+[Stage 1 rules](#stage-1-rules-confirmed-from-the-build) 7 and 8.
 
 | Pattern | Rows that dive | Max diving at once (loops 0 / 1 / 2 / 3) | Launch interval, frames (loops 0 / 1 / 2 / 3) | Shots per dive at loop 0 |
 |---|---|---|---|---|
@@ -500,9 +524,15 @@ its voice.
 A playtester can check each of these.
 
 1. The player crosses the screen in **1.96 s** (98 frames) and stops the frame the stick is released.
-2. A player shot reaches the bottom row in 8 frames and leaves the screen in 21: holding fire gives
-   a steady **5 shots a second**. (The cooldown is the limit, not the two slots. If misses should
-   cost more, slow the shot to 6 px/frame before touching the cooldown.)
+2. A player shot reaches the bottom row in 8 frames and, if it hits nothing, is gone after 21.
+   Holding fire with every shot missing gives **4.76 shots a second**: 2 shots every 21 frames,
+   spawned at frames 0, 10, 21, 31, 42 (gaps of 10 and 11). **The two slots are the limit, not the
+   10-frame cooldown**, because a miss lives 21 frames and two cooldowns are 20. The rate is exactly
+   5 a second only while each shot hits something within 20 frames. Measured in the game
+   (`check.py` fire-hold: 20 shots in 200 frames, printed as 4.77) and the same in the model. (An
+   earlier version of this target said a steady 5 with the cooldown as the limit: that was wrong.
+   Tuning: [options below](#tuning-options-awaiting-playtest). If misses should cost more, slow the
+   shot to 6 px/frame: a miss then lives 28 frames, 3.57 shots a second.)
 3. A dive is announced: the wind-up (flash and sound) starts **1.2 s** before a Hook can first touch
    the player at loop 0 (24 wind-up frames + 35 path steps), and about 0.7 s at loop 3 (12 + 24).
 4. No enemy shot arrives less than **0.44 s** after it's fired at loops 0–1, 0.3 s later.
@@ -514,6 +544,23 @@ A playtester can check each of these.
 9. Every death has a visible cause: the player can say what hit him.
 10. Shooting a diver feels better than clearing parked enemies: the scores above make a game spent
     on divers worth about 1.6 times one spent on the formation.
+
+## Tuning options awaiting playtest
+
+**Held fire rate.** Not changed until Simon has played stage 1. A miss lives 21 frames (Y 213 to 53
+by 8), so held fire is 100 / 21 = 4.76 a second.
+
+| | Change | Held rate, all misses | Costs |
+|---|---|---|---|
+| **a** | **None** | 4.76 a second, gaps 10, 11, 10, 11 frames; 5.00 when shots hit within 20 frames | Nothing. The 5% and the 1-frame (20 ms) difference between gaps can't be seen or heard |
+| b | Kill line: removed when Y < **54** (from 46). A miss lives 20 frames, last shown at Y 61 | 5.00, gaps all 10 | The shot vanishes 8 lines lower: its top at raster line 62, 11 lines inside the screen, not 3. Row 0 is still hit (its box is lines 60–74). A diver sliding in from the wrap can first be hit at Y 44, not 36: 4 frames later |
+| c | A third shot slot | 5.00, gaps all 10, up to 3 in flight | **No free sprite: all 24 are allocated and v1 has no 25th.** It takes an enemy shot's slot (3 to 2, which removes the third bomb of pattern 2 from loop 1) or an enemy (17, against the brief's 18). Box tests 36 to 54. A third shot is the third visitor in a row's window, which is where flicker starts ([The formation](#the-formation)) |
+| d | Spawn at Y **205** (from 213). A miss lives 20 frames, kill line and top of screen unchanged | 5.00, gaps all 10 | The shot appears 12 lines above the ship's nose, not 4: it looks less like it left the gun |
+
+**Recommendation: a.** The gap between 4.76 and 5.00 is one frame in 21; b, c and d each trade it
+for something the player can see. If the fire feels too slow or too fast in play, that is a
+different question (shot speed, or how many shots), and it gets its own numbers after the playtest.
+If Simon wants exactly 5, take **b**: one constant, no sprite, no art.
 
 ## Decisions
 
