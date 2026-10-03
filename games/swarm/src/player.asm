@@ -95,15 +95,16 @@ player_hit:
 // Out: mux_x_lo/hi, mux_col, mux_ptr, mux_y + SPR_PLAYER; a shot spawned in a free slot, with
 //      its sound asked for
 // Uses: A, X, Y
-// Cost: stage 4 part B, with the shot's sound request, measured: 92-318 raster cycles, average 128,
-//       in the AUTOPLAY build (600 passes, lines 43-88; 303 in make test; budget 365:
-//       tests/games/swarm/stage4_costs.txt). Before the sound: to player_update_end, raster cycles, IRQs excluded, measured
+// Cost: tuned (stage 5), with the shot's sound request, measured, raster cycles, IRQs excluded:
+//       302-326 max in the AUTOPLAY build (lines 46-88; 302 in make test); 377 in make test-long,
+//       where a zone IRQ inside it split it and each piece met a badline. Budget 440 (memory-map.md
+//       row 3, since the long run: counted with a zone IRQ inside it, 439; "The long run").
+//       Stage 4 part B: 92-318, average 128 (tests/games/swarm/stage4_costs.txt). Before the sound: to player_update_end, raster cycles, IRQs excluded, measured
 //       (tests/games/swarm/stage3_costs.txt): 92-260, average 125, in the AUTOPLAY build, which
 //       holds the invulnerability timer at 2 so that the flash runs in every frame (600 passes,
 //       lines 43-86: the 260 met a badline and a row's sprites; 248 in make test). On the game
 //       build: 72-129 in Play with no flash, 91-185 with the flash, 46 exploding, 16 hidden (33
-//       in the frame it is hidden). Budget 290 (memory-map.md row 3): it runs in the display,
-//       after the collisions
+//       in the frame it is hidden). It runs in the display, after the collisions
 player_update:
         lda zp_game_state               // 3
         cmp #GAME_STATE_DYING           // 2

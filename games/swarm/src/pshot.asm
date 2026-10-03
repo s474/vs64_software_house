@@ -25,7 +25,7 @@ pshot_init:
 // In:  nothing       Out: nothing
 // Uses: A
 // Cost: 16 raster cycles with no shot, 42-43 with two in flight, to pshot_update_end (measured:
-//       vice_profile 100 passes, make test ARGS=swarm 300 passes, max 43; budget 150). No DMA
+//       vice_profile 100 passes, make test ARGS=swarm 300 passes, max 43; budget 60, memory-map.md row 4). No DMA
 pshot_update:
         .for (var i = 0; i < SPR_PSHOT_COUNT; i++) {
                 lda mux_y + SPR_PSHOT + i       // 4

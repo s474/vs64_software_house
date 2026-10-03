@@ -76,16 +76,18 @@ diver_free:
 // Out: the divers' multiplexer entries, enemy shots spawned, zp_launch_timer, zp_divers_active;
 //      the dive sound asked for at a launch, the enemy shot sound once if any shot was fired
 // Uses: A, X, Y, zp_tmp0-2
-// Cost: stage 4 part B, with the sound requests, measured: 192-1,047 raster cycles, average 478,
-//       in the AUTOPLAY build (600 passes, lines 37-56; 987 in make test; budget 1,350:
-//       tests/games/swarm/stage4_costs.txt). Before the sound: to diver_update_end, CPU cycles counted: 31 with no diver and no launch due; a diver
+// Cost: tuned (stage 5), with the sound requests, measured, raster cycles, IRQs excluded:
+//       1,268-1,296 max in the AUTOPLAY build (lines 37-61; 1,268 in make test, 1,296 over 6,000
+//       passes: tests/games/swarm/tuning_long_look.txt); 1,924 in its placed worst frame (D3L: a
+//       launch after a scan of all 18 with the fallback, a Sweep firing on a 2-step frame, the
+//       border work loaded; lines 41-72; tests/games/swarm/stage5_diver_worst.txt). Budget 2,020
+//       (memory-map.md row 6). The figures below are the earlier stages'. Before the sound: to diver_update_end, CPU cycles counted: 31 with no diver and no launch due; a diver
 //       winding up about 95, one path step about 105 (+ about 150 on a fire step that fires),
 //       returning about 120; a launch about 190 + 16 an enemy scanned (up to 18).
 //       Measured (raster cycles, IRQs excluded; tests/games/swarm/stage3_costs.txt): 180-972,
 //       average 428, in the AUTOPLAY build (wave 12: up to 3 divers, 2 steps every other frame;
 //       600 passes), on lines 36-57: it starts in the top border and can meet badline 51 and
-//       row 0's sprites. 688 on the game build for the launcher's longest scan (below).
-//       Budget 1,350 (row 6)
+//       row 0's sprites. 688 on the game build for the launcher's longest scan (below)
 diver_update:
         ldx zp_loop                     // 3   one test a frame: do the divers take 2 path steps?
         ldy #0                          // 2
@@ -136,7 +138,9 @@ diver_update_end:
 //      the dive sound asked for
 // Uses: A, X, Y, zp_tmp0-2. At most 2 rng_next calls
 // Cost: 31 cycles when the maximum are out; a launch about 190 + 15-16 an enemy scanned before
-//       the one taken (counted). The longest scan, one survivor 17 places on, is measured on the
+//       the one taken that isn't Parked, about 35 a Parked enemy outside the wave's rows (counted).
+//       The second is the dear path: a scan past Parked enemies of other rows makes the routine's
+//       worst frame (D3L in tests/games/swarm/stage5_diver_worst.txt). The longest scan, one survivor 17 places on, is measured on the
 //       game build: tests/games/swarm/stage3_costs.txt
 diver_launch:
         lda zp_pattern

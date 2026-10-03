@@ -195,8 +195,7 @@ enemy_kill:
 //       swap, + 27 on a drift step (+ 34 on a turn), + 105 on a swap frame: 437 at most.
 //       Measured, raster cycles: 296-437 in the game (vice_profile, 400 passes, loop 0); 323-437,
 //       average 331, in the AUTOPLAY build, which drifts every frame (600 passes:
-//       tests/games/swarm/stage2a_costs.py, results beside it). Budget 750 (memory-map.md row 5,
-//       which also has to hold stage 3's wind-up wobble and explosion timers).
+//       tests/games/swarm/stage2a_costs.py, results beside it). Budget 750 (memory-map.md row 5).
 //       Part B, with the explosion slots (stage2b_costs.py, results beside it): 352-466, average
 //       359, in the AUTOPLAY build, where nothing explodes (4 free slots: + 28); 431-538 in the
 //       game with all 4 slots animating for 15 frames and ending together in the 16th, drifting

@@ -11,7 +11,7 @@
 // Cost: init only, about 9,300 cycles (counted)
 screen_charset_init:
         sei
-        lda #$33                        // character ROM at $D000, no I/O
+        lda #CPU_PORT_CHAR_ROM          // character ROM at $D000, no I/O
         sta CPU_PORT
         ldx #0
 !:      lda CHAR_ROM,x
@@ -20,7 +20,7 @@ screen_charset_init:
         sta CHARSET + $100,x
         inx
         bne !-
-        lda #$37                        // I/O back (the value BASIC started us with)
+        lda #CPU_PORT_BASIC             // I/O back (the value BASIC started us with)
         sta CPU_PORT
         ldx #GLYPH_DATA_SIZE - 1
 !:      lda glyph_data,x

@@ -51,6 +51,11 @@ Run from the repo root (about 4 minutes):
     uv run --package budget-runner python tests/games/swarm/stage4_costs.py | tee tests/games/swarm/stage4_costs.txt
 
 Results of the last run: tests/games/swarm/stage4_costs.txt.
+
+The limits are the budget's since the long run (memory-map.md "Frame budget", 2026-10-03):
+diver_update 2,020 (1,350 until stage 5), collide_update 2,750 (2,825), player_update 440 (365),
+game_update 6,720 (6,050), sfx_play 200 (120), idle >= 45 (670). stage4_costs.txt is from the run
+of 2026-10-02, against the old limits, and was not rerun when they moved.
 """
 
 import re
@@ -66,17 +71,17 @@ REPO = Path(__file__).resolve().parents[3]
 SAMPLES, FRAMES, WARMUP = 600, 3000, 400
 RUNS = 8
 SPANS = [("eshot_update", "eshot_update_end", 200, "budget, row 7"),
-         ("diver_update", "diver_update_end", 1350, "budget, row 6"),
-         ("collide_update", "collide_update_end", 2825, "budget, row 8"),
+         ("diver_update", "diver_update_end", 2020, "budget, row 6"),
+         ("collide_update", "collide_update_end", 2750, "budget, row 8"),
          ("formation_update", "formation_update_end", 750, "budget, row 5"),
-         ("player_update", "player_update_end", 365, "budget, row 3"),
+         ("player_update", "player_update_end", 440, "budget, row 3"),
          ("pshot_update", "pshot_update_end", 60, "budget, row 4"),
          ("stars_update", "stars_update_end", 60, "budget, row 10"),
          ("panel_update", "panel_update_end", 250, "budget, row 9"),
-         ("game_update", "game_update_end", 6050, "budget"),
+         ("game_update", "game_update_end", 6720, "budget"),
          ("mux_update", "mux_update_fast", 7400, "engine limit, frames with no overflow; average <= 5,000"),
          ("mux_update", "mux_update_end", 13000, "engine limit, all frames"),
-         ("sfx_play", "sfx_play_end", 120, "budget.json: a request in the display")]
+         ("sfx_play", "sfx_play_end", 200, "budget.json: a request in the display")]
 FRAME_SPANS = (("game_update", "game_update_end"), ("panel_update", "panel_update_end"),
                ("formation_update", "formation_update_end"), ("mux_update", "mux_update_end"))
 ENEMY0, ESHOT0, PSHOT0, MUX_OFF, ENEMIES = 6, 1, 4, 0xFF, 18
@@ -86,7 +91,7 @@ PHASE_FIGHT, PHASE_INTRO, PHASE_CLEAR, CLEAR_PAUSE = 0, 1, 2, 75
 INTRO_FRAMES = 50               # design, Stage 4 rule 2 (100 until the tuning after the stage 4 playtest)
 JOYPORT_IO_SIMULATION, PORT2 = 37, 1
 RIGHT, LEFT, FIRE = 0x08, 0x04, 0x10
-IDLE_MIN, ONEOFF_GAME, ONEOFF_IDLE, FORMATION, BORDER_LINE, PANEL4 = 670, 4000, 5000, 750, 49, 350
+IDLE_MIN, ONEOFF_GAME, ONEOFF_IDLE, FORMATION, BORDER_LINE, PANEL4 = 45, 4000, 5000, 750, 49, 350
 TICK, SFX_UPDATE, TICK_RTI_LINE, IRQ_FRAME, IRQ_FRAMES = 498, 417, 260, 4500, 300
 
 

@@ -1,8 +1,10 @@
 // Swarm: zero page. Every zero-page byte the game and the engine use is declared here, to the
 // allocation in docs/games/swarm/memory-map.md#zero-page. $40-$FF are free.
 
-// $02-$09: scratch, main loop only. mux_update uses zp_tmp0-3. Never held across a jsr, never
-// used in an IRQ handler.
+// $02-$09: scratch, main loop only. mux_update uses zp_tmp0-3. Never held across a jsr to a
+// routine that uses them: a caller may keep one across a call to a routine documented as using
+// no zero page (sfx_play: game.asm, game_wave_clear), as docs/standards/coding-standards.md
+// allows. Never used in an IRQ handler.
 .label zp_tmp0 = $02
 .label zp_tmp1 = $03
 .label zp_tmp2 = $04

@@ -26,7 +26,6 @@
 .const TITLE_SPRITE_Y   = 115           // beside rows 9, 12 and 15's scores: Y = 43 + 8 x the row,
 .const TITLE_SPRITE_DY  = 24            // so the art is centred on the letters and 24 lines apart
 .const TITLE_BLINK      = 32            // PRESS FIRE: on for 32 frames, off for 32
-.const VIC_RASTER       = $d012         // read only here: writing it is the IRQ framework's
 
 // Enter the title: its frame 0. Every sprite hidden, row 9's message erased, the three title
 // enemies (types A, B, C on the first enemy sprite of each row: 6, 12, 18) in their colours and
@@ -76,7 +75,7 @@ title_enter:
 //       game_update for a title frame (stage4_costs.txt, item 5): 250-263 steady, 282 on a shape
 //       swap, 387-608 drawing a text, 415-476 on a blink, 446 in the press's frame; mux_update
 //       1,067 with the three sprites; at least 16,000 cycles idle. The $D012 read at the press
-//       is on raster line 27 every time
+//       is on raster line 26 or 27 (it falls within a few cycles of the boundary)
 title_update:
         inc zp_state_timer              // wraps: the blink and the shapes read it
         lda title_step

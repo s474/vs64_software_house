@@ -2,12 +2,18 @@
 // docs/games/swarm/memory-map.md#labels-the-game-must-provide: the game plays its worst case by
 // itself, with no joystick: the "stick" sweeps right and left between the clamps with fire held,
 // the panel's in-play fields are redrawn every frame (the most panel_update can be asked to do in
-// one frame of play), and from stage 3 the respawn flash runs every frame and hits on the player
+// one frame of play: set here for the next frame's panel_update), and from stage 3 the respawn flash runs every frame and hits on the player
 // are counted, not answered (collide.asm), at wave 12 (pattern 3, loop 3: game.asm, game_new).
 // Nothing in this file is assembled into the game proper.
 
 // Work out this frame's scripted stick: fire held, and right until the right clamp, then left
 // until the left clamp, and so on.
+// Called in game_update straight after stars_update (main.asm), not before panel_update: so the
+// border routines start on the lines they start on in the game, which has no autoplay_update
+// (memory-map.md "The long run"). What it sets is read later: autoplay_joy and zp_player_invuln
+// by player_update in this frame (collide_update doesn't read the timer in this build), the three
+// sound requests by the tick, and panel_dirty (overwritten with the in-play fields, which other
+// routines may add to) by the NEXT frame's panel_update.
 // In:  zp_player_x_lo/hi, zp_game_frame   Out: autoplay_joy (JOY_* bits), panel_dirty
 // Uses: A; X and Y too in the frames it asks for the three effects
 // Cost: 50-60 cycles (counted), + 125 every 64th frame; inside game_update

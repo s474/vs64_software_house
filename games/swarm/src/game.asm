@@ -41,9 +41,10 @@
 // In:  nothing       Out: nothing
 // Uses: A, X, Y, zp_tmp4-5
 // Cost: about 950 cycles (counted: game_wave_intro's 720 and the other inits). Measured as
-//       game_update for the frame it runs in, from the title: 2,190 raster cycles, to line 58,
-//       formation_update 369 on lines 48-54, 14,720 cycles idle (a one-off frame: limits 4,000,
-//       750 and 5,000 idle; tests/games/swarm/stage4_costs.txt, item 4)
+//       game_update for the frame it runs in, from the title, with the sound (stage 4 part B, the
+//       build as tuned): 2,293-2,294 raster cycles, to line 59-60, formation_update 369 on lines
+//       48-54, 14,432 cycles idle (a one-off frame: limits 4,000, 750 and 5,000 idle;
+//       tests/games/swarm/stage4_costs.txt, item 4). Part A: 2,190, to line 58
 game_new:
         ldx #TEXT_GAME_OVER             // row 9: the widest message's cells
         jsr game_text_erase
@@ -79,8 +80,9 @@ game_new:
 // In:  zp_wave, zp_loop      Out: zp_wave_phase = Intro, zp_wave_timer = 0
 // Uses: A, X, Y, zp_tmp4-5
 // Cost: about 720 cycles + jsr/rts (counted: formation_reset 430, diver_init 40, the text 150,
-//       enemy_park 86); a one-off frame. Measured for a later wave's Intro frame 0: game_update
-//       1,892, formation_update 326 on lines 43-48, 15,008 idle (stage4_costs.txt, item 2)
+//       enemy_park 86); a one-off frame. Measured for a later wave's Intro frame 0, with the
+//       wave-start request (stage 4 part B, as tuned): game_update 1,952-1,953, formation_update
+//       326 on lines 44-49, 14,752 idle (stage4_costs.txt, item 2). Part A: 1,892, lines 43-48
 game_wave_intro:
         lda #WAVE_PHASE_INTRO
         sta zp_wave_phase

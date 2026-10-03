@@ -1,0 +1,7 @@
+# uv run --package budget-runner python tests/games/swarm/stage5_longrun_fails.py stars 60000 --check   (2026-10-03, after the gameplay-engineer moved autoplay_update after stars_update: the AUTOPLAY build as of the commit that adds this file; build/swarm_budget from make test ARGS=swarm_budget)
+# uv run --package budget-runner python tests/games/swarm/stage5_longrun_fails.py stars 60000 --check   (build/swarm_budget/swarm_budget.prg, VICE 3.10 x64sc PAL, DEBUG, 400 warm-up frames; raster cycles, IRQ time excluded)
+60000 passes: cost -> passes [(56, 58750), (57, 1250)]
+start line -> passes [(27, 51110), (28, 8890)]
+passes starting after line 29: 0   (146 s)
+uv run --package budget-runner python  stars 60000 --check  153.21s user 20.91s system 117% cpu 2:28.04 total
+exit 0

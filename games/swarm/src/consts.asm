@@ -4,7 +4,10 @@
 
 // --- Hardware -----------------------------------------------------------------------------
 .const CPU_PORT       = $01     // written at init only, before irq_init
+.const CPU_PORT_CHAR_ROM = $33  // RAM, character ROM at $D000, no I/O: screen_charset_init only
+.const CPU_PORT_BASIC    = $37  // BASIC, KERNAL and I/O: the value BASIC starts us with
 .const VIC_CTRL1      = $d011   // every write keeps bit 7 clear (the IRQ framework's)
+.const VIC_RASTER     = $d012   // read only (title.asm, the seed at the press): writing it is the IRQ framework's
 .const VIC_CTRL2      = $d016
 .const VIC_SPR_YEXP   = $d017   // stays 0 (engine v1 condition 4)
 .const VIC_MEMORY     = $d018
@@ -33,6 +36,12 @@
 
 .const MUX_SCREEN = SCREEN      // multiplexer: sprite pointers at $07F8-$07FF
 .const MUX_Y_MAX  = 221         // panel line 243 - 22
+
+// The raster line of chain entry 1, the sound tick (memory-map.md "Raster timeline"): 251, in the
+// lower border, past the last badline (243) and the player's sprite DMA (lines 221-241)
+.const GAME_TICK_LINE = $fb
+.errorif GAME_TICK_LINE < MUX_Y_MAX + 3, "a fixed chain entry must be on line MUX_Y_MAX + 3 or later (engine/README.md: status panels)"
+.errorif GAME_TICK_LINE > $ff, "chain lines are 0-255"
 
 // --- Screen -------------------------------------------------------------------------------
 .const SCREEN_COLS = 40

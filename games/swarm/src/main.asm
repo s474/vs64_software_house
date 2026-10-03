@@ -81,7 +81,7 @@ BasicUpstart2(start)
 * = * "Chain"
         IrqChainBegin()
         IrqNormal(MUX_TOP_LINE, mux_irq_top)    // entry 0, line 16: frame tick, sprites
-        IrqNormal($fb, game_irq_bottom)         // entry 1, line 251: the sound tick (stage 4)
+        IrqNormal(GAME_TICK_LINE, game_irq_bottom)  // entry 1, line 251: the sound tick (stage 4)
         IrqChainEnd()
 .errorif * > CHARSET, "the engine block runs into the charset ($2800)"
 
@@ -144,16 +144,22 @@ main_frame:
 // game_update .. game_update_end: everything the main loop does in a frame except mux_update.
 // Cost (measured: tests/games/swarm/stage4_costs.py, results beside it; raster cycles, IRQs
 //       excluded): see stage4_costs.txt for the AUTOPLAY build (wave 12, 3 divers), the title's
-//       frames, and the one-off frames (a new game, a wave's Intro frame 0). Budget 6,050
+//       frames, and the one-off frames (a new game, a wave's Intro frame 0). Budget 6,720
 game_update:
         jsr input_read                  // exactly once a frame, straight after the tick
-#if AUTOPLAY
-        jsr autoplay_update
-#endif
         jsr panel_update                // straight after the input: always in the top border. It
                                         // draws what the previous frame's updates made dirty
         jsr stars_update                // in the border too (memory-map.md "Order of the frame"):
-                                        // no badline, no sprite DMA, so its cost is its CPU count
+                                        // no badline, no sprite DMA, so its cost is its CPU count.
+                                        // budget.json checks that it starts by line 29
+#if AUTOPLAY
+        jsr autoplay_update             // after the border routines, so that they start on the
+                                        // lines they start on in the game (memory-map.md "The long
+                                        // run"); before everything that reads what it sets: its
+                                        // stick and flash timer (player_update), its sound requests
+                                        // (the tick). Its panel_dirty is drawn by the next frame's
+                                        // panel_update
+#endif
         lda zp_game_state
         cmp #GAME_STATE_TITLE
         bne !play+

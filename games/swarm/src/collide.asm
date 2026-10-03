@@ -52,10 +52,11 @@
 //                         started, 3 scores, the player's hit. Lines 40-69
 //         1,033           the game, both shots hit with 3 divers in a shot's band
 //         311 / 690       the player's hit alone: by a shot / by a ram
-//       Stage 4 part B, with the sound requests (tests/games/swarm/stage4b_collide_worst.txt): the
-//       placed worst frames A / B / C 2,013 / 2,553 / 2,571, lines 41 to 73 / 95 / 95 (they were
-//       1,863 / 2,446 / 2,471 without sound); 112-1,239 in the AUTOPLAY build (1,385 in make test).
-//       Budget 2,825 (row 8). The box scan it replaced: 2,004-2,209 in AUTOPLAY, 2,833-2,836 in
+//       Tuned (stage 5), with the sound requests: the placed worst frames A / B / C 2,010 / 2,554 /
+//       2,612, lines 40-41 to 73 / 95 / 95 (stage3_collide_worst.py, run by make test); 1,506-1,673
+//       max in the AUTOPLAY build (1,506 in make test, 1,673 over 6,000 passes:
+//       tuning_long_look.txt). Stage 4 part B (stage4b_collide_worst.txt): 2,013 / 2,553 / 2,571
+//       (1,863 / 2,446 / 2,471 without sound). Budget 2,750 (row 8, since the long run: 2,612 + 5%). The box scan it replaced: 2,004-2,209 in AUTOPLAY, 2,833-2,836 in
 //       the same placed worst frame (stage3_costs_boxscan.txt, commit 039ad26)
 collide_update:
         lda zp_fx                               // 3   what the grid lookup subtracts from a shot's X

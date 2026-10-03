@@ -13,6 +13,11 @@ Run from the repo root (about 2 minutes):
     uv run --package budget-runner python tests/games/swarm/tuning_long_look.py | tee tests/games/swarm/tuning_long_look.txt
 
 Results of the last run: tests/games/swarm/tuning_long_look.txt.
+
+The limits are the budget's since the long run (memory-map.md "Frame budget", 2026-10-03):
+diver_update 2,020 (1,350 until stage 5), collide_update 2,750 (2,825), game_update 6,720 (6,050).
+tuning_long_look.txt is from the run of 2026-10-02, against the old limits, and was not rerun
+when they moved.
 """
 
 import sys
@@ -24,8 +29,8 @@ from budget_runner.session import MeasureError, Vice, build_program  # noqa: E40
 from stage4_costs import WARMUP, span  # noqa: E402
 
 SAMPLES = 6000
-SPANS = [("diver_update", "diver_update_end", 1350), ("collide_update", "collide_update_end", 2825),
-         ("game_update", "game_update_end", 6050)]
+SPANS = [("diver_update", "diver_update_end", 2020), ("collide_update", "collide_update_end", 2750),
+         ("game_update", "game_update_end", 6720)]
 
 
 def main() -> int:
