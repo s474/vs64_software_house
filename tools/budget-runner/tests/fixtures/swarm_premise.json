@@ -1,0 +1,49 @@
+{
+  "spike": "swarm_budget",
+  "src_dir": "tests/games/swarm",
+  "asset_dir": "games/swarm/src",
+  "warmup_frames": 400,
+  "notes": "Fixture, not part of make test (it is outside tests/). Swarm's player_update and stars_update with premise limits, to show the output. Run (after make test ARGS=swarm_budget, or without --no-build to build): uv run budget-runner --no-build -v tools/budget-runner/tests/fixtures/swarm_premise.json. stars_update's row 10 premise is that it starts by line 29 and that no IRQ fires in it; player_update's count (358 CPU + 82 for one zone IRQ's split) assumes at most one IRQ inside it. The first check's limits are the real ones and should pass; the second asks for 0 IRQs inside player_update, which it fails (a zone IRQ lands in it), to show a failing premise.",
+  "checks": [
+    {
+      "name": "stars_update, premise: starts by line 29, no IRQ inside",
+      "kind": "profile_excl_irq",
+      "routine": ["stars_update", "stars_update_end"],
+      "max_cycles": 60,
+      "samples": 300,
+      "start_line_max": 29,
+      "irqs_inside_max": 0,
+      "basis": "measured",
+      "source": "docs/games/swarm/memory-map.md row 10"
+    },
+    {
+      "name": "player_update, premise: at most 1 IRQ inside",
+      "kind": "profile_excl_irq",
+      "routine": ["player_update", "player_update_end"],
+      "max_cycles": 440,
+      "samples": 600,
+      "irqs_inside_max": 1,
+      "basis": "estimate",
+      "source": "docs/games/swarm/memory-map.md row 3"
+    },
+    {
+      "name": "player_update, premise: no IRQ inside (expected to FAIL)",
+      "kind": "profile_excl_irq",
+      "routine": ["player_update", "player_update_end"],
+      "max_cycles": 440,
+      "samples": 600,
+      "irqs_inside_max": 0,
+      "basis": "estimate",
+      "source": "shows a failing premise"
+    },
+    {
+      "name": "sound tick IRQ (a plain profile)",
+      "kind": "profile",
+      "routine": ["game_irq_bottom", "irq_exit_rti"],
+      "max_cycles": 498,
+      "samples": 300,
+      "basis": "measured",
+      "source": "docs/games/swarm/budget.json"
+    }
+  ]
+}

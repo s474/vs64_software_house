@@ -1,6 +1,6 @@
 """budget-runner: build every tests/**/budget.json spike, run it in VICE, check the budgets.
 
-    uv run budget-runner [--no-build] [--scale N] [SPIKE_OR_PATH ...]      (or: make test / make test-long)
+    uv run budget-runner [--no-build] [--scale N] [-v] [SPIKE_OR_PATH ...]      (or: make test / make test-long)
 
 Exit status: 0 all checks passed (checks for a later build stage are PENDING and don't fail,
 except under --strict); 1 a check failed or could not be measured; 2 a budget file is malformed
@@ -75,11 +75,11 @@ def run_budget(budget: Budget, do_build: bool, strict: bool = False) -> list[Res
             vice.close()
 
 
-def report(budget: Budget, results: list[Result], out=None) -> None:
+def report(budget: Budget, results: list[Result], out=None, verbose: bool = False) -> None:
     out = out or sys.stdout  # looked up per call, not at import
     width = max(len(c.name) for c in budget.checks)
     for r in results:
-        print(format_result(budget.spike, r, width), file=out)
+        print(format_result(budget.spike, r, width, verbose), file=out)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -89,6 +89,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--strict", action="store_true",
                     help="treat a spike whose main.asm does not exist yet, and a check pending a later "
                          "build stage, as a failure")
+    ap.add_argument("-v", "--premise", action="store_true",
+                    help="under every profile check, print where on the raster its passes started and "
+                         "ended and how many IRQs fired inside them (always shown for a check with a "
+                         "start_line_max / irqs_inside_max limit)")
     ap.add_argument("--no-build", action="store_true", help="use the existing build/<spike>/<spike>.prg")
     ap.add_argument("--scale", type=int, default=1, metavar="N",
                     help="long run: multiply every check's samples / frames / after_frames by N "
@@ -112,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
             skipped += 1
             continue
         results = run_budget(b, not a.no_build, a.strict)
-        report(b, results)
+        report(b, results, verbose=a.premise)
         waiting = sum(r.pending is not None for r in results)
         pending += waiting
         total += len(results) - waiting

@@ -4,7 +4,7 @@ import pytest
 
 from budget_runner.evaluate import (
     FRAME, Event, Result, eval_irq_time, eval_memory, eval_profile, eval_start_cycle,
-    SampleCounter, format_result, irq_time_by_frame, irq_spans, profile_costs, union_length,
+    SampleCounter, format_result, irq_time_by_frame, irq_spans, profile_costs, profile_passes, union_length,
 )
 from budget_runner.spec import BudgetError, find_budgets, load_budget, parse_check
 from pathlib import Path
@@ -189,8 +189,8 @@ def test_vice_profile_does_not_rescan_events_per_sample(monkeypatch):
     v.symbols = {"a": A, "b": B}
     v.mon = FakeMon(pcs)
     calls = []
-    real = session.profile_costs
-    monkeypatch.setattr(session, "profile_costs", lambda *a, **k: calls.append(1) or real(*a, **k))
+    real = session.profile_passes
+    monkeypatch.setattr(session, "profile_passes", lambda *a, **k: calls.append(1) or real(*a, **k))
     r = v._profile(check(routine=["a", "b"], max_cycles=100, samples=samples))
     assert r.passed and len(calls) == 1
     assert v.mon.i == 2 * samples  # stopped as soon as the last sample completed
@@ -545,3 +545,53 @@ def test_script_check_runs_without_a_vice_and_after_a_pending_check(tmp_path, mo
     b = Budget(Path("b.json"), "x", "d", 1, [sc, sc2], stage=1)
     results = cli.run_budget(b, True)
     assert results[0].pending and results[1].passed
+
+
+# -- the premise: where a profile's passes ran and how many IRQs fired inside ------
+
+
+def test_profile_passes_record_position_and_irqs_inside():
+    events = [Event(A, 1000, 29, 10), Event(B, 1060, 30, 7),            # no IRQ
+              Event(A, 2000, 40, 5), Event(D, 2020, 40, 25), Event(R, 2040, 41, 4),
+              Event(D, 2050, 41, 14), Event(B, 2100, 42, 8)]            # two IRQs inside
+    ps = profile_passes(events, A, B, count_dispatch=D)
+    assert [(p.start_line, p.start_cycle, p.end_line, p.end_cycle, p.irqs) for p in ps] == [
+        (29, 10, 30, 7, 0), (40, 5, 42, 8, 2)]
+    assert [p.cost for p in ps] == [60, 100]
+
+
+def test_premise_line_and_limits():
+    from budget_runner.evaluate import Pass
+    ps = [Pass(57, 29, 10, 30, 3, 0), Pass(61, 30, 22, 31, 9, 1), Pass(57, 29, 12, 30, 5, 0)]
+    c = check(routine=["a", "b"], max_cycles=60)
+    r = eval_profile(c, ps)
+    assert not r.passed  # 61 > 60
+    text = format_result("m", r, 1)
+    assert "premise" not in text  # only on request, with no premise limit set
+    assert "premise: start L29 c10 .. L30 c22; end L30 c3 .. L31 c9; IRQs inside a pass: 0: 2 (max 57), 1: 1 (max 61)" \
+        in format_result("m", r, 1, verbose=True)
+    c = check(routine=["a", "b"], max_cycles=61, start_line_max=29, irqs_inside_max=0)
+    r = eval_profile(c, ps)
+    assert not r.passed
+    out = format_result("m", r, 1)  # a premise limit shows the premise without -v
+    assert "start line max 30 / budget 29" in out and "IRQs inside a pass max 1 / budget 0" in out
+    assert "premise:" in out
+    ok = eval_profile(check(routine=["a", "b"], max_cycles=61, start_line_max=30, irqs_inside_max=1), ps)
+    assert ok.passed
+
+
+def test_premise_limit_validation():
+    with pytest.raises(BudgetError, match="start_line_max"):
+        check(routine=["a", "b"], max_cycles=10, start_line_max=-1)
+    with pytest.raises(BudgetError, match="start_line_min"):
+        check(routine=["a", "b"], max_cycles=10, start_line_min=40, start_line_max=30)
+    c = check(kind="profile_excl_irq", routine=["a", "b"], max_cycles=10, irqs_inside_max=0)
+    assert c.params["irqs_inside_max"] == 0 and c.params["start_line_min"] is None
+
+
+def test_vice_profile_premise_needs_irq_dispatch_label():
+    from budget_runner import session
+    v = session.Vice.__new__(session.Vice)
+    v.symbols = {"a": A, "b": B}
+    r = v.run(check(routine=["a", "b"], max_cycles=10, irqs_inside_max=0))
+    assert r.error and "irq_dispatch" in r.error

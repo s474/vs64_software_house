@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .evaluate import (
     FRAME, CYCLES_PER_LINE, Event, Result, eval_irq_time, eval_memory, eval_profile,
-    SampleCounter, eval_start_cycle, irq_time_by_frame, profile_costs,
+    SampleCounter, eval_start_cycle, irq_time_by_frame, profile_passes,
 )
 from .spec import REPO, Budget, Check
 
@@ -125,12 +125,16 @@ class Vice:
         a, b = (self.addr(x) for x in p["routine"])
         extra = [self.addr("irq_dispatch"), self.addr("irq_exit_rti")] if excl_irq else []
         dr = tuple(extra) if extra else (None, None)
+        # Count the IRQs that fire inside each pass (the premise) when the build has the IRQ framework
+        dispatch = self.symbols.get("irq_dispatch")
+        if dispatch is None and p.get("irqs_inside_max") is not None:
+            raise MeasureError("'irqs_inside_max' needs the label irq_dispatch, which this build does not have")
         counter = SampleCounter(a, b)  # incremental: each stop costs O(1), not a rescan of all events
         events = self.trace(
-            [a, b, *extra],
+            [a, b, *extra, *([dispatch] if dispatch is not None else [])],
             lambda ev: counter.update(ev) >= p["samples"],
             f"{p['routine'][0]} -> {p['routine'][1]}")
-        return eval_profile(check, profile_costs(events, a, b, *dr)[: p["samples"]])
+        return eval_profile(check, profile_passes(events, a, b, *dr, count_dispatch=dispatch)[: p["samples"]])
 
     def _profile_excl_irq(self, check: Check) -> Result:
         return self._profile(check, excl_irq=True)

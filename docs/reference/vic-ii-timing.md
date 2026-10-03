@@ -400,5 +400,10 @@ Pitfalls found while building the probes:
   reaches: the first fetch of a sprite at Y is at the end of line Y (sprites 0–2) or the start of
   line Y + 1 (3–7). **Measured**: Swarm's `stars_update`, 57 CPU, read 61 on lines 30–31 with one
   sprite at Y 30 (2 + 3 cycles), and 56–57 on line 28 (same script).
+- **Check the premise of a profile limit, not only its figure.** The budget runner records for every
+  `profile` / `profile_excl_irq` check the lines the passes started and ended on and how many IRQs
+  fired inside them (`budget-runner -v`), and a `budget.json` check can enforce them
+  (`start_line_max`, `irqs_inside_max`: [engine/README.md](../../engine/README.md#budget-files)), so
+  a count made for "starts by line 29, no IRQ inside" fails when the code moves.
 - `vice_profile` reports only min/avg/max. To see *where* in a line the CPU is halted, trace
   it instruction by instruction the way `tests/timing/sprites/trace_badline.py` does.

@@ -55,6 +55,8 @@ class Result:
     pending: str | None = None  # not run: the check belongs to a later build stage
     detail: str = ""  # shown on the result line whether it passes or not (a script's last output line)
     output: str = ""  # shown, indented, under a failing result (a script's output tail)
+    premise: str = ""  # where the measured span ran: start/end raster position, IRQs inside (profile kinds)
+    show_premise: bool = False  # the premise line is printed even when it was not asked for (a limit is set)
 
     @property
     def passed(self) -> bool:
@@ -84,31 +86,53 @@ def union_length(spans: list[tuple[int, int]]) -> int:
     return total
 
 
-def profile_costs(events: list[Event], start: int, end: int,
-                  dispatch: int | None = None, rti: int | None = None) -> list[int]:
-    """Cycles from each `start` execution to the next `end`; minus nested IRQs if dispatch/rti given.
+@dataclass(frozen=True)
+class Pass:
+    """One start -> end pass: its cost, where it started and ended on the raster, IRQs entered inside."""
+
+    cost: int
+    start_line: int
+    start_cycle: int
+    end_line: int
+    end_cycle: int
+    irqs: int
+
+
+def profile_passes(events: list[Event], start: int, end: int, dispatch: int | None = None,
+                   rti: int | None = None, count_dispatch: int | None = None) -> list[Pass]:
+    """Every complete start -> end pass: cycles to the next `end`, minus nested IRQs if dispatch/rti given.
 
     An IRQ counts as nested if its dispatch is hit after `start` and its rti before `end`; the
-    IRQ the routine may itself be running inside is not subtracted.
+    IRQ the routine may itself be running inside is not subtracted. `irqs` counts the dispatch hits
+    (`count_dispatch`, or `dispatch`) between start and end, the IRQs that fired inside the pass.
     """
+    count_dispatch = dispatch if count_dispatch is None else count_dispatch
     spans = irq_spans(events, dispatch, rti) if dispatch is not None and rti is not None else []
     span_starts = [s for s, _ in spans]  # spans are sorted by start
-    costs, started = [], None
+    passes, started, irqs = [], None, 0
     for e in events:
         if e.pc == start:
-            started = e.t
+            started, irqs = e, 0
         elif e.pc == end and started is not None:
-            cost = e.t - started
+            cost = e.t - started.t
             if spans:
                 # Only spans starting in (started - 7, e.t) can be nested: a span starting at or
                 # after e.t - 7 has its rti hit after e.t. Bisect instead of scanning every span.
-                lo = bisect_right(span_starts, started - IRQ_SEQUENCE)
+                lo = bisect_right(span_starts, started.t - IRQ_SEQUENCE)
                 hi = bisect_right(span_starts, e.t - IRQ_SEQUENCE)
                 nested = [(s, f) for s, f in spans[lo:hi] if f - RTI_TAIL < e.t]
                 cost -= union_length(nested)
-            costs.append(cost)
+            passes.append(Pass(cost, started.line, started.cycle, e.line, e.cycle, irqs))
             started = None
-    return costs
+        elif e.pc == count_dispatch and started is not None:
+            irqs += 1
+    return passes
+
+
+def profile_costs(events: list[Event], start: int, end: int,
+                  dispatch: int | None = None, rti: int | None = None) -> list[int]:
+    """Cycles from each `start` execution to the next `end`; minus nested IRQs if dispatch/rti given."""
+    return [p.cost for p in profile_passes(events, start, end, dispatch, rti)]
 
 
 class SampleCounter:
@@ -150,16 +174,45 @@ def fmt(n: float) -> str:
     return f"{n:,}" if isinstance(n, int) else f"{n:,.2f}".rstrip("0").rstrip(".")
 
 
-def eval_profile(check: Check, costs: list[int]) -> Result:
-    if not costs:
+def describe_premise(passes: list[Pass]) -> str:
+    """Where the passes ran: earliest and latest start and end (line, cycle), and the IRQs inside."""
+    def span(pos: list[tuple[int, int]]) -> str:
+        lo, hi = min(pos), max(pos)
+        return f"L{lo[0]} c{lo[1]}" + (f" .. L{hi[0]} c{hi[1]}" if hi != lo else "")
+    by_irqs: dict[int, list[int]] = {}
+    for p in passes:
+        by_irqs.setdefault(p.irqs, []).append(p.cost)
+    irqs = ", ".join(f"{n}: {len(c)} (max {fmt(max(c))})" for n, c in sorted(by_irqs.items()))
+    return (f"start {span([(p.start_line, p.start_cycle) for p in passes])}; "
+            f"end {span([(p.end_line, p.end_cycle) for p in passes])}; IRQs inside a pass: {irqs}")
+
+
+PREMISE_LIMITS = (("start_line_min", "start line", ">=", lambda ps: min(p.start_line for p in ps)),
+                  ("start_line_max", "start line", "<=", lambda ps: max(p.start_line for p in ps)),
+                  ("end_line_max", "end line", "<=", lambda ps: max(p.end_line for p in ps)),
+                  ("irqs_inside_max", "IRQs inside a pass", "<=", lambda ps: max(p.irqs for p in ps)))
+
+
+def eval_profile(check: Check, passes: list[Pass] | list[int]) -> Result:
+    """`passes` are Pass records (or bare costs: no premise is then known)."""
+    if not passes:
         return Result(check, error="no complete start -> end pass was seen")
+    detail = [p for p in passes if isinstance(p, Pass)]
+    costs = [p.cost if isinstance(p, Pass) else p for p in passes]
     avg = sum(costs) / len(costs)  # compared unrounded: 5,000.04 is over an average budget of 5,000
     parts = [Part("max", max(costs), "<=", check.params["max_cycles"])]
     if check.params.get("max_avg_cycles") is not None:
         parts.append(Part("avg", avg, "<=", check.params["max_avg_cycles"]))
     if check.params.get("min_cycles") is not None:  # an exact figure a probe must hit: a drop is a failure
         parts.append(Part("min", min(costs), ">=", check.params["min_cycles"]))
-    return Result(check, parts, info=f"min {min(costs)}, avg {avg:.1f}, {len(costs)} passes")
+    r = Result(check, parts, info=f"min {min(costs)}, avg {avg:.1f}, {len(costs)} passes")
+    if detail:
+        r.premise = describe_premise(detail)
+        for key, label, op, get in PREMISE_LIMITS:
+            if check.params.get(key) is not None:
+                parts.append(Part(label + (" min" if op == ">=" else " max"), get(detail), op, check.params[key]))
+                r.show_premise = True
+    return r
 
 
 def eval_start_cycle(check: Check, hits: list[Event]) -> Result:
@@ -195,7 +248,7 @@ def eval_memory(check: Check, raw: int) -> Result:
                   info=f"after {p['after_frames']} frames, raw {raw}")
 
 
-def format_result(spike: str, r: Result, name_width: int) -> str:
+def format_result(spike: str, r: Result, name_width: int, verbose: bool = False) -> str:
     """One line: spike, name, figures, PASS/FAIL, basis. Failures add one indented line per problem.
 
     A pending check (a later build stage) prints PENDING and why, with no figures.
@@ -207,6 +260,8 @@ def format_result(spike: str, r: Result, name_width: int) -> str:
         figures += f"; {r.detail}"
     status = "PASS" if r.passed else "FAIL"
     lines = [f"{spike}  {r.check.name.ljust(name_width)}  {figures}  {status}  ({r.check.basis})"]
+    if r.premise and (verbose or r.show_premise) and not r.pending:
+        lines.append(f"    premise: {r.premise}")
     if not r.passed:
         if r.error:
             lines.append(f"    error: {r.error}")

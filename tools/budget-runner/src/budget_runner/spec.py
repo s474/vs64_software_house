@@ -12,10 +12,13 @@ KINDS = ("profile", "profile_excl_irq", "start_cycle", "irq_time_per_frame", "me
 BASES = ("measured", "estimate", "requirement")
 COMPARISONS = ("equals", "max", "min")
 
+# Optional limits on a profile's premise: where on the raster it runs, how many IRQs fire inside it
+PREMISE = {"start_line_min": None, "start_line_max": None, "end_line_max": None, "irqs_inside_max": None}
+
 # kind -> (required fields, optional fields with defaults)
 FIELDS: dict[str, tuple[tuple[str, ...], dict[str, object]]] = {
-    "profile": (("routine", "max_cycles"), {"samples": 50, "max_avg_cycles": None, "min_cycles": None}),
-    "profile_excl_irq": (("routine", "max_cycles"), {"samples": 50, "max_avg_cycles": None, "min_cycles": None}),
+    "profile": (("routine", "max_cycles"), {"samples": 50, "max_avg_cycles": None, "min_cycles": None, **PREMISE}),
+    "profile_excl_irq": (("routine", "max_cycles"), {"samples": 50, "max_avg_cycles": None, "min_cycles": None, **PREMISE}),
     "start_cycle": (("label", "line", "max_spread"), {"frames": 100, "max_cycle": None}),
     "irq_time_per_frame": (("max_cycles", "frames"), {}),
     "memory": (("address", "size", "after_frames"), {"scale": 1}),
@@ -107,6 +110,12 @@ def parse_check(path: Path, index: int, raw: object) -> Check:
     for key in ("samples", "frames"):
         if key in params:
             _int(where, key, params[key], 1)
+    for key in PREMISE:
+        if params.get(key) is not None:
+            _int(where, key, params[key])
+    lo, hi = params.get("start_line_min"), params.get("start_line_max")
+    if lo is not None and hi is not None and lo > hi:
+        raise BudgetError(f"{where}: 'start_line_min' is above 'start_line_max', so it could never pass")
     if params.get("max_cycle") is not None:
         _int(where, "max_cycle", params["max_cycle"])
     if params.get("max_avg_cycles") is not None:

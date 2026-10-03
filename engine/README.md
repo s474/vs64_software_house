@@ -1855,6 +1855,7 @@ Check kinds (`kind` defaults to `profile`, so the brief's single-object example 
 |---|---|---|---|
 | `profile` | `routine: [start, end]`, `max_cycles`, `samples` (default 50), optional `max_avg_cycles`, optional `min_cycles` | Raster cycles from executing `start` to executing `end`, as `vice_profile` (includes DMA and anything that interrupts it) | max ≤ `max_cycles`, and the average over the samples ≤ `max_avg_cycles` if given (the common-case check: use enough samples to cover the spike's whole motion; the average is compared unrounded, and `max_avg_cycles` may not exceed `max_cycles`), and min ≥ `min_cycles` if given (a lower bound, for a probe that must hit an exact figure: set both limits to it; may not exceed `max_cycles`) |
 | `profile_excl_irq` | as `profile` | As `profile`, minus time spent in IRQs inside the span. An IRQ spans from its `irq_dispatch` hit − 7 cycles to its `irq_exit_rti` hit + 6 | As `profile`: max ≤ `max_cycles`, average ≤ `max_avg_cycles` and min ≥ `min_cycles` if given |
+| *premise limits* (both `profile` kinds, all optional, whole numbers) | `start_line_min`, `start_line_max`, `end_line_max`, `irqs_inside_max` | Where on the raster the measured passes ran: the line each pass starts / ends on, and how many IRQs were dispatched between its start and its end | Every pass starts on a line >= `start_line_min` and <= `start_line_max`, ends on a line <= `end_line_max`, and has at most `irqs_inside_max` IRQs inside. Each is its own part of the result line (`start line max 28 / budget 29`) and fails like `max_cycles`. `irqs_inside_max` needs the label `irq_dispatch` in the build |
 | `start_cycle` | `label`, `line`, `frames` (default 100), `max_spread`, optional `max_cycle` | Raster line and cycle each time `label` is about to execute, over consecutive frames (`vice_run_until` reports the same) | Every hit on `line`, max − min cycle ≤ `max_spread`, and max ≤ `max_cycle` if given |
 | `irq_time_per_frame` | `max_cycles`, `frames` | Sum of IRQ spans (as above) per frame | max over the frames ≤ `max_cycles` |
 | `memory` | `address` (label), `size` (1 or 2, little-endian), `after_frames`, one of `equals` / `max` / `min`, optional `scale` | Value after running `after_frames` more frames, times `scale` | Comparison holds |
@@ -1871,6 +1872,30 @@ multiplexer  pinned sprites never dropped  stage 4 check, spike is at stage 2  P
 somespike  SKIP  tests/engine/somespike/main.asm does not exist yet (14 checks not run)
 budget-runner: 23/23 checks passed, 2 pending a later stage (2 spikes run, 1 skipped: no source yet)
 ```
+
+**The premise of a profile check.** A profile's limit rests on *where on screen* the routine runs: a
+badline or a sprite fetch adds cycles only on some lines, and an IRQ inside a routine splits it into
+two pieces that each meet their own badline (the M4 long run: `player_update` read 377 against a count
+made for one piece, and `stars_update` 61 against 60 when test-build-only work moved it two lines
+later: [vic-ii-timing.md](../docs/reference/vic-ii-timing.md)). So for each pass of a `profile` /
+`profile_excl_irq` check the runner records the raster line and cycle it started and ended on and how
+many IRQs were dispatched inside it, and `-v` / `--premise` prints one line under the result:
+
+```
+swarm_budget  player_update  max 302 / budget 440  PASS  (estimate)
+    premise: start L42 c35 .. L77 c26; end L44 c1 .. L85 c38; IRQs inside a pass: 0: 589 (max 302), 1: 11 (max 229)
+```
+
+`start L42 c35 .. L77 c26` is the earliest and the latest start seen (line, cycle); `IRQs inside a
+pass` is the distribution (`1: 11 (max 229)`: 11 passes had one IRQ inside, the dearest cost 229).
+Without `-v` the line is printed only for a check that sets a premise limit, so a premise that is
+enforced is also visible (`make test ARGS=... ` stays as short as before). A limit that fails
+reports like any other (`start line max 30 / budget 29`) and fails the check. Cost: each IRQ
+dispatch is one more checkpoint stop for a plain `profile` check (the `profile_excl_irq` kinds already
+stop there); measured: about 5% on `make test ARGS=swarm_budget` (166 s to 175 s), see tools/budget-runner/README.md. Examples:
+`tools/budget-runner/tests/fixtures/swarm_premise.json`. IRQ time inside a pass is *excluded* from a
+`profile_excl_irq` cost, but the pass still has two pieces on the raster, which is why the count
+matters.
 
 A PENDING check runs no frames, so the `memory` checks after it see the same frames as if it
 weren't there.
@@ -1895,6 +1920,7 @@ irq_chain  irq_exit overhead                     max 60 / budget 50  FAIL  (meas
 make test                    # every tests/**/budget.json
 make test ARGS=irq_chain     # one spike (see below for what a name matches, or give the path to any budget.json, e.g. a scratch copy)
 uv run budget-runner --no-build irq_chain   # reuse the existing build
+uv run budget-runner --no-build -v swarm_budget   # -v: under each profile check, where its passes ran and the IRQs inside (the premise)
 uv run budget-runner --strict               # a missing main.asm or a PENDING check is a failure (M3 sign-off)
 make test-long                              # long run: every samples / frames / after_frames x 34 (~20,000 passes for a 600-sample check; ~30 min for the multiplexer)
 make test-long LONG_SCALE=10 ARGS=multiplexer   # another factor, one spike
