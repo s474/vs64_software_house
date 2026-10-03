@@ -22,3 +22,8 @@ The same in the border above line 51 (no badline), S sprites of wrapped or risin
   150    150     165     177     
   231    231     251     276     
   627    627     682     735     
+Split by nested IRQs (display, a badline a piece possible): one piece / two (one IRQ) / three (two IRQs):
+  player_update's 186-CPU path (the long run's 377), 6 sprites: 304 / 377 / 450
+  player_update, dearest path 201 CPU, 7 sprites (measured 397 placed): 346 / 423 / 500
+  player_update, dearest path 201 CPU, 8 sprites: 358 / 439 / 520
+  sfx_play's dearest span, 37 CPU, 8 sprites: 118 / 199 / 280

@@ -386,5 +386,19 @@ Pitfalls found while building the probes:
 - **To vary where an effect lands in a block, add the delay *before* the raster poll.** A delay
   placed only after a `lda $d012 / cmp / bne` poll is mostly cancelled: the poll's 9-cycle exit
   grid moves with it. That's how the first `JSR` run showed 43 on every pass.
+- **An IRQ inside a short routine can double its badline cost, with the IRQ excluded.** Taking an
+  IRQ's span out of a main-loop routine's raster time (dispatch − 7 to `rti` + 6, the budget
+  runner's `profile_excl_irq`) leaves the routine as two pieces at two places in the frame, and
+  each piece can meet a badline and its own lines' sprite fetches. **Measured** (Swarm's
+  `player_update`, 186 CPU cycles, 6 sprites a line): 377 raster cycles split by a zone IRQ on
+  lines 58–60 and 63–68 across badlines 59 and 67, where one piece can take at most 304; the model
+  in `tests/games/swarm/short_routine_dma.py` (`worst_split`) gives 377 for that case
+  (`tests/games/swarm/stage5_longrun_fails.py`, results beside it). Count a short routine that
+  runs in the display as two pieces at their own worst starts, or keep it out of IRQ range.
+- **A border routine's cost depends on where it starts, not only on its own state.** Work placed
+  before it that varies (a sound request every 64 frames) can move it onto a line a sprite fetch
+  reaches: the first fetch of a sprite at Y is at the end of line Y (sprites 0–2) or the start of
+  line Y + 1 (3–7). **Measured**: Swarm's `stars_update`, 57 CPU, read 61 on lines 30–31 with one
+  sprite at Y 30 (2 + 3 cycles), and 56–57 on line 28 (same script).
 - `vice_profile` reports only min/avg/max. To see *where* in a line the CPU is halted, trace
   it instruction by instruction the way `tests/timing/sprites/trace_badline.py` does.

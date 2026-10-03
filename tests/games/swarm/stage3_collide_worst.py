@@ -30,8 +30,9 @@ Run from the repo root (about 1 minute):
 Results of the last run: tests/games/swarm/stage3_collide_worst.txt.
 
 Stage 4 part B (the sound in): on a build that has engine/sfx.asm the script also reads sfx_request
-(3 bytes) at game_update_end of each placed frame and holds each case to 2,825 (memory-map.md
-"Stage 4" (f), item 7). Those results: tests/games/swarm/stage4b_collide_worst.txt (the same
+(3 bytes) at game_update_end of each placed frame and holds each case to row 8's limit, 2,750 since
+the stage 5 long run (2,825 until then: memory-map.md "Stage 5 review", the long run; "Stage 4" (f),
+item 7). Those results: tests/games/swarm/stage4b_collide_worst.txt (the same
 command, tee'd there; stage3_collide_worst.txt is kept as stage 3's). It was run again there after
 the stage 4 tuning (Intro 50 frames: new_game() below runs 50, not 100): the placed frames are the
 same frames, so the figures moved by a few cycles only (A 2,013 -> 2,010, B 2,553 -> 2,554,
@@ -54,7 +55,7 @@ from budget_runner.session import STOP_TIMEOUT, MeasureError, Vice, build_progra
 from vice_monitor import CPU_OP_EXEC
 
 RUNS = 8
-LIMIT = 2825                        # row 8, with the sound requests (stage 4 part B)
+LIMIT = 2750                        # row 8, with the sound requests: 2,612 placed + 5% (2,825 until 2026-10-03)
 ENEMY0, ESHOT0, PSHOT0, MUX_OFF = 6, 1, 4, 0xFF
 PARKED, DIVE, EXPLODING = 1, 0x81, 0x83
 GS_PLAY, GS_DYING, GS_OVER = 0, 2, 3

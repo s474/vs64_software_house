@@ -33,6 +33,14 @@ Run from the repo root (instant, no emulator):
 
     python3 tests/games/swarm/short_routine_dma.py
 
+SPLIT BY AN IRQ (added 2026-10-03, after the stage 5 long run read player_update at 377 against
+a count of 358): the count above assumes the routine runs in one piece. In the display a zone IRQ
+can land inside it; profile_excl_irq takes the IRQ's span out, but the routine is then two pieces
+at two places in the frame, and EACH can meet a badline and its own lines' fetches. worst_split()
+is the most two pieces of `cpu` CPU cycles in all can take, each at its own worst start: it
+reproduces the long run's 377 exactly (186 CPU, 6 sprites a line: tests/games/swarm/
+stage5_longrun_fails.txt). Three pieces (two nested IRQs) are printed too.
+
 Results of the last run: tests/games/swarm/short_routine_dma.txt (the memory map's rows 3, 4, 5, 7
 and 10 and its "Short routines" method quote them). Not for long routines: no routine of a
 thousand cycles has 8 sprites on every line it crosses; those keep the measured x 1.23-1.36.
@@ -73,6 +81,15 @@ def worst(cpu, sprites, badlines=True):
     return best
 
 
+def worst_split(cpu, sprites, badlines=True, parts=2, step=1):
+    """Longest raster time for `cpu` CPU cycles run as `parts` pieces (split by nested IRQs, whose
+    own spans are not counted), each piece at its own worst start cycle."""
+    if parts == 1:
+        return worst(cpu, sprites, badlines)
+    return max(worst(k, sprites, badlines) + worst_split(cpu - k, sprites, badlines, parts - 1, step)
+               for k in range(1, cpu - parts + 2, step))
+
+
 def main():
     print("# python3 tests/games/swarm/short_routine_dma.py   (a count from the measured steals of")
     print("# docs/reference/vic-ii-timing.md; no emulator)")
@@ -94,6 +111,13 @@ def main():
     print("  CPU    " + "".join(f"S={s:<6}" for s in cols))
     for cpu in (43, 57, 150, 231, 627):
         print(f"  {cpu:<6} " + "".join(f"{worst(cpu, s, False):<8}" for s in cols))
+
+    print("Split by nested IRQs (display, a badline a piece possible): one piece / two (one IRQ) / three (two IRQs):")
+    for name, cpu, spr in (("player_update's 186-CPU path (the long run's 377), 6 sprites", 186, 6),
+                           ("player_update, dearest path 201 CPU, 7 sprites (measured 397 placed)", 201, 7),
+                           ("player_update, dearest path 201 CPU, 8 sprites", 201, 8),
+                           ("sfx_play's dearest span, 37 CPU, 8 sprites", 37, 8)):
+        print(f"  {name}: {worst(cpu, spr)} / {worst_split(cpu, spr)} / {worst_split(cpu, spr, parts=3, step=3)}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,60 @@
+# Results of tests/games/swarm/stage5_longrun_fails.py (Technical Director, 2026-10-03), on the AUTOPLAY
+# build of commit 2d6cf3f (build/swarm_budget). Four runs, each with its command line first.
+
+# uv run --package budget-runner python tests/games/swarm/stage5_longrun_fails.py stars 60000   (build/swarm_budget/swarm_budget.prg, VICE 3.10 x64sc PAL, DEBUG, 400 warm-up frames; raster cycles, IRQ time excluded)
+pass 1125: 61 cycles, line 30 cycle 21 to line 31 cycle 19, zp_game_frame mod 64 = 0, $D015 $ff, sprite Y [30, 56, 56, 56, 56, 56, 96, 96]
+pass 7205: 61 cycles, line 30 cycle 28 to line 31 cycle 26, zp_game_frame mod 64 = 0, $D015 $ff, sprite Y [30, 56, 56, 56, 56, 56, 77, 96]
+pass 16101: 61 cycles, line 30 cycle 34 to line 31 cycle 32, zp_game_frame mod 64 = 0, $D015 $ff, sprite Y [30, 44, 56, 56, 56, 96, 96, 96]
+pass 18533: 61 cycles, line 30 cycle 44 to line 31 cycle 42, zp_game_frame mod 64 = 0, $D015 $ff, sprite Y [30, 56, 56, 56, 56, 56, 96, 96]
+pass 24677: 61 cycles, line 30 cycle 32 to line 31 cycle 30, zp_game_frame mod 64 = 0, $D015 $ff, sprite Y [30, 56, 56, 56, 56, 56, 56, 93]
+pass 24933: 61 cycles, line 30 cycle 31 to line 31 cycle 29, zp_game_frame mod 64 = 0, $D015 $ff, sprite Y [30, 56, 56, 56, 56, 56, 66, 69]
+pass 27877: 61 cycles, line 30 cycle 37 to line 31 cycle 35, zp_game_frame mod 64 = 0, $D015 $ff, sprite Y [30, 56, 56, 56, 56, 56, 56, 96]
+pass 31589: 60 cycles, line 30 cycle 35 to line 31 cycle 32, zp_game_frame mod 64 = 0, $D015 $ff, sprite Y [30, 56, 56, 56, 56, 56, 56, 61]
+pass 45093: 61 cycles, line 30 cycle 36 to line 31 cycle 34, zp_game_frame mod 64 = 0, $D015 $ff, sprite Y [30, 56, 56, 56, 56, 56, 84, 96]
+pass 46629: 61 cycles, line 30 cycle 28 to line 31 cycle 26, zp_game_frame mod 64 = 0, $D015 $ff, sprite Y [30, 56, 56, 56, 56, 56, 56, 96]
+pass 50853: 61 cycles, line 30 cycle 30 to line 31 cycle 28, zp_game_frame mod 64 = 0, $D015 $ff, sprite Y [30, 56, 56, 56, 56, 56, 96, 96]
+pass 51109: 61 cycles, line 30 cycle 36 to line 31 cycle 34, zp_game_frame mod 64 = 0, $D015 $ff, sprite Y [30, 53, 56, 56, 56, 56, 56, 96]
+pass 55269: 61 cycles, line 30 cycle 36 to line 31 cycle 34, zp_game_frame mod 64 = 0, $D015 $ff, sprite Y [30, 56, 56, 56, 56, 56, 76, 82]
+pass 56677: 61 cycles, line 30 cycle 29 to line 31 cycle 27, zp_game_frame mod 64 = 0, $D015 $ff, sprite Y [30, 56, 56, 56, 56, 93, 93, 96]
+60000 passes: cost -> passes [(56, 58736), (57, 1250), (60, 1), (61, 13)]
+start line -> passes [(28, 59047), (29, 16), (30, 937)]
+passes starting after line 29: 937   (160 s)
+
+# uv run --package budget-runner python tests/games/swarm/stage5_longrun_fails.py player 150000   (build/swarm_budget/swarm_budget.prg, VICE 3.10 x64sc PAL, DEBUG, 400 warm-up frames; raster cycles, IRQ time excluded)
+pass 13426: 359 (raw 781): start 55/33, irq_dispatch 60/20, irq_exit_rti 66/51, end 67/58; $D015 $ff, sprite Y [96, 96, 56, 56, 56, 56, 56, 60]
+pass 25249: 376 (raw 612): start 58/44, irq_dispatch 62/18, irq_exit_rti 65/52, end 68/26; $D015 $ff, sprite Y [96, 53, 56, 56, 56, 56, 56, 56]
+pass 34215: 377 (raw 606): start 58/43, irq_dispatch 60/18, irq_exit_rti 63/45, end 68/19; $D015 $ff, sprite Y [96, 56, 56, 56, 56, 56, 56, 96]
+pass 112559: 364 (raw 594): start 58/48, irq_dispatch 62/16, irq_exit_rti 65/44, end 68/12; $D015 $ff, sprite Y [96, 56, 56, 56, 56, 56, 56, 96]
+pass 141600: 390 (raw 626): start 58/54, irq_dispatch 62/18, irq_exit_rti 65/52, end 68/50; $D015 $ff, sprite Y [96, 53, 56, 56, 56, 56, 56, 61]
+pass 145898: 380 (raw 616): start 58/40, irq_dispatch 60/18, irq_exit_rti 63/52, end 68/26; $D015 $ff, sprite Y [96, 53, 56, 56, 56, 56, 56, 56]
+150000 passes: nested IRQs -> (passes, max) [(0, (146964, 346)), (1, (3018, 390)), (2, (18, 351))]
+the 12 dearest: [(345, 2), (346, 1), (348, 1), (349, 1), (351, 1), (358, 1), (359, 1), (364, 1), (376, 1), (377, 1), (380, 1), (390, 1)]   (405 s)
+
+# uv run --package budget-runner python tests/games/swarm/stage5_longrun_fails.py player 120000 --replace   (build/swarm_budget/swarm_budget.prg, VICE 3.10 x64sc PAL, DEBUG, 400 warm-up frames; raster cycles, IRQ time excluded)
+pass 13426: 389 (raw 820): start 55/33, irq_dispatch 60/16, irq_exit_rti 66/56, end 68/34; $D015 $ff, sprite Y [96, 96, 56, 56, 56, 56, 56, 60]
+pass 25249: 391 (raw 627): start 58/44, irq_dispatch 62/18, irq_exit_rti 65/52, end 68/41; $D015 $ff, sprite Y [96, 53, 56, 56, 56, 56, 56, 56]
+pass 25299: 397 (raw 633): start 58/20, irq_dispatch 60/18, irq_exit_rti 63/52, end 68/23; $D015 $ff, sprite Y [96, 56, 56, 56, 56, 56, 56, 56]
+pass 34215: 392 (raw 621): start 58/43, irq_dispatch 60/18, irq_exit_rti 63/45, end 68/34; $D015 $ff, sprite Y [96, 56, 56, 56, 56, 56, 56, 96]
+pass 40417: 364 (raw 588): start 59/7, irq_dispatch 62/15, irq_exit_rti 65/37, end 68/28; $D015 $ff, sprite Y [96, 56, 56, 56, 56, 56, 96, 96]
+pass 73983: 372 (raw 608): start 62/41, irq_dispatch 68/19, irq_exit_rti 71/53, end 72/19; $D015 $ff, sprite Y [96, 56, 56, 56, 56, 56, 56, 61]
+pass 86071: 380 (raw 604): start 58/40, irq_dispatch 62/15, irq_exit_rti 65/37, end 68/14; $D015 $ff, sprite Y [96, 56, 56, 56, 56, 56, 96, 96]
+pass 86907: 366 (raw 1241): start 67/11, irq_dispatch 68/18, irq_exit_rti 71/52, irq_dispatch 76/12, irq_exit_rti 86/8, end 86/55; $D015 $ff, sprite Y [96, 96, 96, 118, 133, 136, 136, 136]
+pass 107931: 379 (raw 603): start 58/36, irq_dispatch 60/16, irq_exit_rti 63/38, end 68/9; $D015 $ff, sprite Y [96, 56, 56, 56, 56, 56, 96, 96]
+pass 112559: 379 (raw 609): start 58/48, irq_dispatch 62/16, irq_exit_rti 65/44, end 68/27; $D015 $ff, sprite Y [96, 56, 56, 56, 56, 56, 56, 96]
+120000 passes: nested IRQs -> (passes, max) [(0, (117539, 357)), (1, (2448, 397)), (2, (13, 366))]
+the 12 dearest: [(350, 1), (356, 1), (357, 2), (364, 1), (366, 1), (372, 1), (379, 2), (380, 1), (389, 1), (391, 1), (392, 1), (397, 1)]   (344 s)
+
+# uv run --package budget-runner python tests/games/swarm/stage5_longrun_fails.py border 20000   (build/swarm_budget/swarm_budget.prg, VICE 3.10 x64sc PAL, DEBUG, 400 warm-up frames; raster cycles, IRQ time excluded)
+panel_update: starts on lines [(24, 18856), (25, 832), (26, 311), (27, 1)], ends on lines [(28, 19688), (30, 312)]
+stars_update: starts on lines [(28, 19682), (29, 6), (30, 312)], ends on lines [(29, 19687), (30, 1), (31, 312)]
+pshot_update: starts on lines [(29, 16407), (30, 3281), (31, 309), (32, 3)], ends on lines [(29, 83), (30, 19604), (31, 10), (32, 303)]
+eshot_update: starts on lines [(30, 19554), (31, 134), (32, 312)], ends on lines [(30, 266), (31, 8195), (32, 9453), (33, 1925), (34, 153), (35, 8)]
+formation_update: starts on lines [(31, 2052), (32, 8355), (33, 8879), (34, 587), (35, 126), (36, 1)], ends on lines [(36, 39), (37, 6050), (38, 9428), (39, 3585), (40, 807), (41, 90), (42, 1)]
+first IRQ after mux_irq_top (line 16) and before line 100, by line: [(52, 350), (54, 343), (56, 341), (58, 335), (60, 333), (62, 332), (64, 327), (66, 323), (68, 321), (70, 314), (72, 458), (73, 97), (74, 402), (75, 457), (76, 781), (77, 44), (78, 14441)]   (20000 frames, 146 s)
+
+# The DMA model's counts for the same cases (python3 tests/games/swarm/short_routine_dma.py, last lines):
+Split by nested IRQs (display, a badline a piece possible): one piece / two (one IRQ) / three (two IRQs):
+  player_update's 186-CPU path (the long run's 377), 6 sprites: 304 / 377 / 450
+  player_update, dearest path 201 CPU, 7 sprites (measured 397 placed): 346 / 423 / 500
+  player_update, dearest path 201 CPU, 8 sprites: 358 / 439 / 520
+  sfx_play's dearest span, 37 CPU, 8 sprites: 118 / 199 / 280

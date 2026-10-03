@@ -1,0 +1,49 @@
+# make test ARGS=swarm_budget, 2026-10-03, after the Technical Director's long-run decisions (rows 3 and 8, sfx_play 200,
+# the stars_update premise check), before the gameplay-engineer's AUTOPLAY call-order change: the premise check fails by design.
+swarm_budget  game_update: all game logic in the main loop                                         max 3,486 / budget 6,720  PASS  (estimate)
+swarm_budget  player_update                                                                        max 302 / budget 440  PASS  (estimate)
+swarm_budget  pshot_update (2 player shots)                                                        max 43 / budget 60  PASS  (measured)
+swarm_budget  panel_update                                                                         max 231 / budget 250  PASS  (measured)
+swarm_budget  stars_update                                                                         max 57 / budget 60  PASS  (measured)
+swarm_budget  formation_update (18 enemies)                                                        max 458 / budget 750  PASS  (measured)
+swarm_budget  collide_update (grid lookup, box tests for divers, the player's scans, the answers)  max 1,506 / budget 2,750  PASS  (estimate)
+swarm_budget  diver_update (3 divers, launcher)                                                    max 1,268 / budget 2,020  PASS  (measured)
+swarm_budget  eshot_update (3 enemy shots)                                                         max 155 / budget 200  PASS  (measured)
+swarm_budget  sound tick IRQ (game_irq_bottom, sfx_update)                                         max 498 / budget 498  PASS  (measured)
+swarm_budget  sfx_update in the game (worst tick: three effects starting)                          max 417 / budget 417  PASS  (measured)
+swarm_budget  sfx_play (a request from the main loop, in the display)                              max 110 / budget 200  PASS  (estimate)
+swarm_budget  mux_update in the game, frames with no overflow (rule 3)                             max 6,427 / budget 7,400; avg 4,419.46 / budget 5,000  PASS  (requirement)
+swarm_budget  mux_update in the game, all frames (flicker included)                                max 7,929 / budget 13,000  PASS  (measured)
+swarm_budget  all IRQ time per frame (multiplexer + sound tick)                                    max 2,653 / budget 4,500  PASS  (estimate)
+swarm_budget  no late chain entries                                                                irq_late_count 0 (required == 0)  PASS  (requirement)
+swarm_budget  no late sprite writes                                                                mux_late_count 0 (required == 0)  PASS  (requirement)
+swarm_budget  no frame overran (no repeated frame)                                                 game_overrun_count 0 (required == 0)  PASS  (requirement)
+swarm_budget  headroom: idle cycles in the worst frame                                             game_idle_min x 16 5,568 (required >= 45)  PASS  (requirement)
+swarm_budget  pinned sprites (player, enemy shots) never dropped                                   mux_pin_drop_count 0 (required == 0)  PASS  (requirement)
+swarm_budget  no more than 4 pinned                                                                mux_pin_excess_count 0 (required == 0)  PASS  (requirement)
+swarm_budget  nothing missing 2 frames running                                                     mux_max_age 1 / budget 1  PASS  (requirement)
+swarm_budget  the worst case is being exercised: some frames flicker                               game_flicker_frames 1,147 (required >= 1)  PASS  (requirement)
+swarm_budget  AUTOPLAY reaches the player's two scans (hits detected, not answered)                autoplay_player_hits 318 (required >= 1)  PASS  (requirement)
+swarm_budget  AUTOPLAY starts three effects in one tick (the sound tick's worst case)              autoplay_sfx_triples 199 (required >= 1)  PASS  (requirement)
+swarm_budget  soak: no frame overran in 10,000 more frames                                         game_overrun_count 0 (required == 0)  PASS  (requirement)
+swarm_budget  soak: headroom after 10,000 more frames                                              game_idle_min x 16 5,104 (required >= 45)  PASS  (requirement)
+swarm_budget  soak: no late chain entries or sprite writes (chain)                                 irq_late_count 0 (required == 0)  PASS  (requirement)
+swarm_budget  soak: no late sprite writes                                                          mux_late_count 0 (required == 0)  PASS  (requirement)
+swarm_budget  soak: pinned sprites (player, enemy shots) never dropped                             mux_pin_drop_count 0 (required == 0)  PASS  (requirement)
+swarm_budget  soak: nothing missing 2 frames running                                               mux_max_age 1 / budget 1  PASS  (requirement)
+swarm_budget  placed worst frames: diver_update (stage5_diver_worst.py)                            exit code 0 (required == 0); ALL PASS  PASS  (measured)
+swarm_budget  placed worst frames: collide_update (stage3_collide_worst.py)                        exit code 0 (required == 0); after all of the above: game_overrun_count 0, mux_late_count 0, irq_late_count 0, mux_pin_drop_co...  PASS  (measured)
+swarm_budget  stars_update starts by line 29 (row 10's premise: no sprite fetch can reach it)      exit code 1 (required == 0); FAIL: row 10's premise (stars_update starts on line 29 at the latest) does not hold in 47 of 3000...  FAIL  (requirement)
+    exit code: got 1, required == 0
+    output (last lines, after the command):
+      $ uv run --quiet --package budget-runner python tests/games/swarm/stage5_longrun_fails.py stars 3000 --check --prg=build/swarm_budget/swarm_budget.prg
+      # uv run --package budget-runner python tests/games/swarm/stage5_longrun_fails.py stars 3000 --check --prg=build/swarm_budget/swarm_budget.prg   (build/swarm_budget/swarm_budget.prg, VICE 3.10 x64sc PAL, DEBUG, 400 warm-up frames; raster cycles, IRQ time excluded)
+      pass 1125: 61 cycles, line 30 cycle 21 to line 31 cycle 19, zp_game_frame mod 64 = 0, $D015 $ff, sprite Y [30, 56, 56, 56, 56, 56, 96, 96]
+      3000 passes: cost -> passes [(56, 2937), (57, 62), (61, 1)]
+      start line -> passes [(28, 2952), (29, 1), (30, 47)]
+      passes starting after line 29: 47   (7 s)
+      FAIL: row 10's premise (stars_update starts on line 29 at the latest) does not hold in 47 of 3000 passes
+    budget source: docs/games/swarm/memory-map.md#stage-5-review (the long run) and row 10: stars_update's limit of 60 (57 CPU, no DMA) holds only where no sprite fetch can reach it, and the earliest fetch is at the end of line 30 (a wrapped diver at Y 30). tests/games/swarm/stage5_longrun_fails.py traces 3,000 passes of this AUTOPLAY build (about 47 frames with AUTOPLAY's three sound requests) and fails if any starts on line 30 or later. Added 2026-10-03, after make test-long read 61: FAILS until the gameplay-engineer moves `jsr autoplay_update` in games/swarm/src/main.asm to straight after `jsr stars_update` (937 of 60,000 passes start on line 30 before the change). Pass = exit code 0. About 12 seconds
+swarm_budget  stick behaviour (check.py)                                                           exit code 0 (required == 0); ALL PASS  PASS  (requirement)
+budget-runner: 34/35 checks passed, 1 FAILED (1 spike run)
+make: *** [test] Error 1
