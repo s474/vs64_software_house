@@ -1,0 +1,18 @@
+[project]
+name = "gametest"
+version = "0.1.0"
+description = "Reusable harness for behaviour tests of a C64 game in headless VICE: a rig (frame stepping, joystick, labels, memory), a case runner with a clean-state guard, and result files"
+requires-python = ">=3.13"
+dependencies = ["budget-runner"]
+
+[tool.uv.sources]
+budget-runner = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

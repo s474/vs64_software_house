@@ -410,7 +410,7 @@
       "kind": "script",
       "basis": "requirement",
       "source": "tests/games/swarm/check.py: joystick-driven cases on the game itself (the DEBUG build of games/swarm, not this AUTOPLAY wrapper, which ignores the stick; 'build' makes it first). The script starts its own VICE; pass = exit code 0. The release build is still checked by hand with --prg",
-      "command": ["uv", "run", "--quiet", "--package", "budget-runner", "python", "tests/games/swarm/check.py", "--prg", "{prg}"],
+      "command": ["uv", "run", "--quiet", "--package", "gametest", "python", "tests/games/swarm/check.py", "--prg", "{prg}"],
       "build": {"game": "swarm"},
       "timeout": 300
     }

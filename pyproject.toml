@@ -13,4 +13,4 @@ dependencies = []
 package = false
 
 [tool.uv.workspace]
-members = ["mcp/vice", "tools/png2sprites", "tools/budget-runner", "tools/release-check"]
+members = ["mcp/vice", "tools/png2sprites", "tools/budget-runner", "tools/release-check", "tools/gametest"]

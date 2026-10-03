@@ -1,6 +1,10 @@
 """Shared helpers for the stage 5 QA scripts (qa_*.py) of Swarm: one VICE, stepped one game frame
 at a time, with the stick, the game's labels, a stick-driven bot and a PNG writer.
 
+The generic parts (VICE on a free port, the stick, the frame stop, labels and memory, results of a stop that
+doesn't come) are tools/gametest's Rig; Game wraps one and adds Swarm's state readers and the bot. check.py's
+own helpers are swarmtest.py (a SwarmRig: the same Rig plus the placing helpers).
+
 Not run by itself. Used by qa_soak.py, qa_play.py and qa_positions.py (same folder), from the repo root:
 
     uv run --package budget-runner python tests/games/swarm/qa_soak.py ...
@@ -15,13 +19,13 @@ import sys
 import zlib
 from pathlib import Path
 
-from budget_runner.session import STOP_TIMEOUT, MeasureError, Vice
+from budget_runner.session import STOP_TIMEOUT, MeasureError, Vice  # noqa: F401  (the QA scripts star-import these)
+from gametest import BITS, Rig
 from vice_monitor import CPU_OP_EXEC  # on sys.path once budget_runner.session is imported
 
 REPO = Path(__file__).resolve().parents[3]
 DEBUG_PRG = REPO / "build/swarm/swarm.prg"
 RELEASE_PRG = REPO / "build/swarm-release/swarm.prg"
-BITS = {"up": 0x01, "down": 0x02, "left": 0x04, "right": 0x08, "fire": 0x10}
 JOYPORT_IO_SIMULATION = 37
 PORT2 = 1
 MUX_OFF = 0xFF
@@ -33,32 +37,30 @@ ENEMY_DEAD, ENEMY_PARKED, ENEMY_WAITING = 0, 1, 2
 
 
 class Game:
+    """One VICE on a game build, stepped one game frame at a time (a gametest.Rig underneath: .rig)."""
+
     def __init__(self, prg=DEBUG_PRG, warmup=0):
-        self.prg = Path(prg)
-        self.v = Vice(self.prg, warmup)
-        self.mon, self.sym = self.v.mon, self.v.symbols
-        self.mon.resource_set("JoyPort2Device", JOYPORT_IO_SIMULATION)
-        self.mon.joyport_set(PORT2, 0x1F)
-        a = self.sym["game_update_end"]
-        self.cp = self.mon.checkpoint_set(a, a, CPU_OP_EXEC)
+        self.rig = Rig(prg, frame_label="game_update_end", warmup_frames=warmup, debug_labels=("mux_late_count",))
+        self.prg = self.rig.prg
+        self.v = self.rig.vice
+        self.mon, self.sym = self.rig.mon, self.rig.sym
+        self.cp = self.rig.frame_stop
         self.frames = 0
-        self.debug = "mux_late_count" in self.sym
+        self.debug = self.rig.is_debug
         self.stick = 0
 
-    # ---- memory
+    # ---- memory (by label)
     def mem(self, label, n=1, off=0):
-        a = self.sym[label] + off
-        return self.mon.mem_get(a, a + n - 1)
+        return self.rig.peeks(label, n, off)
 
     def peek(self, label, off=0):
-        return self.mem(label, 1, off)[0]
+        return self.rig.peek(label, off)
 
     def peek16(self, label):
-        b = self.mem(label, 2)
-        return b[0] + 256 * b[1]
+        return self.rig.peek16(label)
 
     def poke(self, label, data, off=0):
-        self.mon.mem_set(self.sym[label] + off, bytes(data))
+        self.rig.poke(label, data, off)
 
     def score(self):
         return int(self.mem("game_score", 3).hex())
@@ -70,13 +72,8 @@ class Game:
     def step(self, pressed=None):
         """Optionally set the stick (list of names or mask), run to the next game_update_end."""
         if pressed is not None:
-            m = pressed if isinstance(pressed, int) else sum(BITS[p] for p in pressed)
-            self.stick = m
-            self.mon.joyport_set(PORT2, ~m & 0x1F)
-        self.mon.exit()
-        if not self.mon.wait_stopped(STOP_TIMEOUT):
-            self.mon.ping()
-            raise MeasureError(f"game_update_end not reached (frame {self.frames}): jam? jammed_pc={self.mon.state.jammed_pc}")
+            self.stick = pressed if isinstance(pressed, int) else sum(BITS[p] for p in pressed)
+        self.rig.step(pressed)
         self.frames += 1
 
     def run(self, n, pressed=None):
@@ -196,4 +193,4 @@ class Game:
         Path(path).write_bytes(png)
 
     def close(self):
-        self.v.close()
+        self.rig.close()
