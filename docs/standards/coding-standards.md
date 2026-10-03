@@ -41,7 +41,8 @@ Zero page is scarce and shared, so it is **allocated, never grabbed**:
 - Engine modules document the zero page they need. The game's `zp.asm` assigns it.
 - `$00/$01` are the processor port: never used for data.
 - Scratch registers `zp_tmp0`–`zp_tmp7` may be used by any routine that doesn't call another routine
-  while holding them, and **never inside IRQ handlers** (an IRQ could interrupt a routine using them).
+  while holding them (exception: across a call to a routine documented as using no zero page, such as
+  `sfx_play`, which is how a caller keeps a register it clobbers), and **never inside IRQ handlers** (an IRQ could interrupt a routine using them).
   IRQ handlers get their own `zp_irq_*` locations.
 - The game's memory map doc lists the zero-page ranges.
 

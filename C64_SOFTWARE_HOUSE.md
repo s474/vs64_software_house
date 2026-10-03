@@ -252,7 +252,7 @@ Each game then picks one or two headline techniques from this shelf. That's how 
 | M1 | VICE MCP server with screenshot, memory, joystick, frame-step | Claude can boot a PRG, press fire, and describe the screenshot | ✅ Done ([mcp/vice](mcp/vice/README.md)) |
 | M2 | `CLAUDE.md`, the first five reference docs, the first four agents | An agent answers "how many cycles on a badline?" from the repo docs | ✅ Done. The Technical Director answered from the docs, then extended them with new measured probes |
 | M3 | Engine basics: stable raster IRQ framework, sprite multiplexer v1, PNG → sprite converter | Spike demos pass automated cycle-budget tests | ✅ Done, signed off 2026-10-01 ([brief](docs/milestones/M3-engine-basics.md)). Follow-ups due before M4 uses the multiplexer; multiplexer v2 due before M5 |
-| M4 | **Training game:** a small single-screen game (Robotron- or Galaga-like) | Playable, tested, and you find it fun for five minutes | Planned: [brief](docs/milestones/M4-training-game.md). Galaga-style, all-sprite formation |
+| M4 | **Training game:** a small single-screen game (Robotron- or Galaga-like) | Playable, tested, and you find it fun for five minutes | ✅ Done, signed off 2026-10-03 ([brief](docs/milestones/M4-training-game.md)): "Swarm", Galaga-style, on a bootable disk. Art is placeholder. Before M5: multiplexer v2 and an art trial |
 | M5 | First real title: pitch → feasibility spike → vertical slice | Vertical slice you'd be proud to show on CSDb or Lemon64 | |
 
 M4 is deliberately modest. It shakes out the tools, process and agent prompts on something small before you bet on an ambitious title.
@@ -264,7 +264,7 @@ M4 is deliberately modest. It shakes out the tools, process and agent prompts on
 Progress is tracked in the [milestone table](#10-suggested-first-milestones). Each milestone from
 M3 on has its own brief in [docs/milestones/](docs/milestones/).
 
-**Now: M4 stage 5 (ship)**: QA run, the long soak and sign-off: see the [M4 brief](docs/milestones/M4-training-game.md).
+**Done: M4**, signed off 2026-10-03: see the [M4 brief](docs/milestones/M4-training-game.md), "M4 result and lessons".
 
 **Before M5:**
 

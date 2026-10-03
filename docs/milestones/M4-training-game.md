@@ -8,6 +8,8 @@ broken before a real title (M5) depends on it.
 game's own budgets; QA's scripted play and soak pass in both builds; a release build boots from a
 disk image; and Simon finds it fun for five minutes.
 
+**Status: done, signed off 2026-10-03.** Every condition met; see [M4 result and lessons](#m4-result-and-lessons-signed-off-2026-10-03).
+
 ## What M4 is testing
 
 | What we're trying out | Why it matters |
@@ -194,18 +196,50 @@ more shot a dive. Wave 1 now fires 0.98 shots a second with the formation full (
 constants and three tables; no rule changed. `diver_update` now peaks at 1,296 against 1,350.
 Simon: "difficulty is much better".
 
-### Stage 5: ship (2026-10-02, in progress)
+### Stage 5: ship (2026-10-02 to 03): done
 
-- Release disk image: `make release GAME=swarm` → `dist/swarm/swarm.d64`; `make test-release GAME=swarm`
-  boots it in headless VICE to the title (tools-engineer, `de3c671`).
-- **Gate: Simon played the release disk on the C64 Ultimate: it loads fine, and "I think it passes fun
-  for five minutes".**
-- Still to come: the Technical Director's review, the QA soak and positions run, the long run.
-- **Art (deliverable 5): placeholder, not approved (Simon, 2026-10-02).** The 13 sprites were drawn by
-  a script (`games/swarm/art/make_sprites.py`) and "are not great"; Swarm ships with them. The pipeline
-  works (replace `sprites.hires.png`, run `check_sprites.py`, rebuild), but the studio has no art role,
-  no art direction step and no preview put to Simon for approval. An art trial on Swarm is planned
-  before M5: see the plan's [next actions](../../C64_SOFTWARE_HOUSE.md#11-next-actions).
+| Item | Result |
+|---|---|
+| Release disk | `make release GAME=swarm` → `dist/swarm/swarm.d64` (27 blocks; 18,859 bytes raw, 6,630 crunched); `make test-release` boots it and the crunched PRG in headless VICE to the title (tools-engineer, `de3c671`). Release builds now have their own `build/<title>-release/` |
+| Technical Director's review | Fit to ship, with QA and the long run as conditions (`0cf34d3`). No engine rule broken; 11 low findings (stale comments, one missing build-time check). `diver_update`'s placed worst frame is 1,924 against its 1,350 row: the row is now 2,020, and the budget 7,155 of 7,200 (headroom 45 on paper; the least idle in any measured frame is 5,104). Stage 5's soak checks are on: `make test` 113/113 |
+| QA | Pass, no bugs (`8327633`, [qa-stage5.md](../games/swarm/qa-stage5.md)): 6 bot games checked every frame against the design; 0 position mismatches in about 744,000 checks (F3), write-timing slack 27 DEBUG / 42 release under hostile layouts (engine figures 17 / 39); about 310,000 soak frames with every counter 0; release identical to DEBUG frame for frame; 24 edge cases |
+| Gate: fun for five minutes | **Passed.** Simon played the release disk on the C64 Ultimate: "loaded fine … I think it passes fun for five minutes" |
+| Art (deliverable 5) | **Placeholder, not approved** (Simon). The 13 sprites were drawn by a script (`games/swarm/art/make_sprites.py`) and "are not great"; Swarm ships with them. The pipeline works (replace `sprites.hires.png`, run `check_sprites.py`, rebuild), but the studio has no art role, no art direction step and no preview put to Simon. An art trial is planned before M5: see the plan's [next actions](../../C64_SOFTWARE_HOUSE.md#11-next-actions) |
+| Long run | `make test-long ARGS=swarm_budget` (Simon, 2026-10-03): **32/34, 2 failed.** `player_update` 377 against 365 (its counted worst was 358) and `stars_update` 61 against 60 (said to repeat exactly every 48 frames). No frame overran, every counter 0, least idle 4,912. Both were counts right about the code and wrong about where it runs: a zone IRQ can split `player_update` so each piece meets a badline (placed worst 397; row 365 → 440, paid for by collisions 2,825 → 2,750, total unchanged), and AUTOPLAY's sound requests every 64th frame pushed `stars_update` onto line 30 (budget build only; the call moved, `3d88135`, `8b931d6`). Game PRGs byte-identical; `make test` 114/114. Repeat `make test-long LONG_SCALE=10 ARGS=swarm_budget` (Simon, 2026-10-03): **35/35 passed**; least idle 4,944, every counter 0 |
+
+## M4 result and lessons (signed off 2026-10-03)
+
+**Result.** Swarm is a complete, tuned, single-screen Galaga-style game with sound, on a bootable disk,
+that Simon finds fun for five minutes on real hardware. Every engine module it needed (input, rng,
+collision, sound) was built with a spike and budget checks, and the game runs with every engine counter
+at zero through every soak.
+
+**What the engine taught us** (in full: [memory map](../games/swarm/memory-map.md), "What Swarm taught
+us about the engine"):
+
+- CPU was never the limit: the least idle in any measured frame was 5,104 cycles. Sprites were: 24 of
+  24 virtual sprites and 4 of 4 pins, both reached because of bullets.
+- "Divers can't leave by the bottom" is really "v1 allows only a bottom panel". Simon named it as one
+  reason the game was too easy, and QA found its effect (the right edge is almost safe). Multiplexer
+  v2 should make a top panel possible, and decide between more sprites and pins or character bullets.
+
+**What the process taught us:**
+
+1. **A tuning is a budget change.** Three tables and no code exposed a routine 40% over its row,
+   which the sampled check didn't see. Placed worst frames now run in `make test`; next time a design
+   tuning goes back to the Technical Director by rule.
+2. **Sampled maxima and counted worsts aren't worst cases.** Five of them weren't (three sampled, two counted: the counts missed an IRQ splitting a routine, and the test build's own work moving a routine). Check each count's premise (start line, IRQs inside) in ordinary `make test`. Place the worst frame by hand from the
+   first stage, and budget the next game by frame kind, not as a sum of per-routine worst cases.
+3. **Build-to checklists work.** The memory map's stage 4 part B checklist (nine call sites, three
+   rules, expected figures) went in on one pass, every figure inside its expected range. Marking the
+   places in code ahead of a split stage ("SFX (part B)") made the wiring mechanical.
+4. **Tests that only pass because of slack.** Shortening the wave intro exposed `check.py` cases that
+   depended on 100 frames of settling. A clean-state guard at the start of each case, and `check.py`'s
+   helpers in a module QA can reuse, are worth doing for the next game.
+5. **Ownership of measuring scripts was unclear** in briefs; say who owns each script.
+6. **Art had no process.** No art role, no direction, no approval preview. Planned as an art trial.
+7. **Long runs belong in Simon's terminal** (background commands stop at 10 minutes), and parallel
+   agents need disjoint files and one owner of the VICE MCP emulator at a time.
 
 ## The game (scope for M4)
 

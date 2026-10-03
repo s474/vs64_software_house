@@ -16,7 +16,7 @@ BasicUpstart2(start)
 #import "zp.asm"                        // every zero-page label below
 .const MUX_SCREEN = $0400               // before the multiplexer import
 .const MUX_Y_MAX  = 221                 // largest sprite Y shown: 80-249
-* = $0810 "Engine"                      // allow about 7.2 KB (Swarm: 6,293 measured + sound)
+* = $0810 "Engine"                      // allow about 7.2 KB (Swarm, with sound: 7,033 measured)
 #import "engine/irq.asm"
 #import "engine/multiplexer.asm"
 #import "engine/input.asm"              // 32 bytes
@@ -77,8 +77,9 @@ for the tick, and a second wait halves the frame rate. Copy Swarm's.
   line 16, the first badline at 51, no sprite before line 30): input, panel, anything that
   depends on nothing else. There its cost is its CPU count. Then the movers, then the collisions.
 - **Seed when the player starts, and step the generator while the title waits** (`jsr rng_next`
-  once a title frame). `$D012` read by main-loop code on a title screen is the same line every
-  frame (by count: the title does the same work each frame; Swarm measures it in stage 4), so
+  once a title frame). `$D012` read by main-loop code on a title screen is the same line, or one of two
+  lines, every frame (measured: Swarm's read falls between line 26 cycle 61 and line 27 cycle 11, so
+  it returns 26 or 27; `tests/games/swarm/stage5_newgame_trace.py`), so
   "frame counter and raster line" alone is about 256 different games
   ([Swarm's rule](../docs/games/swarm/memory-map.md#stage-4-what-must-be-done-to-stay-in-budget), (d)).
 
