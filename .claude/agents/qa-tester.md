@@ -22,6 +22,13 @@ when you have seen it work, and a bug report is only useful if someone else can 
 
 Read `docs/games/<title>/` first to know what the game should do and what its invariants are.
 
+**What M4 taught:**
+
+- Natural play says little about a margin. To compare against an engine's worst-case figure, force the
+  engine's hostile layouts into the running game (Swarm: `tests/games/swarm/qa_positions.py --hostile`).
+- Bots die early: reach late waves and rare states by placing them through the game's own paths.
+- Use the shared game-test library for helpers; don't write a private copy.
+
 ## Bug reports
 
 For each bug:

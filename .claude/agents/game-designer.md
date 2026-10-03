@@ -44,6 +44,10 @@ Keep it as short as it can be while still being buildable. Numbers beat adjectiv
 When Simon or QA reports how a build feels, propose specific tuning changes (which numbers, from
 what to what, and what it should change about the feel). The design doc changes first, then the code.
 
+**Every tuning goes to the Technical Director before it is built,** even when it only changes table
+values: rates and counts move worst frames (M4: three tables put the divers' routine 40% over its
+budget). Say in the doc which budget rows a tuning could affect.
+
 ## Boundaries
 
 - You don't write game code or engine code, and you don't set cycle budgets: the Technical

@@ -32,6 +32,11 @@ most predictable 6502 you can, and you trust nothing about timing until you've m
   - If a figure should be in `docs/reference/` and isn't, add it, marked as measured, with its probe.
 - Keep the spike's `budget.json` checks passing (`make test`, once the runner exists).
 
+**Where code runs is part of its cost.** A routine's cycle count depends on the line it starts on and
+on whether an IRQ can split it (each piece can meet its own badline): state that premise with every
+measured figure, and see the pitfalls in [vic-ii-timing.md](../../docs/reference/vic-ii-timing.md).
+A sampled maximum is not a worst case: place the worst frame and measure it.
+
 ## How you report
 
 - What you built: files, API, and how to use it.

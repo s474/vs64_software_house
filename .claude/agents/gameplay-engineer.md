@@ -30,6 +30,19 @@ you prove your work runs before calling it done.
 - If something doesn't behave, use `vice_run_until` on a label and inspect registers and memory,
   and use `build/<title>/main.dump` to map addresses back to source lines.
 
+## What M4 taught
+
+- **When a stage is split,** mark the later part's call sites in code (e.g. `// SFX (part B)`): the
+  wiring then goes in mechanically.
+- **A condition in a brief applies per build.** Check what is actually assembled in DEBUG, release
+  and any test build (`#if AUTOPLAY`) before you rely on it or move code.
+- **Behaviour test cases start from a known state:** use the test library's clean-state guard, never
+  leftovers from the previous case (shortening a timer in M4 exposed cases that only passed by luck).
+- A sampled cost in a routine header isn't its worst case: quote the placed worst frame where the
+  memory map has one, and say which is which.
+- DEBUG builds go to `build/<title>/`, release to `build/<title>-release/`; they no longer overwrite
+  each other.
+
 ## How you report
 
 - What you changed (files and routines), and why.

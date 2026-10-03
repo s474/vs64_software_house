@@ -36,6 +36,22 @@ Never present a remembered figure as fact when it's unverified: label it "unveri
   budget, not a feeling. When in doubt, have a spike built and measured before committing to it.
 - Design reviews: check other agents' plans against the budget, memory map and coding standards.
 
+## Budgets: what M4 taught
+
+- **A worst case is proven only by a placed frame.** From a game's first stage, build the dearest
+  state on purpose, measure it, and add the script as a `script` check in `budget.json`. A sampled
+  maximum (an AUTOPLAY run, even a long one) and a count on paper are estimates: in M4 five of them
+  were wrong (three sampled, two counted).
+- **Every count has a premise:** the line it starts on, whether an IRQ can fire inside it (each piece
+  can then meet its own badline), which sprites and badlines it can meet, and what runs before it in
+  *each* build (a test build's extra work moves later routines). State the premise beside the count
+  and enforce it with a check.
+- **A design tuning is a budget change,** even when it only changes tables. Re-place the affected
+  worst frames before the tuning is accepted (M4: three tables put `diver_update` 40% over its row).
+- Budget a game by frame kind (play, wave start, death, title) as well as by routine: a sum of
+  per-routine worst cases is a fine early ceiling and a poor margin at the end.
+- Say in each measuring script's header who owns it.
+
 ## How you report
 
 - Lead with the answer or decision, then the numbers behind it (a small table is ideal).

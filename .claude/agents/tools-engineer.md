@@ -28,6 +28,9 @@ The VICE MCP server (`mcp/vice/`) wraps VICE's binary monitor. Its `vice_monitor
 Python client, reusable in test harnesses. Read `mcp/vice/README.md` before changing or reusing it,
 and run `cd mcp/vice && uv run smoke_test.py` after any change there.
 
+Helpers that more than one game or role could use go in the shared libraries under `tools/`, not
+inside one game's script (M4: `check.py`'s helpers were locked in one function and QA had to copy them).
+
 ## How you report
 
 - What the tool does, how to run it, and example output.

@@ -292,16 +292,24 @@ routines; and spread set-up that grows with the number of objects over several f
 - The game's budget build is `tests/games/<title>/main.asm`: `#define AUTOPLAY`, then `#import`
   the game, which then plays its worst case with no stick. Put `name:` and `name_end:` (on the
   final `rts`) around each budgeted routine, and keep the DEBUG overrun count and idle minimum.
-- Stick-driven behaviour is checked by a script beside the budget file (Swarm:
-  `tests/games/swarm/check.py`). `make test` runs it as a `script` check in the budget file
-  (DEBUG build); run it by hand with `--prg` on the release build.
+- Stick-driven behaviour is checked by a script beside the budget file, written with
+  [`tools/gametest`](../tools/gametest/README.md): subclass `Rig` for the game's state readers,
+  register cases with `@suite.case(name, needs=...)`, and give the suite a clean-state guard that
+  checks each case's start state, so a case that only passed on the previous case's leftovers fails
+  loudly. Swarm's `tests/games/swarm/check.py` and `swarmtest.py` are the worked example. `make test`
+  runs it as a `script` check (`uv run --package gametest ...`, DEBUG build); run it by hand with
+  `--prg` on the release build.
 - **A budget build in which nothing dies can't measure what dying costs**, and a scripted run
   doesn't place a worst frame. Those are measured on the game's DEBUG build, with the state set
   through the monitor, by a script beside the budget file whose output is committed (Swarm:
   `tests/games/swarm/stage3_costs.py`).
-- **A sampled maximum of a routine that runs in the display is a look, not a bound**: it lands on
-  a different raster line every frame. Its limit is the counted worst case; a border routine's
-  sampled maximum is its maximum once the samples cover its own state's cycle.
+- **A sampled maximum is a look, not a bound, and a count is only as good as its premise.** A
+  routine's cost depends on where it runs: the line it starts on (which depends on all the work
+  before it, in each build: a test build's extra work moves later routines) and whether a zone IRQ
+  splits it, so that each piece meets its own badline. Swarm's long run broke two figures this way
+  ([memory map](../docs/games/swarm/memory-map.md#the-long-run)). State each count's premise and
+  enforce it in the budget file (`start_line_max`, `end_line_max`, `irqs_inside_max`; `-v` prints
+  it), and place the worst frame and measure it as a `script` check from the first stage.
 - A failing budget check is reported with the measured figure. Limits aren't edited to pass.
 - `"stage"` and `from_stage` are whole numbers: a stage built in parts can't switch on half its
   checks. Number a new game's stages in tens; Swarm's way round it is in its
