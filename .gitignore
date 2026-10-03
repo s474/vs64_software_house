@@ -5,3 +5,4 @@ screenshots/
 __pycache__/
 .claude/settings.local.json
 dist/
+releases/

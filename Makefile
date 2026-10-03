@@ -5,6 +5,9 @@
 #                        crunch, bootable disk -> dist/$(GAME)/$(GAME).{prg,-sfx.prg,.d64,.vs}
 #                        (dist/ survives make clean). make crunch / make d64 are aliases.
 #   make test-release    release, then boot the d64 and the crunched PRG in headless VICE
+#   make publish         DRAFT GitHub release: needs TAG=<tag>, a clean tree and a passing test-release;
+#                        tags, pushes that one tag, drafts the release with the d64 + crunched PRG
+#                        (DRY_RUN=1 prints the git/gh commands instead). See tools/release-check/README.md
 #   make test            budget runner: build + run the engine spikes in VICE, check budget.json
 #   make test-long       the same checks with ~34x the samples and frames (LONG_SCALE=n to change)
 #   make test-tools      pytest for the Python tools
@@ -73,7 +76,7 @@ DEP      := $(OUT_DIR)/$(GAME).d
 DEPINFO  := $(OUT_DIR)/.asminfo
 DEPAWK   := '/^\[files\]/{f=1;next} /^\[/{f=0} f{sub(/^[0-9]+;/,""); sub(/^\.\//,""); if ($$0 !~ /^KickAss.jar:/) print}'
 
-.PHONY: all run run-sfx release crunch d64 test-release clean test test-long test-tools
+.PHONY: all run run-sfx release crunch d64 test-release publish clean test test-long test-tools
 
 all: $(PRG)
 
@@ -144,6 +147,11 @@ $(D64): $(SFX)
 
 test-release: release
 	@uv run --quiet --package release-check release-check $(GAME)
+
+# TAG has no default on purpose: nothing is tagged, pushed or drafted unless it is given.
+publish:
+	@test -n "$(TAG)" || { echo "make publish: TAG=<tag> is required (e.g. make publish GAME=$(GAME) TAG=$(GAME)-m5); nothing was changed" >&2; exit 2; }
+	@SRC_DIR="$(SRC_DIR)" ASSET_DIR="$(ASSET_DIR)" uv run --quiet --package release-check release-publish $(GAME) $(TAG) $(if $(DRY_RUN),--dry-run)
 
 run: $(PRG)
 	$(X64) -moncommands $(OUT_DIR)/main.vs -autostart $(PRG) >/dev/null 2>&1 &
