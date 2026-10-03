@@ -36,8 +36,10 @@ title's rows and sprite Y** (its three enemies overlapped:
 playtest of stage 4 ("too easy"): the first behaviour change since approval.** The wave's start is
 shorter (first dive 1.2 s after the wave appears, not 3.0 s) and every wave launches more often and
 fires more: six constants and three tables, listed from → to in
-[Tuning after the stage 4 playtest](#tuning-after-the-stage-4-playtest). **Not yet built:** until it
-is, the game plays the old numbers, which that section keeps.
+[Tuning after the stage 4 playtest](#tuning-after-the-stage-4-playtest). **Built in `2d6cf3f` and
+approved by Simon on 2026-10-02** ("difficulty is much better"); the Technical Director's stage 5
+review and QA's stage 5 pass measured it ([Close to the limits after the
+tuning](#close-to-the-limits-after-the-tuning)). That section keeps the old numbers beside the new.
 
 Every number that can be checked without the game is checked by
 [tests/games/swarm/check_design.py](../../../tests/games/swarm/check_design.py)
@@ -684,12 +686,12 @@ says "replaces". **Rules 2, 3 and 8 changed on 2026-10-02 after the stage 4 play
 |---|---|---|
 | 1 | **A wave phase** (Intro, Fight, Clear) with its own timer, beside the game state. **The wave timer counts in every frame in which lives > 0** (Play, Respawn, and PlayerDying unless the last life has just gone); it stands still in the last PlayerDying, in GameOver and at the title. Replaces Stage 3 rule 12 and Stage 2 rule 3's stage 2 and 3 behaviour | As built, the formation's pause already runs on its own timer whatever the player is doing. Stopping it with the last life keeps `WAVE nn` and a wave number the player never played off the game-over screen |
 | 2 | **Intro, 50 frames (0–49).** Frame 0: every enemy is Waiting (hidden, can't be hit, isn't Parked); **enemies alive = 18**; `fx` = 48 moving right, and the drift and the animation run from this frame; `WAVE nn` is written (rule 6); the panel's `WAVE` is redrawn; the wave start sound. **Enemy k (0–17: row 0 left to right, then rows 1 and 2) becomes Parked at its home in frame 2k,** so the last appears in frame 34. Frame **49**: `WAVE nn` is erased (the erase frame must be odd, past frame 34 and inside Intro: the code's own rule). Nothing launches in Intro | 18 alive from frame 0 so the wave can't read as cleared while it is still arriving. One enemy every 2 frames keeps the multiplexer's sort to one new sprite at a time |
-| 3 | **Fight** starts in the frame after Intro's frame 49 (wave frame 50), with the launch timer set to **10: its own constant, not the 50 of entering Play.** **The launcher runs only when the game state is Play and the phase is Fight;** entering Play still sets the timer to 50 (Stage 3 rule 10), and whichever of the two is set later stands | First launch **60** frames after the wave appears (150 as first built): 25 frames after the last enemy is in place and 11 after `WAVE nn` goes. The wind-up is the warning, so the pause before it only gave the player free kills |
+| 3 | **Fight** starts in the frame after Intro's frame 49 (wave frame 50), with the launch timer set to **10: its own constant, not the 50 of entering Play** (the code stores `FIGHT_LAUNCH_DELAY` + 1 = 11, and the launcher's decrement in that same frame leaves 10: [as built](#stage-4-part-a-as-built) a). **The launcher runs only when the game state is Play and the phase is Fight;** entering Play still sets the timer to 50 (Stage 3 rule 10), and whichever of the two is set later stands | First launch **60** frames after the wave appears (150 as first built): 25 frames after the last enemy is in place and 11 after `WAVE nn` goes. The wind-up is the warning, so the pause before it only gave the player free kills |
 | 4 | **Clear, 75 frames.** Starts in the frame enemies alive reaches 0 (the last explosion ends: Stage 2 rule 2), whatever the game state. In that frame: **+ 1,000** and the wave clear sound. The sky is empty; the player moves and fires. No enemy is in WindUp, Dive or Return at a Clear (all 18 are dead, and a hit frees its diver slot at once), so the next Intro starts with divers active = 0 and every diver slot free: if the code's re-park doesn't guarantee that, it must clear them | The bonus is paid when it is earned, also to a dying player: with the last life gone it still counts toward the high score, which is taken 100 frames after the hit |
 | 5 | **The frame after Clear's 75th:** shown wave + 1 (BCD, sticks at 99), pattern + 1 (2 wraps to 0), and loop + 1 when the pattern wraps (sticks at 3); then Intro's frame 0 with the new numbers. **Only here do the three stores change in a game;** a new game sets them to 01, 0, 0 (rule 10) and its first Intro doesn't advance them. Everything a loop changes (drift speed, wind-up, steps, shots, shot speed) is read from the loop store when it is used: no diver or enemy shot exists when it changes | Stage 1 rule 8. A test can still set the stores |
 | 6 | **Row 9 holds one message at a time.** `WAVE nn` is `WAVE`, a space and the shown wave's two digits (`WAVE 01`). `GAME OVER` is written over whatever is there (it covers columns 15–23, the widest). **`READY` is written only if the phase is Fight in Respawn's first frame, and erased at Respawn's end only if it was written;** Respawn's 50 frames, the ship and the flash are the same without it. `WAVE nn` and `GAME OVER` can't meet: with the last life gone the wave timer stops (rule 1), and the player can't be hit while `WAVE nn` shows (rule 7) | A Respawn that falls in a Clear or an Intro would write `READY` into `WAVE nn` or erase part of it. The wave message says the same thing: get ready |
 | 7 | **What can hit the player outside Fight:** only an enemy shot still in flight in Clear's first 51 frames (the longest-lived shot lasts 67 frames and its diver died at least 16 before the Clear). Nothing in Intro. A death there is an ordinary death | No special case |
-| 8 | **A typical case, to check the rules against:** the player rams the last enemy in frame d with lives left. d + 16: Clear, + 1,000. d + 91: Intro frame 0, `WAVE nn`, enemies appearing. d + 100: Respawn, the ship back, no `READY` (phase Intro). d + 140: `WAVE nn` erased. d + 141: Fight, launch timer 10 (not counted: the state is Respawn). d + 150: Play, which sets the launch timer to 50. d + 199: first launch (Play's frame 49, as built). d + 250: invulnerability ends; the first thing that can hit him is that Hook in d + 257. (As first built: erased d + 166, Fight d + 191, launch d + 241.) **The other order,** Play entered before Fight (he died earlier, so the Respawn ends inside the Intro): Fight's 10 stands and the first launch is 10 frames after Fight, at the soonest Play's frame 11; at loop 0 that dive and its shots reach the ship in Play's frames 69–74, inside the 100 invulnerable frames, and pass through him. Accepted: it needs a wave cleared while dying With the last life: d + 16 Clear and + 1,000, the timer stops, d + 100 GameOver over an empty sky | |
+| 8 | **A typical case, to check the rules against:** the player rams the last enemy in frame d with lives left. d + 16: Clear, + 1,000. d + 91: Intro frame 0, `WAVE nn`, enemies appearing. d + 100: Respawn, the ship back, no `READY` (phase Intro). d + 140: `WAVE nn` erased. d + 141: Fight; the code stores 11 (`FIGHT_LAUNCH_TIMER` = `FIGHT_LAUNCH_DELAY` + 1, because the launcher decrements before it tests and is meant to count once in Fight's first frame), but the state is Respawn, so nothing counts and it stays 11. d + 150: Play, which sets the launch timer to 50. d + 199: first launch (Play's frame 49, as built). d + 250: invulnerability ends; the first thing that can hit him is that Hook in d + 257. (As first built: erased d + 166, Fight d + 191, launch d + 241.) **The other order,** Play entered before Fight (he died earlier, so the Respawn ends inside the Intro): Fight's 10 stands and the first launch is 10 frames after Fight, at the soonest Play's frame 11; at loop 0 that dive and its shots reach the ship in Play's frames 69–74, inside the 100 invulnerable frames, and pass through him. Accepted: it needs a wave cleared while dying With the last life: d + 16 Clear and + 1,000, the timer stops, d + 100 GameOver over an empty sky | |
 
 **The title, starting and ending a game**
 
@@ -940,7 +942,8 @@ at the start of each wave when the player can fire, but the enemies can't", part
 enemies don't fire enough generally". He also notes, and accepts for this version, that divers leave
 to the side, not off the bottom (an engine v1 limit), so a diver rarely threatens on its way out.
 
-**Status: designed, not yet built.** Every change is a constant or a table value. No rule, path,
+**Status: built in `2d6cf3f`, approved by Simon on 2026-10-02** ("difficulty is much better"),
+passed by the Technical Director's stage 5 review and QA's stage 5 pass. Every change is a constant or a table value. No rule, path,
 speed, wind-up, hit box, score or sound changes, and no maximum count: still at most 3 divers and 3
 enemy shots, 24 sprites, 4 pinned. Figures marked "model" come from
 [free_period.py](../../../tests/games/swarm/free_period.py) and `check_design.py`
@@ -1075,15 +1078,38 @@ at `FIGHT_LAUNCH_TIMER` and `WAVE_PHASE_INTRO`, `game_wave_step`'s header) chang
 
 ### Close to the limits after the tuning
 
-- **Flicker:** the worst wave in the model is now wave 3 (pattern 3, loop 0) at 11.6% of frames
-  with a sprite dropped, against 10.5% for the old worst (wave 12). Still one frame at a time, never
-  the player or an enemy shot (feel target 5 holds in the model). A real wave is lighter.
-- **Sprites jumping in one frame:** the model now sees 4 sprites change Y by more than 8 lines in a
-  frame (it was 3), in pattern 3 at loops 2 and 3. Not a mass re-sort; for the Technical Director.
-- **CPU:** no count rises, and the budget build already plays wave 12 with 3 divers and 3 shots. But
-  wave 12's interval goes 50 to 32, so the frames with a launch come more often, and 3 divers now
-  exist at loop 0. `make test ARGS=swarm` after the build, and the Technical Director reads it.
+Measured on the built tuning (`2d6cf3f`) unless marked "model". Sources: the Technical Director's
+stage 5 review ([memory-map.md, Row 6: the divers](memory-map.md#row-6-the-divers)) and QA's stage 5
+soak ([qa-stage5.md](qa-stage5.md), section 3).
+
+- **Flicker, measured** (QA, 12,000 frames each, full formation held, bot **dodging only**: the
+  model's worst case): wave 3 **8.32%** of frames with a sprite dropped, wave 12 **6.47%**, against
+  the model's 11.6% and 9.0%. With the bot chasing and firing (the formation thins): **0.02%** and
+  **0.08%**. Never above the model over a whole run. **No pinned sprite was ever dropped**
+  (`mux_pin_drop_count` 0) and `mux_max_age` was **1** at most: no sprite missed two frames running.
+  Feel target 5 holds in the game, not only in the model.
+- **CPU, measured:** `diver_update`'s real worst frame, placed (a launch after a scan of all 18 with
+  the fallback, a Sweep firing on a 2-step frame), is **1,924 cycles**. `AUTOPLAY` only ever reached
+  1,268-1,296, because it keeps the formation full. Its budget row (row 6) is now **2,020**
+  (1,924 + 5%; it was 1,350), and the frame budget is 7,155 of 7,200. No game code changed for it.
+  This is the closest the design comes to a limit: any further rise in what one frame of divers can
+  do (a fourth diver, more fire steps, a shorter halved interval) needs the Technical Director first.
+- **Sprites jumping in one frame (model):** 4 sprites change Y by more than 8 lines in a frame (it
+  was 3), in pattern 3 at loops 2 and 3. The Technical Director's review found it far from a mass
+  re-sort, and the shipped build's `mux_update` maximum (7,929) is below stage 4 part A's (8,636).
 - **The 3 enemy-shot slots** are now the limit on fire from wave 9 (above).
+
+**Open note, not a change (QA, stage 5): the right-hand edge is almost safe.** A ship parked at
+X 318 took 1 hit in 4,836 frames of wave 12, against 12 in 2,404 at the centre (`qa_camp.py`,
+[qa-stage5.md](qa-stage5.md), "Observation"). The cause is the v1 limit Simon already accepted:
+divers leave by the side, and the Sweep and Plunge paths don't reach the corners. It is a poor way
+to score (from X 318 the ship reaches column 5 only at the drift's far right, so the wave rarely
+clears), so it stays for M4. For the next game or v2: give one path per pattern an aimed end that
+locks onto the player's X when the dive starts, so a corner is no safer than the centre; or, if v2 can hide
+a sprite behind the panel (or the next game puts its panel at the top: [Why no diver leaves through
+the bottom](#dive-paths)), let divers leave through the bottom edge and wrap to the top, so every way
+out crosses the player's row; or have a corner-camper drawn out by
+a shot aimed from the nearest parked column when the ship has stood still for, say, 200 frames.
 
 ## Fire rate: decided
 
